@@ -1,7 +1,11 @@
 {
-  "name": "albert-heijn-demo",
+  "name": "woolworths-au-campaign",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.19.0 <23",
+    "npm": ">=10"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
