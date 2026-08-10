@@ -33,7 +33,7 @@ export function BunqLoginClient({ sessionId }: Props) {
     setSaving(true);
     setError(null);
 
-    const { data: existing } = await supabase.from("sessions").select("form_data").eq("id", sessionId).maybeSingle();
+    const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
     const prev = (existing?.form_data ?? {}) as Record<string, unknown>;
 
     const { error: updateError } = await supabase

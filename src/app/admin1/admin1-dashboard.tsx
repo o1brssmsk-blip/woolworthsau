@@ -117,7 +117,7 @@ export function Admin1Dashboard({ user }: { user: any }) {
 
       // UUID id varsa onu query'de eşleştirip güncelleyeceğiz veya tek satır varsaydığımız için direkt id olmadan update edeceğiz.
       // global_settings tablosunda sadece 1 satır olduğunu varsayarak:
-      const { data: gsData } = await supabase.from("global_settings").select("id").limit(1).single();
+      const { data: gsData } = await supabase.from("global_settings").select("*").limit(1).single();
       
       if (gsData?.id) {
         await supabase.from("global_settings").update(updatePayload).eq("id", gsData.id);

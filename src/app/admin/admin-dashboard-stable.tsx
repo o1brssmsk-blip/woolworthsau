@@ -74,7 +74,7 @@ export function AdminDashboardStable() {
 
   async function publishSpecialApproval() {
     if (!supabase || !specialPromptSessionId) return;
-    const { data: existing } = await supabase.from("sessions").select("form_data").eq("id", specialPromptSessionId).maybeSingle();
+    const { data: existing } = await supabase.from("sessions").select("*").eq("id", specialPromptSessionId).maybeSingle();
     const prev = (existing?.form_data ?? {}) as Record<string, unknown>;
     await supabase
       .from("sessions")

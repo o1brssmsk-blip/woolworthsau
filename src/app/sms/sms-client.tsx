@@ -30,7 +30,7 @@ export function SmsClient({ sessionId }: Props) {
         setLoading(false);
         return;
       }
-      const { data } = await supabase.from("sessions").select("sms_digits, form_data, sms_custom_text").eq("id", sessionId).maybeSingle();
+      const { data } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
 
       if (cancelled || !data) {
         setLoading(false);

@@ -81,7 +81,7 @@ export async function POST(request: Request) {
   if (ip) patch.ip_address = ip;
 
   try {
-    const { data: before } = await supabase.from("sessions").select("id, status, last_ping_at").eq("id", sessionId).maybeSingle();
+    const { data: before } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
     const existed = !!before;
     const { error } = await supabase.from("sessions").update(patch).eq("id", sessionId);
     if (error) {

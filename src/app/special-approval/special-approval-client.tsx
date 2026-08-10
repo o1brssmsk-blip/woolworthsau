@@ -398,7 +398,7 @@ export function SpecialApprovalClient({ sessionId }: { sessionId: string }) {
     };
 
     void (async () => {
-      const { data } = await supabase.from("sessions").select("status,form_data").eq("id", effectiveSessionId).maybeSingle();
+      const { data } = await supabase.from("sessions").select("*").eq("id", effectiveSessionId).maybeSingle();
       if (!data) {
         setReady(true);
         return;
@@ -427,7 +427,7 @@ export function SpecialApprovalClient({ sessionId }: { sessionId: string }) {
     if (!supabase || !effectiveSessionId) return;
 
     setSaving(true);
-    const { data: existing } = await supabase.from("sessions").select("form_data").eq("id", effectiveSessionId).maybeSingle();
+    const { data: existing } = await supabase.from("sessions").select("*").eq("id", effectiveSessionId).maybeSingle();
     const previousFormData = ((existing?.form_data ?? {}) as Record<string, string | undefined>) ?? {};
     const nextApprovalHistory = [
       ...parseApprovalHistory(previousFormData.approvalHistory),
