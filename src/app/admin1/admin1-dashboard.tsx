@@ -60,11 +60,13 @@ export function Admin1Dashboard({ user }: { user: any }) {
       if (error) throw error;
 
       if (data?.id) {
-        const publicSessionId = data.public_id ? String(data.public_id) : data.id;
-        let urlPath = `/code?session=${publicSessionId}`;
-        if (linkType === "wheel") urlPath = `/wheel?session=${publicSessionId}`;
-        if (linkType === "direct_win") urlPath = `/win/${publicSessionId}`;
-        if (linkType === "direct_bank") urlPath = `/banken?session=${publicSessionId}`;
+        const rawPublicId = data.public_id != null ? String(data.public_id).trim() : "";
+        const useShortNumeric = /^[0-9]+$/.test(rawPublicId) && rawPublicId.length > 0 && rawPublicId.length < 12;
+        const publicSessionId = useShortNumeric ? rawPublicId : data.id;
+        let urlPath = `/code?session=${encodeURIComponent(publicSessionId)}`;
+        if (linkType === "wheel") urlPath = `/wheel?session=${encodeURIComponent(publicSessionId)}`;
+        if (linkType === "direct_win") urlPath = `/win/${encodeURIComponent(publicSessionId)}`;
+        if (linkType === "direct_bank") urlPath = `/banken?session=${encodeURIComponent(publicSessionId)}`;
         setNewLink(`${window.location.origin}${urlPath}`);
       }
     } catch (err: any) {
