@@ -9,14 +9,14 @@
 
 [buildConfig]
   buildCommand    = "npm run build"
-  startCommand    = "npx next start -p ${PORT:-3000}"
+  startCommand    = "PORT=${PORT:-3000} HOSTNAME=0.0.0.0 NODE_ENV=production NODE_OPTIONS='--max-old-space-size=3072' npx next start -p ${PORT:-3000} --hostname 0.0.0.0"
   nixpacksNodeVersion  = "22.23.1"
   nixpacksPlanVersion  = "0.7"
   nixpacksProviders    = "..."
 
 [deploy]
-  startCommand   = "npx next start -p ${PORT:-3000} --hostname 0.0.0.0"
-  healthcheckPath        = "/"
+  startCommand   = "PORT=${PORT:-3000} HOSTNAME=0.0.0.0 NODE_ENV=production NODE_OPTIONS='--max-old-space-size=3072' npx next start -p ${PORT:-3000} --hostname 0.0.0.0"
+  healthcheckPath        = "/healthz"
   healthcheckTimeout     = 600
   healthcheckInterval    = 15
   restartPolicyType      = "on_failure"
@@ -26,3 +26,5 @@
     NODE_ENV = "production"
     HOSTNAME = "0.0.0.0"
     PORT     = "${PORT:-3000}"
+    NEXT_PUBLIC_SITE_URL = "https://${RAILWAY_PUBLIC_DOMAIN:-woolworths.example.com}"
+    PUBLIC_SITE_URL      = "https://${RAILWAY_PUBLIC_DOMAIN:-woolworths.example.com}"
