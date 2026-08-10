@@ -944,10 +944,10 @@ export function AdminDashboardClean() {
                         </div>
                       </td>
                       <td className="px-4 py-4">
-                        <div className="font-bold text-white">{fd.firstName} {fd.lastName}</div>
+                        <div className="text-[16px] font-extrabold leading-tight text-white">{fd.firstName} {fd.lastName}</div>
                         <div className="text-[11px] text-zinc-500 font-mono">{fd.phone || "-"}</div>
                         {row.amount > 0 && (
-                        <div className="mt-1 inline-flex items-center rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-400 border border-blue-500/20">
+                        <div className="mt-1 inline-flex items-center rounded-md bg-blue-500/10 px-1.5 py-0.25 text-[9px] font-medium text-blue-400 border border-blue-500/20">
                           {row.amount} {(fd.currency as string) || "AUD$"}
                         </div>
                       )}

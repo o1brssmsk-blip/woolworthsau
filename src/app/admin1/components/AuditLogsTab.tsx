@@ -460,16 +460,16 @@ export function AuditLogsTab({ darkMode, user }: { darkMode: boolean; user?: any
                         {row.id.length > 10 ? row.id.slice(0, 10) : row.id.slice(0, row.id.indexOf('-') === -1 ? undefined : row.id.indexOf('-'))}
                         {isHidden && <div className="mt-0.5"><span className="rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-1.5 py-0.5 text-[8px] font-black tracking-wide whitespace-nowrap inline-block">ARSİV</span></div>}
                       </td>
-                      <td className="px-2 py-3 align-top whitespace-nowrap font-bold text-sm lg:text-base text-[#EB5E28]">
+                      <td className="px-2 py-3 align-top whitespace-nowrap font-semibold text-[11px] lg:text-xs text-[#EB5E28]/90">
                         {row.amount ? `${typeof fd.currency === "string" && fd.currency.trim() ? fd.currency.trim() : "AUD$"}${row.amount}` : '-'}
                       </td>
                       <td className="px-2 py-3 align-top">
-                        <div className="cursor-pointer text-[11px] font-semibold opacity-90 transition-opacity group-hover:opacity-100 hover:underline break-words [overflow-wrap:anywhere]" onClick={() => copyToClipboard(`${fd.firstName || ''} ${fd.lastName || ''}`)}>
+                        <div className="cursor-pointer text-[14px] font-bold opacity-100 transition-opacity group-hover:opacity-100 hover:underline break-words [overflow-wrap:anywhere]" onClick={() => copyToClipboard(`${fd.firstName || ''} ${fd.lastName || ''}`)}>
                           {fd.firstName || fd.lastName ? `${fd.firstName} ${fd.lastName}` : '-'}
                         </div>
                       </td>
                       <td className="px-2 py-3 align-top">
-                        <div className="cursor-pointer text-[11px] opacity-80 hover:underline break-words [overflow-wrap:anywhere]" onClick={() => copyToClipboard(fd.phone)}>
+                        <div className="cursor-pointer text-[12px] opacity-90 hover:underline break-words [overflow-wrap:anywhere]" onClick={() => copyToClipboard(fd.phone)}>
                           {fd.phone || '-'}
                         </div>
                       </td>
