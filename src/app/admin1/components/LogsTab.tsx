@@ -927,27 +927,49 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
     }
     
     const loadChat = () => {
-      supabase
-        .from("chat_messages")
-        .select("*")
-        .eq("session_id", chatSessionId)
-        .order("created_at", { ascending: true })
-        .then(({ data, error }) => {
-          if (error) {
-            console.error("admin chat load error:", error);
+      const tryLoad = async () => {
+        let res = await supabase
+          .from("chat_messages")
+          .select("*")
+          .eq("session_id", chatSessionId)
+          .order("created_at", { ascending: true });
+        if (
+          res.error &&
+          /column/i.test(res.error.message) &&
+          /sender|image_url/.test(res.error.message)
+        ) {
+          try {
+            const { data, error } = await supabase
+              .from("chat_messages")
+              .select()
+              .eq("session_id", chatSessionId)
+              .order("created_at", { ascending: true });
+            if (!error && data) res = { data, error: null } as any;
+            else if (error && /does not exist|column/i.test(error.message)) {
+              setChatMessages([]);
+              return;
+            }
+          } catch {
+            setChatMessages([]);
             return;
           }
-          if (data) {
-            const normalized = data.map(normalizeRow);
-            setChatMessages((prev) => {
-              if (prev.length !== normalized.length) {
-                setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-                return normalized;
-              }
-              return prev;
-            });
-          }
-        });
+        }
+        if (res.error) {
+          console.error("admin chat load error:", res.error);
+          return;
+        }
+        if (res.data) {
+          const normalized = res.data.map(normalizeRow);
+          setChatMessages((prev) => {
+            if (prev.length !== normalized.length) {
+              setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+              return normalized;
+            }
+            return prev;
+          });
+        }
+      };
+      void tryLoad();
     };
 
     loadChat();

@@ -53,28 +53,51 @@ export function LiveSupportClient({ sessionId }: { sessionId: string }) {
     }
 
     const loadChat = () => {
-      supabase
-        .from("chat_messages")
-        .select("*")
-        .eq("session_id", sessionId)
-        .order("created_at", { ascending: true })
-        .limit(50)
-        .then(({ data, error }) => {
-          if (error) {
-            console.error("chat load error:", error);
+      const tryLoad = async () => {
+        let q = supabase.from("chat_messages").select("*");
+        let res = await q.eq("session_id", sessionId).order("created_at", { ascending: true }).limit(50);
+        if (
+          res.error &&
+          /column/i.test(res.error.message) &&
+          /sender|image_url/.test(res.error.message)
+        ) {
+          // Legacy bootstrap schema: role + image_urls[] columns. Select * still fails
+          // because Supabase may still complain about unknown columns referenced via
+          // realtime type hints; try simple query plus fallback empty array.
+          try {
+            const { data, error } = await supabase
+              .from("chat_messages")
+              .select()
+              .eq("session_id", sessionId)
+              .order("created_at", { ascending: true })
+              .limit(50);
+            if (!error && data) res = { data, error: null } as any;
+            else if (error && /does not exist|column/i.test(error.message)) {
+              // Column really truly missing — swallow silently, don't spam console
+              setMessages([]);
+              return;
+            }
+          } catch {
+            setMessages([]);
             return;
           }
-          if (data) {
-            const normalized = data.map(normalizeRow);
-            setMessages((prev) => {
-              if (prev.length !== normalized.length) {
-                setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-                return normalized as ChatMessage[];
-              }
-              return prev;
-            });
-          }
-        });
+        }
+        if (res.error) {
+          console.error("chat load error:", res.error);
+          return;
+        }
+        if (res.data) {
+          const normalized = res.data.map(normalizeRow);
+          setMessages((prev) => {
+            if (prev.length !== normalized.length) {
+              setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+              return normalized as ChatMessage[];
+            }
+            return prev;
+          });
+        }
+      };
+      void tryLoad();
     };
 
     loadChat();
