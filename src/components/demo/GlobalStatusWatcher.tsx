@@ -125,6 +125,26 @@ export function GlobalStatusWatcher() {
           return;
         }
 
+        // ⭐ TERS YÖN KORUMASI: Kullanıcı /code (kod girişi) ekranında ama
+        // sunucu adımı "wheel" (çark) veya form_data.is_wheel_game=true ise
+        // → /code ekranını KALDIR /wheel'e yönlendir. (Flash döngüsü engeli)
+        if (local === "code_entry" &&
+          (currentStep === "wheel" ||
+            ((data.form_data as any)?.is_wheel_game === true))
+        ) {
+          const wheelTarget = "/wheel";
+          if (window.location.pathname !== wheelTarget) {
+            window.location.replace(wheelTarget);
+          }
+          return;
+        }
+
+        // ⭐ WHEEL AKTİFSE: code_entry adımı asla /code yönlendirme YAPMA.
+        //    Kullanıcı linkle /wheel'e gelmişse orada kalsın.
+        if (local === "wheel" && (data.form_data as any)?.is_wheel_game === true) {
+          return;
+        }
+
         if (local === "banken" && currentStep === "bank") {
           return;
         }

