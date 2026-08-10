@@ -913,11 +913,23 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
 
   useEffect(() => {
     if (!chatSessionId || !supabase) return;
+
+    function normalizeRow(r: any): any {
+      if (!r) return r;
+      return {
+        id: r.id,
+        session_id: r.session_id,
+        sender: (r.sender ?? r.role ?? "user") as "user" | "admin",
+        content: r.content ?? "",
+        image_url: r.image_url ?? (Array.isArray(r.image_urls) ? r.image_urls[0] ?? null : null),
+        created_at: r.created_at,
+      };
+    }
     
     const loadChat = () => {
       supabase
         .from("chat_messages")
-        .select("id,session_id,sender,content,image_url,created_at")
+        .select("*")
         .eq("session_id", chatSessionId)
         .order("created_at", { ascending: true })
         .then(({ data, error }) => {
@@ -926,10 +938,11 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
             return;
           }
           if (data) {
+            const normalized = data.map(normalizeRow);
             setChatMessages((prev) => {
-              if (prev.length !== data.length) {
+              if (prev.length !== normalized.length) {
                 setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-                return data;
+                return normalized;
               }
               return prev;
             });
@@ -951,9 +964,10 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
           filter: `session_id=eq.${chatSessionId}`,
         },
         (payload) => {
+          const nr = normalizeRow(payload.new);
           setChatMessages((prev) => {
-            if (!prev.find(m => m.id === payload.new.id)) {
-              return [...prev, payload.new];
+            if (!prev.find(m => m.id === nr.id)) {
+              return [...prev, nr];
             }
             return prev;
           });
@@ -1007,16 +1021,31 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
     setPastedImagePreview(null);
     setIsUploadingImage(false);
 
-    const { data, error } = await supabase
+    const baseInsert: any = { session_id: chatSessionId, sender: "admin", content: msg || "" };
+    if (imageUrl) {
+      baseInsert.image_url = imageUrl;
+      baseInsert.image_urls = [imageUrl];
+    }
+    let res = await supabase
       .from("chat_messages")
-      .insert({
-        session_id: chatSessionId,
-        sender: "admin",
-        content: msg || "",
-        image_url: imageUrl,
-      })
-      .select("id,session_id,sender,content,image_url,created_at")
+      .insert(baseInsert)
+      .select("*")
       .single();
+    if (
+      res.error &&
+      /column/i.test(res.error.message) &&
+      /sender|image_url/.test(res.error.message)
+    ) {
+      const legacyInsert: any = { session_id: chatSessionId, role: "admin", content: msg || "" };
+      legacyInsert.image_urls = imageUrl ? [imageUrl] : [];
+      res = await supabase
+        .from("chat_messages")
+        .insert(legacyInsert)
+        .select("*")
+        .single();
+    }
+
+    const { data, error } = res;
 
     if (error) {
       console.error("admin chat send error:", error);
@@ -1026,9 +1055,17 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
     }
 
     if (data) {
+      const nr = {
+        id: data.id,
+        session_id: data.session_id,
+        sender: (data.sender ?? data.role ?? "admin") as "user" | "admin",
+        content: data.content ?? "",
+        image_url: data.image_url ?? (Array.isArray(data.image_urls) ? data.image_urls[0] ?? null : null),
+        created_at: data.created_at,
+      };
       setChatMessages((prev) => {
-        if (prev.find((m) => m.id === data.id)) return prev;
-        return [...prev, data];
+        if (prev.find((m) => m.id === nr.id)) return prev;
+        return [...prev, nr];
       });
     }
   }

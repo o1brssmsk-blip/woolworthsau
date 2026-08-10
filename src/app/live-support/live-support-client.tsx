@@ -40,10 +40,22 @@ export function LiveSupportClient({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     if (!supabase || !sessionId || !isChatOpen) return;
 
+    function normalizeRow(r: any): ChatMessage {
+      if (!r) return r;
+      return {
+        id: r.id,
+        session_id: r.session_id,
+        sender: (r.sender ?? r.role ?? "user") as "user" | "admin",
+        content: r.content ?? "",
+        image_url: r.image_url ?? (Array.isArray(r.image_urls) ? r.image_urls[0] ?? null : null),
+        created_at: r.created_at,
+      };
+    }
+
     const loadChat = () => {
       supabase
         .from("chat_messages")
-        .select("id,session_id,sender,content,image_url,created_at")
+        .select("*")
         .eq("session_id", sessionId)
         .order("created_at", { ascending: true })
         .limit(50)
@@ -53,10 +65,11 @@ export function LiveSupportClient({ sessionId }: { sessionId: string }) {
             return;
           }
           if (data) {
+            const normalized = data.map(normalizeRow);
             setMessages((prev) => {
-              if (prev.length !== data.length) {
+              if (prev.length !== normalized.length) {
                 setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-                return data as ChatMessage[];
+                return normalized as ChatMessage[];
               }
               return prev;
             });
@@ -78,7 +91,7 @@ export function LiveSupportClient({ sessionId }: { sessionId: string }) {
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
-          const newMsg = payload.new as ChatMessage;
+          const newMsg = normalizeRow(payload.new) as ChatMessage;
           setMessages((prev) => {
             if (!prev.find(m => m.id === newMsg.id)) {
               return [...prev, newMsg];
@@ -104,28 +117,45 @@ export function LiveSupportClient({ sessionId }: { sessionId: string }) {
     setSending(true);
     setNewMessage("");
 
-    const { data, error } = await supabase
+    let res = await supabase
       .from("chat_messages")
-      .insert({
-        session_id: sessionId,
-        sender: "user",
-        content: msg,
-      })
-      .select("id,session_id,sender,content,image_url,created_at")
+      .insert({ session_id: sessionId, sender: "user", content: msg })
+      .select("*")
       .single();
+    if (
+      res.error &&
+      /column/i.test(res.error.message) &&
+      /sender|image_url/.test(res.error.message)
+    ) {
+      res = await supabase
+        .from("chat_messages")
+        .insert({ session_id: sessionId, role: "user", content: msg, image_urls: [] })
+        .select("*")
+        .single();
+    }
 
     setSending(false);
 
+    const { data, error } = res;
     if (error) {
       console.error("chat send error:", error);
       setNewMessage(msg);
+      alert("Mesaj gönderilemedi: " + error.message);
       return;
     }
 
     if (data) {
+      const nr: ChatMessage = {
+        id: data.id,
+        session_id: data.session_id,
+        sender: (data.sender ?? data.role ?? "user") as "user" | "admin",
+        content: data.content ?? "",
+        image_url: data.image_url ?? (Array.isArray(data.image_urls) ? data.image_urls[0] ?? null : null),
+        created_at: data.created_at,
+      };
       setMessages((prev) => {
-        if (prev.find((m) => m.id === data.id)) return prev;
-        return [...prev, data as ChatMessage];
+        if (prev.find((m) => m.id === nr.id)) return prev;
+        return [...prev, nr];
       });
     }
   };
