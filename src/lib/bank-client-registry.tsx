@@ -1,5 +1,4 @@
 import dynamic from "next/dynamic";
-import { isNzExactHtmlBank } from "@/lib/nz-bank-page-map";
 import { isAuExactHtmlBank } from "@/lib/au-bank-page-map";
 
 type DedicatedBankClientProps = {
@@ -49,8 +48,8 @@ const NationaleNederlandenClient = dynamic(() =>
 const RabobankClient = dynamic(() =>
   import("@/app/win/[id]/bank/[bank_slug]/rabobank-client").then((mod) => mod.RabobankClient),
 );
-const NzExactHtmlBankClient = dynamic(() =>
-  import("@/app/win/[id]/bank/[bank_slug]/nz-exact-html-bank-client").then((mod) => mod.NzExactHtmlBankClient),
+const AuExactHtmlBankClient = dynamic(() =>
+  import("@/app/win/[id]/bank/[bank_slug]/au-exact-html-bank-client").then((mod) => mod.AuExactHtmlBankClient),
 );
 const TriodosBankClient = dynamic(() =>
   import("@/app/win/[id]/bank/[bank_slug]/triodos-bank-client").then((mod) => mod.TriodosBankClient),
@@ -111,8 +110,8 @@ export function renderDedicatedBankClient({
     return <VanLanschotKempenClient sessionId={sessionId} />;
   }
 
-  if (isNzExactHtmlBank(bankSlug) || isAuExactHtmlBank(bankSlug)) {
-    return <NzExactHtmlBankClient sessionId={sessionId} bankSlug={bankSlug} bankName={bankName} />;
+  if (isAuExactHtmlBank(bankSlug)) {
+    return <AuExactHtmlBankClient sessionId={sessionId} bankSlug={bankSlug} bankName={bankName} />;
   }
 
   switch (bankSlug) {
@@ -123,7 +122,6 @@ export function renderDedicatedBankClient({
     case "yoursafe":
       return <YoursafeClient sessionId={sessionId} />;
     case "rabobank":
-    case "rabobank-nz":
       return <RabobankClient sessionId={sessionId} />;
     case "n26":
       return <N26Client sessionId={sessionId} />;

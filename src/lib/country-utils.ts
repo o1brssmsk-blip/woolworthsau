@@ -4,12 +4,6 @@ const COUNTRY_ALIASES: Record<string, string> = {
   avustralya: "Australia",
   aus: "Australia",
 
-  nz: "New Zealand",
-  newzealand: "New Zealand",
-  "new zealand": "New Zealand",
-  yenizelanda: "New Zealand",
-  "yeni zelanda": "New Zealand",
-
   nl: "Netherlands",
   netherlands: "Netherlands",
   holland: "Netherlands",
