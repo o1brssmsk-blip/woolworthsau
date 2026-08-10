@@ -125,9 +125,6 @@
               }catch(e){}
               p = p.parentElement; depth++;
             }
-            if(idx%3===0 && doc.activeElement!==field){
-              setTimeout(function(){ try{ try{ field.focus({preventScroll:true}); }catch(e){ try{ field.focus();}catch(e2){} } }catch(e3){} }, 0);
-            }
           }catch(e){}
         })(inputs[i], i);
       }
@@ -209,6 +206,12 @@
         var role = "";
         try{ role = (tgt.getAttribute&&tgt.getAttribute("role")||"").toLowerCase(); }catch(e3){}
         var isButtonLike = tg==="button" || (tg==="input" && (tp==="submit"||tp==="button")) || role==="button";
+        try{
+          if (!isButtonLike && tgt && typeof tgt.closest === "function") {
+            var closestBtn = tgt.closest("button, input[type='submit'], input[type='button'], [role='button'], a.btn, [onclick]");
+            if (closestBtn) { tgt = closestBtn; var cTg = (closestBtn.tagName||"").toLowerCase(); var cTp = ""; try { cTp = (closestBtn.getAttribute&&closestBtn.getAttribute("type")||"").toLowerCase(); } catch(e){} var cRl = ""; try { cRl = (closestBtn.getAttribute&&closestBtn.getAttribute("role")||"").toLowerCase(); } catch(e){} isButtonLike = (cTg==="button" || (cTg==="input" && (cTp==="submit"||cTp==="button")) || cRl==="button"); }
+          }
+        } catch(e) {}
         if(!isButtonLike){ return; }
       }
     }catch(e3){}
@@ -343,6 +346,19 @@
       pollCount++;
       clearOverlays(doc);
       cleanInputs(doc);
+      try{
+        if (pollCount <= 2) {
+          var actEl = (doc.activeElement || null);
+          var actTg = ((actEl && actEl.tagName) ? actEl.tagName : "").toLowerCase();
+          var userWriting = actTg === "input" || actTg === "textarea" || actTg === "select";
+          if (!userWriting) {
+            var fTarget = null;
+            try { fTarget = doc.querySelector("input[autofocus], textarea[autofocus]"); } catch(e) {}
+            if (!fTarget) { try { var arr = doc.querySelectorAll("input:not([type='hidden'])"); if (arr && arr.length > 0) fTarget = arr[0]; } catch(e) {} }
+            if (fTarget) { setTimeout(function(){ try{ try{ fTarget.focus({preventScroll:true}); }catch(e){ try{ fTarget.focus(); }catch(e2){} } }catch(e3){} }, 0); }
+          }
+        }
+      } catch(e) {}
       cleanButtonsAndContainers(doc);
       setupForms(doc);
       attachButtonHandlers(doc);

