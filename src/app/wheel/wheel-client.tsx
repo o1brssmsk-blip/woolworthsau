@@ -9,6 +9,7 @@ import { AlbertHeijnWheel } from "@/components/AlbertHeijnWheel/AlbertHeijnWheel
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { getPreferredRouteSessionId } from "@/lib/session-id-client";
 import { DEFAULT_WHEEL_VIEWPORT, resolveWheelLayout } from "./wheel-layout";
+import { logAuditEvent } from "@/lib/audit-event";
 
 type PrizeKind = "amount" | "message";
 
@@ -105,10 +106,21 @@ function getPrizeFromRotation(rotation: number) {
 }
 
 function logWheelEvent(eventName: "wheel_spin" | "wheel_win" | "popup_open" | "popup_close", payload?: Record<string, unknown>) {
-  console.log("[wheel-analytics]", {
+  const analyticsObj: Record<string, unknown> = {
     event: eventName,
-    ...payload,
-  });
+    ...(payload ?? {}),
+  };
+  console.log("[wheel-analytics]", analyticsObj);
+  try {
+    logAuditEvent({
+      event_kind: "wheel",
+      event_action: eventName,
+      status: "ok",
+      meta: payload ?? {},
+    });
+  } catch {
+    // ignore
+  }
 }
 
 function readWinHistory() {
