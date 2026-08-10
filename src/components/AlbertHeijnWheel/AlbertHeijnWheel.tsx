@@ -164,10 +164,10 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
                 : "50% 48.375%",
               transform: `translate3d(0,0,0) rotate(${rotation}deg)`,
               WebkitTransform: `translate3d(0,0,0) rotate(${rotation}deg)`,
-              // 5s spin sonunda overshoot (sarsıntı) olmasın → yumuşak yavaşlama, fazla zıplama yok
+              // Doğal çark hissi: yavaş başla → ortada hızlan → en sonda yavaş yavaş dur (10sn, 9 tam tur)
               transition: spinning
-                ? "transform 5000ms cubic-bezier(.15,.8,.2,1) forwards"
-                : "transform 180ms ease-out",
+                ? "transform 10000ms cubic-bezier(.08,.72,.2,1) forwards"
+                : "transform 220ms ease-out",
               backfaceVisibility: "hidden",
               WebkitBackfaceVisibility: "hidden",
               transformStyle: "preserve-3d",
