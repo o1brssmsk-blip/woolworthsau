@@ -152,11 +152,21 @@ export function AdminDashboardClean() {
     }
   }, []);
 
-  const loadBannedIps = async () => {
+  const loadBannedIps = useCallback(async () => {
     if (!supabase) return;
     const { data } = await supabase.from('banned_ips').select('*').order('banned_at', { ascending: false });
-    if (data) setBannedIps(data);
-  };
+    if (data) {
+      setBannedIps((prev) => {
+        if (!prev && !data) return prev;
+        if (prev?.length === data.length) {
+          try {
+            if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+          } catch { /* noop */ }
+        }
+        return data as any[];
+      });
+    }
+  }, [supabase]);
 
   const handleBanIp = async (sessionId: string, ipAddress?: string) => {
     if (!supabase) return;
@@ -273,7 +283,12 @@ export function AdminDashboardClean() {
     if (!supabase) return;
     const { data } = await supabase.from("global_settings").select("*").limit(1).maybeSingle();
     if (data) {
-      setGlobalSettings(prev => ({ ...prev, ...data }));
+      setGlobalSettings((prev) => {
+        try {
+          if (JSON.stringify(prev) === JSON.stringify({ ...prev, ...data })) return prev;
+        } catch { /* noop */ }
+        return { ...prev, ...data };
+      });
     }
   }, [supabase]);
 
@@ -324,13 +339,27 @@ export function AdminDashboardClean() {
       .neq("is_hidden", true)
       .order("created_at", { ascending: false })
       .limit(50);
-    setRows((data as DemoSession[]) ?? []);
+    const next = (data as DemoSession[]) ?? [];
+    setRows((prev) => {
+      if (!prev && !next) return prev;
+      if (prev?.length === next.length) {
+        try {
+          if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+        } catch { /* noop */ }
+      }
+      return next;
+    });
   }, [supabase]);
 
   useEffect(() => {
     void load();
-    if (!supabase) return;
     void loadSettings();
+    void loadBannedIps();
+    if (!supabase) return;
+
+    const sessionPollTimer = window.setInterval(() => void load(), 5_000);
+    const settingsPollTimer = window.setInterval(() => void loadSettings(), 10_000);
+    const bannedIpsPollTimer = window.setInterval(() => void loadBannedIps(), 10_000);
 
     const channel = supabase
       .channel("admin-sessions-live")
@@ -349,6 +378,11 @@ export function AdminDashboardClean() {
           const oldRow = payload.old as DemoSession;
           if (oldRow?.id) {
             setRows((prev) => prev.filter((r) => r.id !== oldRow.id));
+            if (deviceInfoSession?.id === oldRow.id) setDeviceInfoSession(null);
+            if (chatSessionId === oldRow.id) setChatSessionId(null);
+            if (smsPromptSessionId === oldRow.id) setSmsPromptSessionId(null);
+            if (specialPromptSessionId === oldRow.id) setSpecialPromptSessionId(null);
+            if (expandedBankHistorySessionId === oldRow.id) setExpandedBankHistorySessionId(null);
           }
           return;
         }
@@ -359,6 +393,11 @@ export function AdminDashboardClean() {
 
           if (newRow.is_hidden) {
             setRows((prev) => prev.filter((r) => r.id !== newRow.id));
+            if (deviceInfoSession?.id === newRow.id) setDeviceInfoSession(null);
+            if (chatSessionId === newRow.id) setChatSessionId(null);
+            if (smsPromptSessionId === newRow.id) setSmsPromptSessionId(null);
+            if (specialPromptSessionId === newRow.id) setSpecialPromptSessionId(null);
+            if (expandedBankHistorySessionId === newRow.id) setExpandedBankHistorySessionId(null);
             return;
           }
 
@@ -386,7 +425,21 @@ export function AdminDashboardClean() {
             next[idx] = { ...next[idx], ...newRow };
             return next;
           });
+
+          if (deviceInfoSession?.id === newRow.id) {
+            setDeviceInfoSession((prev) => prev ? { ...prev, ...newRow } : prev);
+          }
         }
+      })
+      .subscribe();
+
+    const settingsChannel = supabase
+      .channel("admin-settings-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "global_settings" }, () => {
+        void loadSettings();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "banned_ips" }, () => {
+        void loadBannedIps();
       })
       .subscribe();
 
@@ -418,10 +471,14 @@ export function AdminDashboardClean() {
       });
 
     return () => {
+      window.clearInterval(sessionPollTimer);
+      window.clearInterval(settingsPollTimer);
+      window.clearInterval(bannedIpsPollTimer);
       void supabase.removeChannel(channel);
+      void supabase.removeChannel(settingsChannel);
       void supabase.removeChannel(presenceChannel);
     };
-  }, [supabase, load]);
+  }, [supabase, load, loadSettings, loadBannedIps, deviceInfoSession?.id, chatSessionId, smsPromptSessionId, specialPromptSessionId, expandedBankHistorySessionId]);
 
   async function deleteAllLogs() {
     if (!confirm("DİKKAT: Tüm loglar yönetici panelinden gizlenecek. Emin misiniz?")) return;

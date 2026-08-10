@@ -274,10 +274,19 @@ export function AuditLogsTab({ darkMode, user }: { darkMode: boolean; user?: any
       if (reqRef.current !== myReq) return;
       if (error) { setQueryError(error.message); setRows([]); return; }
       const fetched = ((data as DemoSession[]) ?? []);
-      const hiddenOnlyFalse = fetched.filter(r => !showHiddenOnly ? true : !!r.is_hidden);
-      setRows(hiddenOnlyFalse);
-      setLogCount(hiddenOnlyFalse.length);
-      setHiddenCount(fetched.filter(r => !!r.is_hidden).length);
+      const filtered = fetched.filter(r => !showHiddenOnly ? true : !!r.is_hidden);
+      const hiddenCnt = fetched.filter(r => !!r.is_hidden).length;
+      setRows((prev) => {
+        if (!prev && !filtered) return prev;
+        if (prev?.length === filtered.length) {
+          try {
+            if (JSON.stringify(prev) === JSON.stringify(filtered)) return prev;
+          } catch { /* noop */ }
+        }
+        setLogCount(filtered.length);
+        setHiddenCount(hiddenCnt);
+        return filtered;
+      });
     } catch (e: any) {
       if (reqRef.current !== myReq) return;
       setQueryError(e?.message || String(e));
@@ -290,10 +299,11 @@ export function AuditLogsTab({ darkMode, user }: { darkMode: boolean; user?: any
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (!supabase) return;
+    const pollTimer = window.setInterval(() => void load(), 5_000);
     const ch = supabase.channel("admin1-eski-logs")
       .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, () => void load())
       .subscribe();
-    return () => { void supabase.removeChannel(ch); };
+    return () => { window.clearInterval(pollTimer); void supabase.removeChannel(ch); };
   }, [supabase, load]);
 
   const copyToClipboard = (text: string) => { if (!text) return; void navigator.clipboard?.writeText(text); };

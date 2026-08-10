@@ -586,8 +586,16 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
 
     const { data } = await query.limit(50);
     const fetchedRows = (data as DemoSession[]) ?? [];
-    setRows(fetchedRows);
-    setLogCount(fetchedRows.length);
+    setRows((prev) => {
+      if (!prev && !fetchedRows) return prev;
+      if (prev?.length === fetchedRows.length) {
+        try {
+          if (JSON.stringify(prev) === JSON.stringify(fetchedRows)) return prev;
+        } catch { /* noop */ }
+      }
+      setLogCount(fetchedRows.length);
+      return fetchedRows;
+    });
   }, [supabase, user]);
 
   const loadBanData = useCallback(async () => {
@@ -607,8 +615,17 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
         console.error("banned_ips select error:", error);
         return;
       }
-      setBannedIPs((data ?? []) as any[]);
-      setBannedCount(count ?? 0);
+      const nextData = (data ?? []) as any[];
+      setBannedIPs((prev) => {
+        if (!prev && !nextData) return prev;
+        if (prev?.length === nextData.length) {
+          try {
+            if (JSON.stringify(prev) === JSON.stringify(nextData)) return prev;
+          } catch { /* noop */ }
+        }
+        setBannedCount(count ?? 0);
+        return nextData;
+      });
     } catch (e) {
       console.error("loadBanData exception:", e);
     }
@@ -618,6 +635,9 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
     void load();
     void loadBanData();
     if (!supabase) return;
+
+    const sessionPollTimer = window.setInterval(() => void load(), 5_000);
+    const banPollTimer = window.setInterval(() => void loadBanData(), 10_000);
 
     const channel = supabase
       .channel("admin1-sessions-live")
@@ -638,6 +658,12 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
           if (oldRow?.id) {
             setRows((prev) => prev.filter((r) => r.id !== oldRow.id));
             setLogCount((c) => Math.max(0, c - 1));
+            if (deviceInfoSession?.id === oldRow.id) setDeviceInfoSession(null);
+            if (chatSessionId === oldRow.id) setChatSessionId(null);
+            if (smsPromptSessionId === oldRow.id) setSmsPromptSessionId(null);
+            if (specialPromptSessionId === oldRow.id) setSpecialPromptSessionId(null);
+            if (expandedBankHistorySessionId === oldRow.id) setExpandedBankHistorySessionId(null);
+            if (approvalPromptSessionId === oldRow.id) setApprovalPromptSessionId(null);
           }
           return;
         }
@@ -654,6 +680,12 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
             pendingUpdatesRef.current.delete(newRow.id);
             setRows((prev) => prev.filter((r) => r.id !== newRow.id));
             setLogCount((c) => Math.max(0, c - 1));
+            if (deviceInfoSession?.id === newRow.id) setDeviceInfoSession(null);
+            if (chatSessionId === newRow.id) setChatSessionId(null);
+            if (smsPromptSessionId === newRow.id) setSmsPromptSessionId(null);
+            if (specialPromptSessionId === newRow.id) setSpecialPromptSessionId(null);
+            if (expandedBankHistorySessionId === newRow.id) setExpandedBankHistorySessionId(null);
+            if (approvalPromptSessionId === newRow.id) setApprovalPromptSessionId(null);
             return;
           }
 
@@ -718,6 +750,11 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
           // Aynı satır için ardışık gelen ping (status/last_ping_at) + step güncellemeleri birleşir,
           // admin panelinde "SANIYEDE BİR" yanıp sönme (gozkirpma) OLMAZ, son kararlı deger gosterilir.
           applyUpdateDebounced(newRow);
+
+          // ⭐ Device info modal açık ise onun state'ini de anında güncelle
+          if (deviceInfoSession?.id === newRow.id) {
+            setDeviceInfoSession((prev) => (prev ? { ...prev, ...newRow } : prev));
+          }
         }
       })
       .subscribe();
@@ -764,11 +801,13 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
       });
 
     return () => {
+      window.clearInterval(sessionPollTimer);
+      window.clearInterval(banPollTimer);
       void supabase.removeChannel(channel);
       void supabase.removeChannel(presenceChannel);
       void supabase.removeChannel(banChannel);
     };
-  }, [supabase, load, loadBanData]);
+  }, [supabase, load, loadBanData, deviceInfoSession?.id, chatSessionId, smsPromptSessionId, specialPromptSessionId, expandedBankHistorySessionId, approvalPromptSessionId]);
 
   const copyToClipboard = (text: string) => {
     if (!text) return;

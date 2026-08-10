@@ -56,6 +56,13 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
 
   useEffect(() => {
     fetchSettings();
+    if (!supabase) return;
+    const t = window.setInterval(fetchSettings, 10_000);
+    const ch = supabase
+      .channel("admin1-gs")
+      .on("postgres_changes", { event: "*", schema: "public", table: "global_settings" }, () => void fetchSettings())
+      .subscribe();
+    return () => { window.clearInterval(t); void supabase.removeChannel(ch); };
   }, [supabase]);
 
   const handleSave = async (e: React.FormEvent) => {
