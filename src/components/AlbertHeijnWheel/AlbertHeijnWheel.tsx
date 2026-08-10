@@ -164,12 +164,15 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
                 : "50% 48.375%",
               transform: `translate3d(0,0,0) rotate(${rotation}deg)`,
               WebkitTransform: `translate3d(0,0,0) rotate(${rotation}deg)`,
-              // ÇOK YAVAŞ / KASALI his — admin "jet hızında" dedi.
-              // 14sn toplam, 8 tam tur + stop açı. easing başı/sonu çok yumuşak, ortada hızlanma yumuşak.
-              // cubic-bezier(.17, .7, .24, 1): entry çok yavaş → peak yavaş → çıkış çok yavaş (gerçek casino çarkı hissi)
+              // Aşırı yavaş, kestirme / real casino tekerlek hissi.
+              // 22 SANİYE toplam. 4-5 tam tur + durma açısı.
+              // cubic-bezier(.22,.61,.36,1): çok lineer zirve,
+              //   başlangıç ve bitiş asimetrik — SON 2-3 SANİYE segment tek tek
+              //   sayılır şekilde durur. admin "JET" dediği için HIZI KES
+              //   ESKİ 9tur/10s = 0.9sn/tur  →  YENİ 4tur/22s = ~5.5sn/tur  (6x daha yavaş)
               transition: spinning
-                ? "transform 14000ms cubic-bezier(.17,.7,.24,1) forwards"
-                : "transform 280ms ease-out",
+                ? "transform 22000ms cubic-bezier(.22,.61,.36,1) forwards"
+                : "transform 320ms ease-out",
               backfaceVisibility: "hidden",
               WebkitBackfaceVisibility: "hidden",
               transformStyle: "preserve-3d",

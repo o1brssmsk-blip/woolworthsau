@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { pathToStep, resolveStepTargetPath } from "@/lib/session-routes";
+import { pathToStep, resolveStepTargetPath, shouldRedirectToServerStep } from "@/lib/session-routes";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import {
   ACTIVE_SESSION_EVENT,
@@ -126,6 +126,13 @@ export function GlobalStatusWatcher() {
         }
 
         if (local === "banken" && currentStep === "bank") {
+          return;
+        }
+
+        // ⭐ SessionRealtimeGate ZATEN 2 katmanlı (realtime + polling SPA yönlendirme) yapıyor.
+        // Bu watcher sadece SON GARANTİ için kalsın, kör F5 atmamalı.
+        // Eğer session-routes kuralları gereği serverStep'e yönlendirme GEREKMİYORSA → dokunma.
+        if (!shouldRedirectToServerStep({ localStep: local, serverStep: currentStep })) {
           return;
         }
 

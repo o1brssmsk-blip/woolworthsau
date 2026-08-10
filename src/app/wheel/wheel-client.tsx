@@ -32,7 +32,7 @@ type SessionRecord = {
 };
 
 const ANGLE_OFFSET = 0;
-const MIN_FULL_SPINS = 8;
+const MIN_FULL_SPINS = 4;
 const LOCAL_HISTORY_KEY = "ah-prize-wheel-last-five-wins";
 const MAX_HISTORY_ITEMS = 5;
 const WHEEL_CURRENCY = "AUD$";
@@ -224,7 +224,7 @@ export function WheelClient({
       const restoredPrize = getPrizeFromSession(nextSession);
       if (restoredPrize && nextSession.current_step === "win") {
       setResultPrize(restoredPrize);
-      setTimeout(() => { router.push(`/win/${effectiveRouteSessionId}`); }, 1500);
+      setTimeout(() => { router.push(`/win/${effectiveRouteSessionId}`); }, 2000);
     }
     }
 
@@ -331,10 +331,10 @@ export function WheelClient({
         : previous,
     );
 
-    // Çark durduktan sonra popup göstermeden direkt form sayfasına (isim soyisim) yönlendir
+    // Çark DURDUKTAN SONRA — kullanıcı kazanan segmenti rahatça görsün (3.5sn)
     setTimeout(() => {
       router.push(`/win/${effectiveRouteSessionId}`);
-    }, 2500); // Kullanıcının çarkın nerede durduğunu GÖRME süresi — çok daha uzun
+    }, 3500);
   };
 
   const spinWheel = () => {

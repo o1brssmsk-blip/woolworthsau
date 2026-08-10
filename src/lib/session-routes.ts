@@ -144,6 +144,7 @@ export function resolveStepTargetPath(
 }
 
 export function pathToStep(pathname: string): SessionStep | null {
+  if (pathname.startsWith("/wheel")) return "wheel";
   if (pathname.startsWith("/code")) return "code_entry";
   if (pathname.includes("/bank/")) return "bank";
   if (pathname.startsWith("/win")) return "win";
