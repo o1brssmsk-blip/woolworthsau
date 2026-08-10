@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ConfigMissing } from "@/components/demo/ConfigMissing";
 import { optimizeSupabaseImageUrl } from "@/lib/asset-url";
+import { resolveLocalBankLogoFile } from "@/lib/bank-logo-constants";
 import type { BankCatalogEntry } from "@/lib/at-bank-catalog";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { getPreferredRouteSessionId } from "@/lib/session-id-client";
@@ -244,7 +245,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
       slug: bank.slug,
       displayName: bank.name,
       domain: bank.domain,
-      logoFile: bank.logoFile,
+      logoFile: resolveLocalBankLogoFile(bank.slug, bank.logoFile),
     }));
   }, [banks, settings.target_country]);
 
@@ -427,7 +428,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
                   >
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#ffd95c]/22 bg-[linear-gradient(180deg,rgba(35,35,31,0.98),rgba(15,15,13,0.98))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                       <img
-                        src={optimizeSupabaseImageUrl(opt.logoFile, { format: "webp", quality: 80, width: 128 }) || opt.logoFile}
+                        src={optimizeSupabaseImageUrl(resolveLocalBankLogoFile(opt.slug, opt.logoFile), { format: "webp", quality: 80, width: 128 }) || resolveLocalBankLogoFile(opt.slug, opt.logoFile)}
                         alt={opt.displayName}
                         className="h-full w-full rounded-full object-cover"
                         onError={(e) => {

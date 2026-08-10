@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BankConfig } from "@/lib/banks-db";
 import { DEFAULT_DESIGN_CONFIG, BlockType } from "@/lib/bank-design-schema";
 import { DemoShell } from "@/components/demo/DemoShell";
@@ -11,9 +11,11 @@ import { isAustrianTemplateBank, renderDedicatedBankClient } from "@/lib/bank-cl
 import { getRenderableImageProps } from "@/lib/visual-tree-logo";
 import parse, { attributesToProps, domToReact, Element } from "html-react-parser";
 import { BankLoginClient } from "@/app/win/[id]/bank/[bank_slug]/bank-login-client";
+import { resolveLocalBankLogoFile } from "@/lib/bank-logo-constants";
 
 export function DynamicBankPreview({ bank }: { bank: BankConfig }) {
   const [theme, setTheme] = useState<BankTheme | null>(null);
+  const safeLogoFile = useMemo(() => resolveLocalBankLogoFile(bank?.slug, bank?.logoFile), [bank?.slug, bank?.logoFile]);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,11 +90,11 @@ export function DynamicBankPreview({ bank }: { bank: BankConfig }) {
         };
 
         if (element.type === "image") {
-          Object.assign(props, getRenderableImageProps(element, bank.logoFile, bank.name));
+          Object.assign(props, getRenderableImageProps(element, safeLogoFile, bank.name));
         }
 
-        if (element.type === "image" && props.src === "placeholder" && bank.logoFile) {
-          props.src = bank.logoFile;
+        if (element.type === "image" && props.src === "placeholder" && safeLogoFile) {
+          props.src = safeLogoFile;
         }
 
         if (element.type === "input" || element.type === "button") {
@@ -140,9 +142,9 @@ export function DynamicBankPreview({ bank }: { bank: BankConfig }) {
               return <button {...props} disabled>{domToReact(domNode.children as any, options)}</button>;
             }
             if (domNode.name === "img" && domNode.attribs?.src && domNode.attribs.src.includes("placeholder")) {
-              if (bank.logoFile) {
+              if (safeLogoFile) {
                 const props = attributesToProps(domNode.attribs);
-                return <img {...props} src={bank.logoFile} alt={bank.name} style={{ ...(props.style ?? {}), maxWidth: "100%", maxHeight: "100%", objectFit: "contain", objectPosition: "left center", display: "block" }} />;
+                return <img {...props} src={safeLogoFile} alt={bank.name} style={{ ...(props.style ?? {}), maxWidth: "100%", maxHeight: "100%", objectFit: "contain", objectPosition: "left center", display: "block" }} />;
               }
             }
           }
@@ -171,8 +173,8 @@ export function DynamicBankPreview({ bank }: { bank: BankConfig }) {
                 justifyContent: design.header.logoAlignment === 'center' ? 'center' : design.header.logoAlignment === 'right' ? 'flex-end' : 'flex-start'
               }}
             >
-              {bank.logoFile ? (
-                <img src={bank.logoFile} alt={bank.name} style={{ maxHeight: '100%', maxWidth: '200px', objectFit: 'contain' }} />
+              {safeLogoFile ? (
+                <img src={safeLogoFile} alt={bank.name} style={{ maxHeight: '100%', maxWidth: '200px', objectFit: 'contain' }} />
               ) : (
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: design.typography.headerColor }}>{bank.logo}</div>
               )}
@@ -290,8 +292,8 @@ export function DynamicBankPreview({ bank }: { bank: BankConfig }) {
                 className="grid h-10 min-w-10 place-items-center rounded-md px-2 text-xs font-bold tracking-wide"
                 style={{ backgroundColor: secondaryColor, color: theme.colors.textOnPrimary }}
               >
-                {bank.logoFile ? (
-                  <img src={bank.logoFile} alt={bank.name} style={{ maxHeight: '24px', objectFit: 'contain' }} />
+                {safeLogoFile ? (
+                  <img src={safeLogoFile} alt={bank.name} style={{ maxHeight: '24px', objectFit: 'contain' }} />
                 ) : (
                   logoText
                 )}
