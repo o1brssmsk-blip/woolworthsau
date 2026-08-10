@@ -553,7 +553,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       <div className="flex min-h-screen items-center justify-center bg-white px-4 text-center text-sm font-medium text-red-600">
         Exact bank page file is missing for {bankName} ({bankSlug}).
         {isAuExactHtmlBank(bankSlug) && bankSlug === "suncorp-bank" ? (
-          <div className="mt-2 w-full text-xs text-amber-700">
+          <div className="mt-2 w-full text-xs text-[#129C4F]">
             Suncorp Bank HTML files (1.html, 2.html, 3.html) bekleniyor. Kullanicidan geldikten sonra public/au-banks/suncorp-bank/ altina yerlestirilecektir.
           </div>
         ) : null}

@@ -62,10 +62,10 @@ const LEGACY_PAKNSAVE_LOGO_URLS = new Set([
   "/wheel-assets/mobile/png/paknsave-logo-hub.png",
   "/form-assets/maxima-mini-logo.png",
 ]);
-const DEFAULT_AU_LOGO_URL = "/logo.png";
-const AUSTRALIA_BG_URL = "/portal/desktop-background.png";
-const AUSTRALIA_BG_URL_MOBILE = "/portal/mobile-background.png";
-const AUSTRALIA_FORM_LOGO = "/form-assets/woolworths-logo-form.png";
+const DEFAULT_AU_LOGO_URL = "/woolworths/transparent/woolworths-logo-official-transparent.png";
+const AUSTRALIA_BG_URL = "/woolworths/portal/desktop-background-clean.png";
+const AUSTRALIA_BG_URL_MOBILE = "/woolworths/portal/mobile-background-clean.png";
+const AUSTRALIA_FORM_LOGO = "/woolworths/transparent/woolworths-logo-form-512x512.png";
 const LEGACY_BG_URL = "/spar-bg.png";
 const LEGACY_WHEEL_BACKGROUNDS = new Set([
   "/wheel-assets/desktop/background-opaque.png",

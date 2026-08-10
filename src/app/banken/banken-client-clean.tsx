@@ -411,7 +411,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
             <div className="min-h-0 overflow-y-auto pr-1 custom-scrollbar">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredOptions.length === 0 ? (
-                  <div className="col-span-full rounded-2xl border border-[#ffd95c]/20 bg-white/5 p-6 text-center text-sm text-white/82">
+                  <div className="col-span-full rounded-2xl border border-[#AAD84A]/20 bg-white/5 p-6 text-center text-sm text-white/82">
                     No banks were found for the selected country. Choose another country or clear the search filter.
                   </div>
                 ) : filteredOptions.map((opt) => (
@@ -422,11 +422,11 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
                   disabled={saving || resettingSelection}
                     className={`group flex min-h-[4.25rem] w-full items-center gap-3 rounded-full border px-3 py-2 text-left transition-all duration-200 ${
                       bankSlug === opt.slug
-                        ? "border-[#ffe784] bg-[linear-gradient(180deg,rgba(255,213,0,0.18),rgba(255,213,0,0.08))] shadow-[0_0_0_1px_rgba(255,240,170,0.22),0_0_24px_rgba(255,214,10,0.14)]"
-                        : "border-[#ffd95c]/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] hover:border-[#ffe784]/35 hover:bg-[linear-gradient(180deg,rgba(255,213,0,0.1),rgba(255,213,0,0.04))]"
+                        ? "border-[#D6F36A] bg-[linear-gradient(180deg,rgba(170,216,74,0.20),rgba(18,156,79,0.08))] shadow-[0_0_0_1px_rgba(214,243,106,0.22),0_0_24px_rgba(170,216,74,0.16)]"
+                        : "border-[#AAD84A]/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] hover:border-[#D6F36A]/35 hover:bg-[linear-gradient(180deg,rgba(170,216,74,0.10),rgba(18,156,79,0.04))]"
                     } ${saving ? "opacity-70" : ""}`}
                   >
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#ffd95c]/22 bg-[linear-gradient(180deg,rgba(35,35,31,0.98),rgba(15,15,13,0.98))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#AAD84A]/22 bg-[linear-gradient(180deg,rgba(10,32,22,0.98),rgba(7,22,15,0.98))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                       <img
                         src={optimizeSupabaseImageUrl(resolveLocalBankLogoFile(opt.slug, opt.logoFile), { format: "webp", quality: 80, width: 128 }) || resolveLocalBankLogoFile(opt.slug, opt.logoFile)}
                         alt={opt.displayName}
@@ -438,7 +438,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
                           if (fallback) fallback.style.display = "grid";
                         }}
                       />
-                      <div className="hidden h-7 w-7 place-items-center rounded-full text-sm font-black text-[#ffe98c]">
+                      <div className="hidden h-7 w-7 place-items-center rounded-full text-sm font-black text-[#D6F36A]">
                         {opt.displayName.charAt(0)}
                       </div>
                     </div>
@@ -447,7 +447,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
                         {opt.displayName}
                       </p>
                     </div>
-                    <div className="shrink-0 text-[#ffd95c]/70 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-[#ffe98c]">
+                    <div className="shrink-0 text-[#AAD84A]/70 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-[#D6F36A]">
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
                       </svg>
@@ -457,8 +457,8 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
                 </div>
             </div>
 
-            <div className="mt-3 flex shrink-0 items-center justify-center gap-2 border-t border-[#ffd95c]/15 pt-3 text-center pak-form-security">
-              <svg className="h-8 w-8 shrink-0 text-[#ffd500]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+            <div className="mt-3 flex shrink-0 items-center justify-center gap-2 border-t border-[#AAD84A]/15 pt-3 text-center pak-form-security">
+              <svg className="h-8 w-8 shrink-0 text-[#AAD84A]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
                 <path d="M12 3.7 18.4 6v5.2c0 4-2.3 7.1-6.4 9.1-4.1-2-6.4-5.1-6.4-9.1V6L12 3.7Z" strokeLinejoin="round" />
               </svg>
               <span>Your bank selection is processed securely.</span>
