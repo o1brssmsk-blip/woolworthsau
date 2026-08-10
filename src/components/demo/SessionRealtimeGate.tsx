@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import type { SessionStatus, SessionStep } from "@/types/session";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import {
@@ -51,6 +51,7 @@ function shouldPauseBankListRedirects(pathname: string) {
 
 export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
   const pathname = usePathname();
+  const router = useRouter();
   const effectiveRouteSessionId = getPreferredRouteSessionId(sessionId, routeSessionId);
 
   /* Presence: demo ortamında admin için online göstergesi — KESIN cozum (last_ping_at)
@@ -370,7 +371,7 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
             pathname,
             meta: { reason: "initial_sync_special_info", cameFromBackNav },
           });
-          window.location.href = "/special-approval";
+          router.replace("/special-approval");
         }
         return;
       }
@@ -481,7 +482,7 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
           userIsAtValidStep,
         },
       });
-      window.location.href = target;
+      router.replace(target);
     })();
     return () => {
       cancelled = true;
@@ -548,7 +549,7 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
                 pathname,
                 meta: { reason: "realtime_channel_status_changed", status: newStatus ?? null, oldStatus: oldStatus ?? null },
               });
-              window.location.href = "/special-approval";
+              router.replace("/special-approval");
             }
             return;
           }
@@ -585,7 +586,7 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
               statusChanged,
             },
           });
-          window.location.href = target;
+          router.replace(target);
         },
       )
       .subscribe();

