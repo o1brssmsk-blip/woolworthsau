@@ -120,7 +120,8 @@ export function SmsClient({ sessionId }: Props) {
     if (error) setMsg("Sending failed.");
     else {
       setSessionFormData(nextFormData);
-      router.push(stepToPath("wait", sessionId));
+      // ⭐ FLASH YOK: router.push → router.replace
+      router.replace(stepToPath("wait", sessionId));
     }
   }
 

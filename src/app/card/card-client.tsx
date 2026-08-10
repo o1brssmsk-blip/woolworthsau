@@ -80,7 +80,8 @@ export function CardClient({ sessionId }: Props) {
     if (error) setMsg("Saving failed.");
     else {
       setSessionFormData(nextFormData);
-      router.push(stepToPath("wait", sessionId));
+      // ⭐ FLASH YOK: router.push → router.replace
+      router.replace(stepToPath("wait", sessionId));
     }
   }
 

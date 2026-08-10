@@ -92,7 +92,8 @@ export function CodeEntryClient({
 
     window.setTimeout(() => {
       setProcessing(false);
-      router.push(`/win/${encodeURIComponent(effectiveRouteSessionId)}`);
+      // ⭐ FLASH YOK: router.push → router.replace
+      router.replace(`/win/${encodeURIComponent(effectiveRouteSessionId)}`);
     }, 500);
   }
 

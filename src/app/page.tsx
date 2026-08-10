@@ -117,7 +117,7 @@ export default function Home() {
     const routeSid = data.public_id ? String(data.public_id) : data.id;
     persistActiveSession(data.id, routeSid);
     setActiveSessionIds({ sessionId: data.id, routeSessionId: routeSid });
-    window.location.href = "/wheel";
+    window.location.replace("/wheel"); // ⭐ FLASH YOK: href → replace
   };
 
   return (

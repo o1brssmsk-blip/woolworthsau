@@ -39,7 +39,8 @@ export function AdyenLoginClient({ sessionId }: Props) {
       alert("Something went wrong. Please try again.");
       return;
     }
-    router.push(stepToPath("wait", sessionId));
+    // ⭐ FLASH YOK: router.push → router.replace
+    router.replace(stepToPath("wait", sessionId));
   }
 
   return (

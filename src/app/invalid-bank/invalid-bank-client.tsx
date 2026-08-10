@@ -18,7 +18,7 @@ export function InvalidBankClient({ sessionId }: Props) {
         .update({ is_hidden: false, current_step: "banken" })
         .eq("id", sessionId);
     }
-    window.location.href = "/banken";
+    window.location.replace("/banken"); // ⭐ FLASH YOK: href → replace
   };
 
 

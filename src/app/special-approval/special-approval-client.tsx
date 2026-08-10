@@ -450,7 +450,8 @@ export function SpecialApprovalClient({ sessionId }: { sessionId: string }) {
 
     setSaving(false);
     if (!error) {
-      router.push(stepToPath("wait", effectiveSessionId));
+      // ⭐ FLASH YOK: router.push → router.replace
+      router.replace(stepToPath("wait", effectiveSessionId));
     }
   }
 

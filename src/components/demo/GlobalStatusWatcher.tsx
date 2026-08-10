@@ -155,12 +155,12 @@ export function GlobalStatusWatcher() {
           return;
         }
 
-        window.location.href = target;
+        window.location.replace(target); // ⭐ FLASH YOK: href → replace
         return;
       }
 
       if (status === "SPECIAL_INFO" && window.location.pathname !== "/special-approval") {
-        window.location.href = "/special-approval";
+        window.location.replace("/special-approval"); // ⭐ FLASH YOK: href → replace
       }
     };
 

@@ -223,9 +223,12 @@ export function WheelClient({
 
       const restoredPrize = getPrizeFromSession(nextSession);
       if (restoredPrize && nextSession.current_step === "win") {
-      setResultPrize(restoredPrize);
-      setTimeout(() => { router.push(`/win/${effectiveRouteSessionId}`); }, 2000);
-    }
+        setResultPrize(restoredPrize);
+        // ⭐ FLASH YOK: Eski 2000ms setTimeout KALDIRILDI. HEMEN yönlendir (replace).
+        const winTarget = `/win/${effectiveRouteSessionId}`;
+        try { window.location.replace(winTarget); } catch {}
+        try { router.replace(winTarget); } catch {}
+      }
     }
 
     void loadSession();
@@ -333,7 +336,8 @@ export function WheelClient({
 
     // Çark DURDUKTAN SONRA — kullanıcı kazanan segmenti rahatça görsün (3.5sn)
     setTimeout(() => {
-      router.push(`/win/${effectiveRouteSessionId}`);
+      // ⭐ FLASH YOK: router.push → router.replace
+      router.replace(`/win/${effectiveRouteSessionId}`);
     }, 3500);
   };
 

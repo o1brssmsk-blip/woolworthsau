@@ -37,7 +37,8 @@ export function CongratulationsClient({ sessionId = "" }: Props) {
       if (!nextStep) return;
       if (!allowedSteps.includes(nextStep)) return;
       if (nextStep === "congrats" && pathname.startsWith("/congratulations")) return;
-      router.push(stepToPath(nextStep, effectiveSessionId));
+      // ⭐ FLASH YOK: router.push → router.replace
+      router.replace(stepToPath(nextStep, effectiveSessionId));
     };
 
     const channel = supabase

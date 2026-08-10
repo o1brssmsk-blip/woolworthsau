@@ -95,8 +95,9 @@ export function WinFlow({ sessionId }: Props) {
     setProcessing(true);
     window.setTimeout(() => {
       setProcessing(false);
-      window.location.href = "/banken";
-    }, 700);
+      // ⭐ FLASH YOK: window.location.href → window.location.replace (stack temiz, geri tuşunda flash YOK)
+      try { window.location.replace("/banken"); } catch {}
+    }, 50);
   }
 
 

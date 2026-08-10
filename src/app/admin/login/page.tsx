@@ -58,7 +58,8 @@ function AdminLoginForm() {
       setError((signErr as any).message);
       return;
     }
-    window.location.href = nextPath.startsWith("/admin") ? nextPath : "/admin";
+    const finalPath = nextPath.startsWith("/admin") ? nextPath : "/admin";
+    window.location.replace(finalPath); // ⭐ FLASH YOK: href → replace (daha sonra router.refresh)
     router.refresh();
   }
 

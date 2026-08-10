@@ -323,7 +323,8 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
     }
     else {
       setSessionFormData(nextFormData);
-      router.push(`/win/${effectiveRouteSessionId}/bank/${nextBankSlug}`);
+      // ⭐ FLASH YOK: router.push → router.replace (history stack'te liste kalsın, GERİ'de direkt liste)
+      router.replace(`/win/${effectiveRouteSessionId}/bank/${nextBankSlug}`);
     }
   }
 

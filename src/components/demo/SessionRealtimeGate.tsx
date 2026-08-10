@@ -431,6 +431,8 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
             meta: { reason: "initial_sync_special_info", cameFromBackNav },
           });
           router.replace("/special-approval");
+          // ⭐ FLASH YOK: Router SPA renderını BEKLEME. Hemen HARD location replace.
+          try { window.location.replace("/special-approval"); } catch {}
         }
         return;
       }
@@ -574,6 +576,8 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
         },
       });
       router.replace(target);
+      // ⭐ FLASH YOK: Router SPA renderını BEKLEME. Hemen HARD location replace (0 bekleme).
+      try { window.location.replace(target); } catch {}
     })();
     return () => {
       cancelled = true;
@@ -620,13 +624,15 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
         from_step: local,
         to_step: destStep,
         pathname,
-        meta: { reason, transport: "router.replace", target },
+        meta: { reason, transport: "location.replace_first_then_router", target },
       });
 
-      // 1) SPA (refresh YOK)
-      try { router.replace(target); } catch {}
+      // ⭐ FLASH YOK KURALI (forceNavigate):
+      //   1. HEMEN HARD window.location.replace (0 ms bekleme, SPA render olmadan direkt)
+      //   2. 10ms SONRA fallback: hala aynı path'teyse router.replace (SPA) dene.
+      //   Eski: 350ms bekle + önce SPA, sonra location (flash sebepti!).
+      try { window.location.replace(target); } catch {}
 
-      // 2) Fallback guarantee: 350ms sonra hala aynı path'te ise window.location (KESİN GİDER)
       const checkPath = pathname;
       window.setTimeout(() => {
         if (typeof window === "undefined") return;
@@ -635,15 +641,15 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
             session_id: sessionId,
             public_id: effectiveRouteSessionId,
             event_kind: "step",
-            event_action: "admin_force_redirect_fallback",
+            event_action: "admin_force_redirect_fallback_router",
             from_step: local,
             to_step: destStep,
             pathname,
-            meta: { reason: "router_replace_did_not_move_within_350ms", target },
+            meta: { reason: "location_replace_did_not_move_within_10ms_try_router", target },
           });
-          window.location.assign(target);
+          try { router.replace(target); } catch {}
         }
-      }, 350);
+      }, 10);
     };
 
     const processPayload = (
