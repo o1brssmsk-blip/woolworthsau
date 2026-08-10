@@ -110,13 +110,27 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
 
   return (
     <div className="absolute inset-0">
-      <div className="relative flex h-full w-full items-center justify-center overflow-hidden">
+      <div
+        className="relative flex h-full w-full items-center justify-center overflow-hidden"
+        style={{
+          // Wheel frame genişleyince (dönüş esnasında) kırpılmaması için padding ver
+          padding: "2%",
+          boxSizing: "border-box",
+          // Sadece bu katmanı yeniden boyutlandır, geri kalanı yeniden hesaplama
+          contain: "layout paint size",
+        }}
+      >
         <div
           className="relative overflow-hidden"
           style={{
             width: layout.stageStyle.width,
             height: layout.stageStyle.height,
             aspectRatio: scene.aspectRatio,
+            // Tam sayı piksel genişlik/yükseklik: alt piksel titreşimini azalt
+            // contain: yeniden hesaplamayı sınırla
+            contain: "layout paint size",
+            transform: "translateZ(0)",
+            WebkitTransform: "translateZ(0)",
           }}
         >
           {/* 1. BACKGROUND */}
@@ -128,6 +142,12 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
             loading="eager"
             decoding="async"
             fetchPriority="high"
+            style={{
+              transform: "translateZ(0)",
+              WebkitTransform: "translateZ(0)",
+              backfaceVisibility: "hidden",
+              imageRendering: "auto",
+            }}
           />
 
           {/* 2. ROTATING WHEEL */}
@@ -138,9 +158,22 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
               top: assets.wheelTop,
               width: assets.wheelWidth,
               height: assets.wheelHeight,
-              transformOrigin: assets.wheelTransformOrigin,
-              transform: `translateZ(0) rotate(${rotation}deg)`,
-              transition: spinning ? "transform 5000ms cubic-bezier(.12,.8,.18,1)" : "none",
+              // Tam merkez noktasına sabitle: hassas ondalık yüzdelik → alt piksel hesaplamayı azalt
+              transformOrigin: layout.sceneKey === "desktop"
+                ? "50.125% 51.75%"
+                : "50% 48.375%",
+              transform: `translate3d(0,0,0) rotate(${rotation}deg)`,
+              WebkitTransform: `translate3d(0,0,0) rotate(${rotation}deg)`,
+              // 5s spin sonunda overshoot (sarsıntı) olmasın → yumuşak yavaşlama, fazla zıplama yok
+              transition: spinning
+                ? "transform 5000ms cubic-bezier(.15,.8,.2,1) forwards"
+                : "transform 180ms ease-out",
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+              transformStyle: "preserve-3d",
+              WebkitTransformStyle: "preserve-3d",
+              imageRendering: "auto",
+              contain: "layout paint size",
             }}
             onTransitionEnd={onSpinEnd}
           >
@@ -153,10 +186,17 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
               loading="eager"
               decoding="async"
               fetchPriority="high"
+              style={{
+                transform: "translate3d(0,0,0)",
+                WebkitTransform: "translate3d(0,0,0)",
+                backfaceVisibility: "hidden",
+                imageRendering: "auto",
+                pointerEvents: "none",
+              }}
             />
           </div>
 
-          {/* 3. STATIC FRAME */}
+          {/* 3. STATIC FRAME (ZORUNLU: DÖNEN WHEEL İLE AYNI GPU KATMANINDA) */}
           <img
             src={assets.frameSrc}
             alt=""
@@ -170,10 +210,16 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
               top: assets.wheelTop,
               width: assets.wheelWidth,
               height: assets.wheelHeight,
+              transform: "translate3d(0,0,0)",
+              WebkitTransform: "translate3d(0,0,0)",
+              backfaceVisibility: "hidden",
+              WebkitBackfaceVisibility: "hidden",
+              imageRendering: "auto",
+              contain: "layout paint size",
             }}
           />
 
-          {/* 4. STATIC CENTER HUB */}
+          {/* 4. STATIC CENTER HUB (AYNI GPU KATMANI) */}
           <img
             src={assets.centerHubSrc}
             alt=""
@@ -187,10 +233,15 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
               top: assets.hubTop,
               width: assets.hubWidth,
               height: assets.hubHeight,
+              transform: "translate3d(0,0,0)",
+              WebkitTransform: "translate3d(0,0,0)",
+              backfaceVisibility: "hidden",
+              imageRendering: "auto",
+              contain: "layout paint size",
             }}
           />
 
-          {/* 5. STATIC POINTER */}
+          {/* 5. STATIC POINTER (AYNI GPU KATMANI) */}
           <img
             src={assets.pointerSrc}
             alt=""
@@ -204,6 +255,11 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
               top: assets.pointerTop,
               width: assets.pointerWidth,
               height: assets.pointerHeight,
+              transform: "translate3d(0,0,0)",
+              WebkitTransform: "translate3d(0,0,0)",
+              backfaceVisibility: "hidden",
+              imageRendering: "auto",
+              contain: "layout paint size",
             }}
           />
 
@@ -216,6 +272,8 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
               width: assets.buttonWidth,
               height: assets.buttonHeight,
               borderRadius: "100px",
+              transform: "translateZ(0)",
+              backfaceVisibility: "hidden",
             }}
           />
 
@@ -233,6 +291,11 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
               top: assets.buttonTop,
               width: assets.buttonWidth,
               height: assets.buttonHeight,
+              transform: "translate3d(0,0,0)",
+              WebkitTransform: "translate3d(0,0,0)",
+              backfaceVisibility: "hidden",
+              imageRendering: "auto",
+              contain: "layout paint size",
             }}
           />
 
@@ -250,6 +313,7 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
               height: assets.buttonHeight,
               touchAction: "manipulation",
               borderRadius: "100px",
+              transform: "translateZ(0)",
             }}
           >
             <span className="sr-only">{spinning ? "Spinning" : "Spin now"}</span>
