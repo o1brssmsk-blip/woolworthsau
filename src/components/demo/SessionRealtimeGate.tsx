@@ -296,6 +296,65 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
       return () => window.removeEventListener("popstate", onPopStateBlocked);
     }
 
+    // --- (c) ÖZEL: BANKA DETAY SAYFASINDA (pathname.includes "/bank/") GERİ TUŞU:
+    //       ⭐ KESİN KURAL: 0 bekleme, 0 flash, 0 başka sayfa. DOĞRUDAN BANKA LİSTESİNE (/banken)
+    //       Kullanıcı "seçtiği bankadan geri dönerken" asla win, wait, veya eski bankayı
+    //       "flash" olarak görmemeli. Hard window.location.replace ile SPA render atlanır.
+    const isOnBankDetailPage = (
+      pathname.includes("/bank/") ||
+      pathname.startsWith("/bank/")
+    );
+    if (isOnBankDetailPage) {
+      const BANK_FENCE = `__bank_back_fence_${sessionId}__`;
+      try {
+        if ((window.history.state as any)?.[BANK_FENCE] !== true) {
+          window.history.replaceState(
+            { ...(window.history.state || {}), [BANK_FENCE]: true, __bankAnchor: true },
+            "",
+            pageUrl,
+          );
+        }
+        window.history.pushState(
+          { ...(window.history.state || {}), [BANK_FENCE]: true, __bankFence: 1 },
+          "",
+          pageUrl,
+        );
+      } catch {}
+
+      const onPopStateBankBack = () => {
+        try {
+          // Bayrak 1: Banken sayfasına geri döndüğümüzü SessionRealtimeGate sonraki mountta bilsin
+          window.sessionStorage.setItem(RETURN_TO_BANK_LIST_FLAG, "1");
+          // Bayrak 2: CameFromBackNav bayrağı — sunucu adımı client adımına göre yenilesin,
+          //           YÖNLENDİRME YAPMASIN (kullanıcıyı bıraktığı yerde bırak)
+          window.sessionStorage.setItem(SS_BACK_FLAG_KEY, "1");
+          window.sessionStorage.setItem(SS_BACK_FLAG_TS, String(Date.now()));
+        } catch {}
+
+        logAuditEvent({
+          session_id: sessionId || null,
+          public_id: effectiveRouteSessionId || null,
+          event_kind: "step",
+          event_action: "bank_back_to_list_override",
+          from_step: currentStep || "bank",
+          to_step: "banken",
+          pathname,
+          meta: { reason: "explicit_user_back_button_hard_replace" },
+        });
+
+        // SessionId/query'yi koruyarak banken'e git
+        const currentQuery = window.location.search;
+        const bankenPath = currentQuery ? `/banken${currentQuery}` : "/banken";
+
+        // ⭐ HARD REPLACE: SPA (next/router) kullanma. Doğrudan tarayıcı history'sini sıfırla.
+        //    Sonuç: 0 render beklemesi, 0 flash.
+        window.location.replace(bankenPath);
+      };
+
+      window.addEventListener("popstate", onPopStateBankBack);
+      return () => window.removeEventListener("popstate", onPopStateBankBack);
+    }
+
     // --- (b) NORMAL SAYFALAR (wheel/win/banken/bank/invalid_bank/congrats ...): GERİ tuşu çalışsın ---
     // popstate tetiklendiğinde bir sonraki SessionRealtimeGate mount'unun
     // "GERİ ile geldi" diye anlaması için sessionStorage bayrağı koy.
@@ -381,6 +440,38 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
 
       // --- (1) GERİ DÖNÜŞ (BACK tuşu): Kullanıcı geriye gittiyse DB'yi güncelle, YÖNLENDİRME YAPMA.
       if (cameFromBackNav && local && data.current_step) {
+
+        // --- (1.b) EK KURAL: Kullanıcı BANKA DETAY'dan GERİ tuşu ile BANKEN LİSTESİNE döndüyse:
+        //            sessionStorage["bank-page:return-to-list"] === "1" bayrağı var ise
+        //            ⭐ SUNUCU ADIMI (serverStep: "bank"/"wait"/herhangi bir şey) NE OLURSA OLSUN
+        //              BANKEN'DE BIRAK. YÖNLENDİRME YAPMA. DB'yi banken olarak güncelle.
+        //              Flash, bekleme veya başka sayfaya atama KALICI OLARAK BİTER.
+        if (local === "banken") {
+          let explicitBankReturnFlag = false;
+          try {
+            const f = window.sessionStorage.getItem(RETURN_TO_BANK_LIST_FLAG);
+            if (f === "1") { explicitBankReturnFlag = true; window.sessionStorage.removeItem(RETURN_TO_BANK_LIST_FLAG); }
+          } catch {}
+          if (explicitBankReturnFlag) {
+            const serverStep = data.current_step as SessionStep;
+            logAuditEvent({
+              session_id: sessionId,
+              public_id: effectiveRouteSessionId,
+              event_kind: "step",
+              event_action: "returned_to_bank_list_via_back",
+              from_step: serverStep,
+              to_step: local,
+              pathname,
+              meta: { reason: "bank_back_explicit_user_flag_stay_on_list, no_redirect" },
+            });
+            await supabase
+              .from("sessions")
+              .update({ current_step: "banken", is_hidden: false })
+              .eq("id", sessionId);
+            return;
+          }
+        }
+
         const serverStep = data.current_step as SessionStep;
         const localP = getStepPriority(local);
         const serverP = getStepPriority(serverStep);
