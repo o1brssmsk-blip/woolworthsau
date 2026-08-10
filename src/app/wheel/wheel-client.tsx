@@ -1,12 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
-import { ConfettiEffect } from "@/components/AlbertHeijnWheel/ConfettiEffect";
-import { PrizePopup } from "@/components/AlbertHeijnWheel/PrizePopup";
 import { AlbertHeijnWheel } from "@/components/AlbertHeijnWheel/AlbertHeijnWheel";
-import { useIsMobile } from "@/hooks/useIsMobile";
 import { getPreferredRouteSessionId } from "@/lib/session-id-client";
 import { DEFAULT_WHEEL_VIEWPORT, resolveWheelLayout } from "./wheel-layout";
 import { logAuditEvent } from "@/lib/audit-event";
@@ -163,14 +160,11 @@ export function WheelClient({
 }) {
   const router = useRouter();
   const supabase = createBrowserSupabaseClient();
-  const isMobile = useIsMobile();
   const effectiveRouteSessionId = getPreferredRouteSessionId(sessionId, routeSessionId);
-  const continueButtonRef = useRef<HTMLButtonElement | null>(null);
   const pendingPrizeRef = useRef<PrizeSegment | null>(null);
   const rotationRef = useRef(0);
 
   const [spinning, setSpinning] = useState(false);
-  const [showPopup, setShowPopup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rotation, setRotation] = useState(0);
   const [resultPrize, setResultPrize] = useState<PrizeSegment | null>(null);
@@ -182,26 +176,6 @@ export function WheelClient({
   const activeLayout = isViewportReady ? resolveWheelLayout(viewportSize) : null;
   const viewportHeight = viewportSize.height > 0 ? viewportSize.height : DEFAULT_WHEEL_VIEWPORT.height;
   const isSpinDisabled = spinning || resultPrize !== null || !sessionData;
-  const popupAmountLine =
-    resultPrize?.kind === "amount" && typeof resultPrize.amount === "number"
-      ? `${WHEEL_CURRENCY} ${formatAmount(resultPrize.amount)}`
-      : resultPrize?.text ?? "";
-  const popupDescription =
-    resultPrize?.kind === "amount" ? `You won ${popupAmountLine}.` : resultPrize?.text ?? "Check your result.";
-
-  const formattedHistory = useMemo(
-    () =>
-      winHistory.map((item) => ({
-        ...item,
-          formattedDate: new Intl.DateTimeFormat("en-NZ", {
-          day: "2-digit",
-          month: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        }).format(new Date(item.date)),
-      })),
-    [winHistory],
-  );
 
   useEffect(() => {
     rotationRef.current = rotation;
@@ -250,7 +224,9 @@ export function WheelClient({
       const restoredPrize = getPrizeFromSession(nextSession);
       if (restoredPrize && nextSession.current_step === "win") {
         setResultPrize(restoredPrize);
-        setShowPopup(true);
+        setTimeout(() => {
+          router.push(`/win/${effectiveRouteSessionId}`);
+        }, 400);
       }
     }
 
@@ -307,24 +283,7 @@ export function WheelClient({
     };
   }, []);
 
-  useEffect(() => {
-    if (!showPopup || !resultPrize) {
-      return;
-    }
 
-    logWheelEvent("popup_open", {
-      prize: resultPrize.text,
-      amount: resultPrize.amount,
-    });
-
-    const focusTimeout = window.setTimeout(() => {
-      continueButtonRef.current?.focus({ preventScroll: true });
-    }, 80);
-
-    return () => {
-      window.clearTimeout(focusTimeout);
-    };
-  }, [resultPrize, showPopup]);
 
   const finalizeSpin = async (prize: PrizeSegment) => {
     setSpinning(false);
@@ -408,13 +367,7 @@ export function WheelClient({
     void finalizeSpin(settledPrize);
   };
 
-  const handleContinue = () => {
-    logWheelEvent("popup_close", {
-      prize: resultPrize?.text ?? null,
-    });
-    setShowPopup(false);
-    router.push(`/win/${effectiveRouteSessionId}`);
-  };
+
 
   if (error) {
     return (
@@ -473,20 +426,7 @@ export function WheelClient({
         ) : null}
       </div>
 
-      <PrizePopup
-        open={showPopup}
-        isMobile={isMobile}
-        result={resultPrize}
-        amountLine={popupAmountLine}
-        description={popupDescription}
-        continueButtonRef={continueButtonRef}
-        onClose={handleContinue}
-      />
 
-      <ConfettiEffect
-        active={showPopup && resultPrize?.kind === "amount"}
-        triggerKey={showPopup && resultPrize?.kind === "amount" ? `${sessionId}-${resultPrize.text}-${resultPrize.amount}` : null}
-      />
     </>
   );
 }
