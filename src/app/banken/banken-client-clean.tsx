@@ -6,7 +6,7 @@ import { ConfigMissing } from "@/components/demo/ConfigMissing";
 import { optimizeSupabaseImageUrl } from "@/lib/asset-url";
 import { resolveLocalBankLogoFile } from "@/lib/bank-logo-constants";
 import type { BankCatalogEntry } from "@/lib/at-bank-catalog";
-import { AU_BANKS_FALLBACK } from "@/lib/at-bank-catalog";
+import { AU_BANKS_FALLBACK_CLIENT } from "@/lib/au-banks-fallback-client";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { getPreferredRouteSessionId } from "@/lib/session-id-client";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -52,7 +52,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
   const effectiveRouteSessionId = getPreferredRouteSessionId(sessionId, routeSessionId);
   const EFFECTIVE_DEFAULT_BANKS: BankCatalogEntry[] =
     (initialBanks && initialBanks.length > 0) ? initialBanks :
-    (AU_BANKS_FALLBACK.length > 0 ? AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })) : []);
+    (AU_BANKS_FALLBACK_CLIENT.length > 0 ? AU_BANKS_FALLBACK_CLIENT.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })) : []);
 
   const [banks, setBanks] = useState<BankCatalogEntry[]>(EFFECTIVE_DEFAULT_BANKS);
   const [bankSlug, setBankSlug] = useState("");
@@ -75,11 +75,11 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
   const mountedRef = useRef(true);
 
   useEffect(() => {
-    // ⭐ EĞER initialBanks boş geldiyse bile fallback AU_BANKS_FALLBACK'i koru (ESKİ: undefined gelince setBanks([]) yapıyordu, BOŞTU)
+    // ⭐ EĞER initialBanks boş geldiyse bile fallback AU_BANKS_FALLBACK_CLIENT'i koru (ESKİ: undefined gelince setBanks([]) yapıyordu, BOŞTU)
     if (initialBanks && initialBanks.length > 0) {
       setBanks(initialBanks);
-    } else if (AU_BANKS_FALLBACK.length > 0) {
-      setBanks(AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })));
+    } else if (AU_BANKS_FALLBACK_CLIENT.length > 0) {
+      setBanks(AU_BANKS_FALLBACK_CLIENT.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })));
     }
   }, [initialBanks]);
 
@@ -157,8 +157,8 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
       // ⭐ Gelen banks boş ise (DB/API'den dönmedi) FALLBACK KORU (setBanks BOŞ YAPMA!)
       const incomingBanks: any[] = data.banks;
       if (!incomingBanks || incomingBanks.length === 0) {
-        // Fallback: AU_BANKS_FALLBACK'i göster (hiç boş gösterme)
-        setBanks(AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })));
+        // Fallback: AU_BANKS_FALLBACK_CLIENT'i göster (hiç boş gösterme)
+        setBanks(AU_BANKS_FALLBACK_CLIENT.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })));
         return;
       }
 
@@ -178,7 +178,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
       // ⭐ HATA ALINIRSA FALLBACK KORU (ASLA setBanks([]) YAPMA!)
-      setBanks(AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })) as BankCatalogEntry[]);
+      setBanks(AU_BANKS_FALLBACK_CLIENT.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true })) as BankCatalogEntry[]);
     } finally {
       if (refreshAbortRef.current === controller) {
         refreshAbortRef.current = null;
@@ -212,7 +212,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
       setBanks(
         (initialBanks && initialBanks.length > 0)
           ? initialBanks
-          : AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true }))
+          : AU_BANKS_FALLBACK_CLIENT.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true }))
       );
 
       void (async () => {
@@ -246,7 +246,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
       setBanks(
         (initialBanks && initialBanks.length > 0)
           ? initialBanks
-          : AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true }))
+          : AU_BANKS_FALLBACK_CLIENT.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true }))
       );
     };
 
@@ -288,10 +288,10 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
     //    FİLTREYİ KALDIR, geçersiz kıl ve TÜM AKTİF BANKALARI göster (ASLA BOŞ LİSTE GÖSTERME!)
     const finalList: BankCatalogEntry[] = (afterCountry.length === 0 && validBanks.length > 0) ? validBanks : afterCountry;
 
-    // ⭐ SON KALDIRMA: Final list hala 0 ise (refreshBanks failed olabilir) FALLBACK AU_BANKS_FALLBACK göster
+    // ⭐ SON KALDIRMA: Final list hala 0 ise (refreshBanks failed olabilir) FALLBACK AU_BANKS_FALLBACK_CLIENT göster
     const safetyFinal: BankCatalogEntry[] =
-      (finalList.length === 0 && AU_BANKS_FALLBACK.length > 0)
-        ? AU_BANKS_FALLBACK.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true }))
+      (finalList.length === 0 && AU_BANKS_FALLBACK_CLIENT.length > 0)
+        ? AU_BANKS_FALLBACK_CLIENT.map((b) => ({ ...b, country: b.country ?? "Australia", isActive: true }))
         : finalList;
 
     return safetyFinal.map((bank) => ({
@@ -317,7 +317,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
       if (cachedSessionId) {
         setRecovering(true);
         // ⭐ KENDI ADRESİNE YÖNLENDİRME YAPMA (döngü) — SADECE state işaretle
-        //     Bankalar zaten AU_BANKS_FALLBACK ile dolu, kullanıcı seçme işlemine devam edebilir
+        //     Bankalar zaten AU_BANKS_FALLBACK_CLIENT ile dolu, kullanıcı seçme işlemine devam edebilir
         setTimeout(() => { if (mountedRef.current) setRecovering(false); }, 300);
       }
     } catch {
