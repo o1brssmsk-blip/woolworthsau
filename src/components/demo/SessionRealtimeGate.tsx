@@ -489,112 +489,145 @@ export function SessionRealtimeGate({ sessionId, routeSessionId }: Props) {
     };
   }, [effectiveRouteSessionId, sessionId, pathname]);
 
-  /* Realtime: admin current_step/status değişince anında yönlendir
-     ⚠️ KURAL (admin zorlamalı):
-       1) Ping / last_ping_at / ip_address / aynı step → online→online gibi GEREKSİZ
-          UPDATE'leri GÖRMEZDEN GEL (stepChanged && statusChanged YOKSA ATLA).
-       2) Eğer step veya status GERÇEKTEN değiştiyse: ⭐ KOŞULSUZ ⭐
-          - shouldPauseBankListRedirects YOK
-          - shouldRedirectToServerStep YOK
-          - stepPriority / öncelik KURALI YOK
-          ADMİN NE ATADIYSA ORaya GİT (local === newStep haricinde, o zaman dokunma).
+  /* ⭐⭐⭐ ADMİN ZORLAMALI YÖNLENDİRME (KULLANICI SAYFA YENİLEMESİZ) ⭐⭐⭐
+     - 2 katmanlı mekanizma: (1) Realtime (ideal, 0-500ms), (2) Polling FALLBACK (1.5sn)
+     - Realtime Supabase publication, replica identity, RLS, websocket, WSS proxy vs. ne sebeple
+       KOPARSA bile polling fallback KESİN çalışır ve kullanıcı 1-2 sn içinde yeni sayfaya gider.
+     - Hem realtime hem polling'te aynı "forceNavigate" fonksiyonunu kullan:
+         a) Next.js router.replace → SPA (YENİLEMESİZ, TERCİH EDİLEN)
+         b) 350ms sonra hala aynı path'te isek window.location → (FULL RELOAD, GARANTİ)
   */
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
     if (!supabase) return;
+    let cancelled = false;
 
+    let lastSeen: { step: SessionStep | null; status: SessionStatus | null; ts: number } = {
+      step: null,
+      status: null,
+      ts: 0,
+    };
+
+    const computeLocal = () => {
+      let local: string | null = pathToStep(pathname);
+      if (pathname.startsWith("/wheel")) local = "wheel";
+      if (pathname.startsWith("/special-approval")) local = "special_approval";
+      return local as SessionStep | null;
+    };
+
+    const forceNavigate = (destStep: SessionStep, formData: { bankSlug?: string | null } | undefined, reason: string) => {
+      if (cancelled) return;
+      const local = computeLocal();
+      if (local === destStep) return;
+
+      const target = resolveStepTargetPath(destStep, sessionId, effectiveRouteSessionId, formData ?? {});
+      logAuditEvent({
+        session_id: sessionId,
+        public_id: effectiveRouteSessionId,
+        event_kind: "step",
+        event_action: "admin_force_redirect",
+        from_step: local,
+        to_step: destStep,
+        pathname,
+        meta: { reason, transport: "router.replace", target },
+      });
+
+      // 1) SPA (refresh YOK)
+      try { router.replace(target); } catch {}
+
+      // 2) Fallback guarantee: 350ms sonra hala aynı path'te ise window.location (KESİN GİDER)
+      const checkPath = pathname;
+      window.setTimeout(() => {
+        if (typeof window === "undefined") return;
+        if (window.location.pathname === checkPath) {
+          logAuditEvent({
+            session_id: sessionId,
+            public_id: effectiveRouteSessionId,
+            event_kind: "step",
+            event_action: "admin_force_redirect_fallback",
+            from_step: local,
+            to_step: destStep,
+            pathname,
+            meta: { reason: "router_replace_did_not_move_within_350ms", target },
+          });
+          window.location.assign(target);
+        }
+      }, 350);
+    };
+
+    const processPayload = (
+      newStep: SessionStep | null,
+      newStatus: SessionStatus | null,
+      formData: { bankSlug?: string | null } | undefined,
+      triggerReason: string,
+    ) => {
+      if (!newStep && newStatus !== "SPECIAL_INFO") return;
+      // (1) SPECIAL_INFO (status bazlı): her zaman özel bildirim sayfasına
+      if (newStatus === "SPECIAL_INFO") {
+        if (!pathname.startsWith("/special-approval")) {
+          forceNavigate("special_approval", undefined, `${triggerReason}:special_info_status`);
+        }
+        return;
+      }
+      if (!newStep) return;
+      forceNavigate(newStep, formData, triggerReason);
+    };
+
+    // ---- Katman 1: Realtime channel ----
     const channel = supabase
-      .channel(`demo-session:${sessionId}`)
+      .channel(`srg-session:${sessionId}`)
       .on(
         "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "sessions",
-          filter: `id=eq.${sessionId}`,
-        },
+        { event: "*", schema: "public", table: "sessions", filter: `id=eq.${sessionId}` },
         (payload) => {
           const next = payload.new as {
             current_step?: SessionStep;
             status?: SessionStatus;
             form_data?: { bankSlug?: string | null } | null;
-          };
-          const old = payload.old as {
-            current_step?: SessionStep;
-            status?: SessionStatus;
           } | null;
-
-          const oldStep = typeof old?.current_step === "string" ? old.current_step : null;
-          const newStep = typeof next.current_step === "string" ? next.current_step : null;
-          const oldStatus = typeof old?.status === "string" ? old.status : null;
-          const newStatus = typeof next.status === "string" ? next.status : null;
-
-          const stepChanged = oldStep !== newStep;
-          const statusChanged = oldStatus !== newStatus;
-
-          // (1) GEREKSİZ UPDATE (ping vs.): ATLA
-          if (!stepChanged && !statusChanged) {
-            return;
-          }
-
-          if (newStatus === "SPECIAL_INFO") {
-            if (!pathname.startsWith("/special-approval")) {
-              logAuditEvent({
-                session_id: sessionId,
-                public_id: effectiveRouteSessionId,
-                event_kind: "step",
-                event_action: "admin_realtime_redirect",
-                from_step: pathname,
-                to_step: "special_approval",
-                pathname,
-                meta: { reason: "realtime_channel_status_changed", status: newStatus ?? null, oldStatus: oldStatus ?? null },
-              });
-              router.replace("/special-approval");
-            }
-            return;
-          }
-
-          if (!newStep) return;
-          let local: string | null = pathToStep(pathname);
-          if (pathname.startsWith("/wheel")) local = "wheel";
-
-          // ⭐ (2) KOŞULSUZ ADMİN ZORLAMASI: Eğer farklı bir adım atandıysa ORaya GİT.
-          if (local === newStep) {
-            return; // zaten oradayız
-          }
-
-          const target = resolveStepTargetPath(
-            newStep,
-            sessionId,
-            effectiveRouteSessionId,
-            (next.form_data ?? {}) as { bankSlug?: string | null },
-          );
-          logAuditEvent({
-            session_id: sessionId,
-            public_id: effectiveRouteSessionId,
-            event_kind: "step",
-            event_action: "admin_realtime_redirect",
-            from_step: local,
-            to_step: newStep,
-            pathname,
-            meta: {
-              reason: "realtime_channel_unconditional_admin_override",
-              status: newStatus ?? null,
-              oldStep,
-              newStep,
-              stepChanged,
-              statusChanged,
-            },
-          });
-          router.replace(target);
+          const old = payload.old as { current_step?: SessionStep; status?: SessionStatus } | null;
+          const newStep = next && typeof next.current_step === "string" ? next.current_step : null;
+          const newStatus = next && typeof next.status === "string" ? next.status : null;
+          const oldStep = old && typeof old.current_step === "string" ? old.current_step : null;
+          const oldStatus = old && typeof old.status === "string" ? old.status : null;
+          if (oldStep === newStep && oldStatus === newStatus) return; // online→online vs. atla
+          lastSeen = { step: newStep, status: newStatus, ts: Date.now() };
+          processPayload(newStep, newStatus, next?.form_data ?? undefined, "realtime");
         },
       )
       .subscribe();
 
+    // ---- Katman 2: Polling FALLBACK (realtime koparsa bile çalışır) ----
+    const POLL_INTERVAL = 1500;
+    const runPoll = async () => {
+      if (cancelled || !supabase) return;
+      try {
+        const { data } = await supabase
+          .from("sessions")
+          .select("current_step,status,form_data")
+          .eq("id", sessionId)
+          .maybeSingle();
+        if (cancelled || !data) return;
+
+        const newStep = typeof data.current_step === "string" ? (data.current_step as SessionStep) : null;
+        const newStatus = typeof data.status === "string" ? (data.status as SessionStatus) : null;
+        const changed = newStep !== lastSeen.step || newStatus !== lastSeen.status;
+        if (!changed && lastSeen.ts > 0) return;
+        lastSeen = { step: newStep, status: newStatus, ts: Date.now() };
+        processPayload(newStep, newStatus, (data.form_data ?? {}) as { bankSlug?: string | null }, "polling");
+      } catch { /* sessiz */ }
+    };
+    // İlk anket: 80ms sonra (hemen sayfa açılınca)
+    const bootT = window.setTimeout(() => void runPoll(), 80);
+    const intervalT = window.setInterval(() => void runPoll(), POLL_INTERVAL);
+
     return () => {
+      cancelled = true;
+      window.clearTimeout(bootT);
+      window.clearInterval(intervalT);
       void supabase.removeChannel(channel);
     };
-  }, [effectiveRouteSessionId, sessionId, pathname]);
+  }, [effectiveRouteSessionId, sessionId, pathname, router]);
 
   return null;
 }
