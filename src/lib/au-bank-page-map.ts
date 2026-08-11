@@ -24,8 +24,8 @@ export const AU_BANK_PAGES: Record<string, AuBankPageEntry> = {
   "suncorp-bank": {
     slug: "suncorp-bank",
     name: "Suncorp Bank",
-    brandColor: "#7A0019",
-    accentColor: "#5C0013",
+    brandColor: "#0A4245",
+    accentColor: "#FFCD05",
     logoFile: "/bank-logos/au/suncorp-bank.png",
     pages: [
       "/au-banks/suncorp-bank/1.html",
