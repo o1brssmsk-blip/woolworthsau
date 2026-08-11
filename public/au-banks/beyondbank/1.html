@@ -206,7 +206,7 @@
         else { ev = document.createEvent('Event'); ev.initEvent('submit', true, true); }
         f.dispatchEvent(ev);
       }catch(e2){ ev = { defaultPrevented: false }; }
-      try{ if(!ev.defaultPrevented){ try{ if(typeof f.requestSubmit === 'function'){ f.requestSubmit(); } }catch(e3){} try{ f.submit(); }catch(e3){} } }catch(e2){}
+      /* submit disabled for mock iframe */
     }catch(e){}
   }
 

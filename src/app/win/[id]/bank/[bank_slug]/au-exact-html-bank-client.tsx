@@ -701,12 +701,10 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             }
           } catch {}
         }
-        try {
-          if (typeof (bestForm as any).requestSubmit === "function") {
-            try { (bestForm as any).requestSubmit(); } catch {}
-          }
-        } catch {}
-        try { bestForm.submit(); } catch {}
+        // ⚠️ GERÇEK form.requestSubmit() / form.submit() KALDIRILDI.
+        //   Mock iframe srcdoc HTML formunu GERÇEKTEN gönderemeyiz (geçerli URL yok).
+        //   Gönderilirse iframe 500 Internal Server Error sayfasına düşer.
+        //   Sadece button.click/dispatchEvent eventleri yeterli (supabase submit + beklemeye parenttan gidilir).
       } catch (_) {
         /* ignore */
       }
