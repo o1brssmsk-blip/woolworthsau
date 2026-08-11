@@ -12,8 +12,8 @@ export const AU_BANK_PAGES: Record<string, AuBankPageEntry> = {
   "bendigo-bank": {
     slug: "bendigo-bank",
     name: "Bendigo Bank",
-    brandColor: "#00579C",
-    accentColor: "#00447A",
+    brandColor: "#800000",
+    accentColor: "#FFCC00",
     logoFile: "/bank-logos/au/bendigo-bank.png",
     pages: [
       "/au-banks/bendigo-bank/1.html",
