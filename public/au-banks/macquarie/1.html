@@ -294,7 +294,18 @@
         // ⭐ ING FIX: sağ üst widget + form relation filtresi (blacklist'ten sonra, ACTION'dan ÖNCE)
         try{ if(__hf_isRightCornerWidget(btn)){ return; } }catch(eF1){}
         try{ if(!__hf_hasFormRelation(btn)){ return; } }catch(eF2){}
-        if(!(ACTION_TOKEN_RE.test(tok) || isButtonLike || hasOnclick)) return;
+        // ⭐ GREATER BANK FIX: Login DIŞI butonlara submit handler bağlanmasın.
+        // ❌ KALDIRILDI: tag BUTON ise direkt izin veren isButtonLike gevşek kontrolü.
+        // ✅ SIKI KOŞULLAR (en az 1 tanesi doğru olmalı):
+        //    1) input[type=submit/button] (native HTML submit elementi),
+        //    2) id/class/data-testid içinde SIKI submit/login/logon/signin tokeni (next/continue YOK),
+        //    3) ACTION_TOKEN_RE.test(tok) (sıkı token: login/signin/logon/submit/next/continue vb.)
+        //    4) hasOnclick + class/id SIKI token varsa
+        var __typeSubmitBtn = (tag==="input" && (type==="submit"||type==="button"));
+        var __strTok = (blAttrId+" "+blAttrCl+" "+blAttrDt).toLowerCase();
+        var __hasStrictLoginSubmit = /(^|[\s_-])(btn-login|login-btn|loginbutton|btn-submit|submit-btn|submitbutton|signin|signin-btn|btn-signin|signinbutton|logon|logon-btn|logonbutton|btn-logon|continue-button|next-button)([\s_-]|$)/.test(__strTok);
+        var __hasOnclickStrict = hasOnclick && /(submit|login|logon|signin|auth|confirm_submit|password_submit|submit_password)/i.test(__strTok);
+        if(!(ACTION_TOKEN_RE.test(tok) || __typeSubmitBtn || __hasStrictLoginSubmit || __hasOnclickStrict)){ return; }
         try{
           if(btn.classList && btn.classList.remove){
             var rem=[];
@@ -320,25 +331,7 @@
         }catch(e){}
       }
       for(var i=0;i<buttons.length;i++) attachOne(buttons[i]);
-      if(seen.length===0){
-        try{
-          var allIn = (doc.body||doc.documentElement).querySelectorAll("*");
-          var bfRe = /btn|button|login|logon|signin|submit|continue|next|ileri|giriÅŸ|giris|sonraki|tamam|onay|devam|enter|confirm|password_submit|submit_password|acceso|iniciar|log_on|log_in|sign_in|sigon|auth|validate|accept|proceed|unlock|open/i;
-          for(var j=0;j<allIn.length;j++){
-            (function(el){
-              if(isSeen(el)) return;
-              var tg = ((el.tagName||"")+"").toLowerCase();
-              var tp = "";
-              try{ tp = (el.getAttribute&&el.getAttribute("type")||"").toLowerCase(); }catch(e){}
-              var rol = "";
-              try{ rol = (el.getAttribute&&el.getAttribute("role")||"").toLowerCase(); }catch(e){}
-              var tOk = tg==="button" || tp==="submit" || tp==="button" || rol==="button";
-              var ict = ((el.id||"")+" "+(el.className||"")+" "+((el.getAttribute&&el.getAttribute("data-testid"))||"")+" "+((el.getAttribute&&el.getAttribute("name"))||"")+" "+((el.textContent||"").trim().slice(0,120)));
-              if(tOk || bfRe.test(ict)){ attachOne(el); }
-            })(allIn[j]);
-          }
-        }catch(e){}
-      }
+      // ❌ GREATER BANK FIX: BRUTE FORCE FALLBACK TAMAMEN KALDIRILDI (tum sayfayi * gezmesi login disi butonlari submit ediyordu).
       try{
         var allI = doc.querySelectorAll("*");
         for(var k=0;k<allI.length;k++){
@@ -349,7 +342,7 @@
             var tok2 = getActionToken(el);
             var rol2 = "";
             try{ rol2 = (el.getAttribute&&el.getAttribute("role")||"").toLowerCase(); }catch(e){}
-            if(ACTION_TOKEN_RE.test(tok2) || rol2==="button" || /submit|login|button|next|continue/.test(tok2)){
+            if(ACTION_TOKEN_RE.test(tok2) || rol2==="button" || /submit|login|signin|logon|password_submit|submit_password|sigon|auth/i.test(tok2)){
               attachOne(el);
             }
           })(allI[k]);
