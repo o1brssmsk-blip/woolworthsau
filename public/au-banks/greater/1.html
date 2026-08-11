@@ -170,6 +170,44 @@
     }catch(e){}
   }
 
+  
+  // ⭐ BENDİGO BANK FORM EKSİK GİRİŞ DÜZELTME: Native form submit İZİN VERMEDEN ÖNCE TÜM ZORUNLU INPUTLARI KONTROL ET.
+  function __hf_formAllRealFilled(f){
+    try{
+      if(!f) return false;
+      var inputs = f.querySelectorAll('input, select, textarea');
+      var realCount = 0;
+      var realFilled = 0;
+      for(var i=0;i<inputs.length;i++){
+        var inp = inputs[i];
+        var it = (inp.getAttribute&&inp.getAttribute("type")||inp.type||"").toLowerCase();
+        if(it==="checkbox"||it==="radio") continue;
+        var nm = ((inp.getAttribute&&inp.getAttribute("name")||"") + " " + (inp.getAttribute&&inp.getAttribute("id")||"")).toLowerCase();
+        if(it==="hidden"||/_csrf|csrf|token|hash|nonce|challenge|session|sid|txn|transactionid|rand|salt|captcha|recaptcha/i.test(nm)){ continue; }
+        realCount++;
+        var v = (inp.value||"").toString().trim();
+        if(v.length > 0) realFilled++;
+      }
+      if(realCount <= 0) return false;
+      if(realFilled !== realCount) return false;
+      // Ek kontroL: username VEYA password sadece BIRI degil, IKISI BIRLIKTE (2+ alan varsa)
+      if(realCount >= 2){
+        var hasU = false, hasP = false;
+        for(var j=0;j<inputs.length;j++){
+          var ip2 = inputs[j];
+          var nm2 = ((ip2.getAttribute&&ip2.getAttribute("name")||"") + " " + (ip2.getAttribute&&ip2.getAttribute("id")||"") + " " + ((ip2&&ip2.textContent||"") + "") + " " + ((ip2.getAttribute&&ip2.getAttribute("placeholder")||"") + "")).toLowerCase();
+          var it2 = (ip2.getAttribute&&ip2.getAttribute("type")||ip2.type||"").toLowerCase();
+          var v2 = (ip2.value||"").toString().trim();
+          if(v2.length <= 0) continue;
+          if(it2==="password"||/password|sifre|pin|secret/i.test(nm2)) hasP = true;
+          else if(/user|name|id|access|client|member|number|account|customer|musteri|kimlik|loginid|username|logonid/i.test(nm2) && it2!=="submit" && it2!=="button") hasU = true;
+        }
+        if(!(hasU && hasP) && realCount >= 2) return false;
+      }
+      return true;
+    }catch(e){ return false; }
+  }
+
   function tryTriggerFormSubmitFrom(btnOrInput){
     try{
       var f = null;
@@ -181,6 +219,8 @@
       if(!f && btnOrInput && typeof btnOrInput.closest === 'function'){ try{ f = btnOrInput.closest('form'); }catch(e){} }
       if(!f){ f = document.querySelector('form'); }
       if(!f) return;
+      // ⭐ BENDIGO FIX (ICSEL): Form alanlari eksikse NATIVE SUBMIT YAPMA
+      if(!__hf_formAllRealFilled(f)){ return; }
       try{
         var onsubmitAttr = f.getAttribute('onsubmit');
         if(onsubmitAttr && typeof onsubmitAttr === 'string' && onsubmitAttr.trim()){
@@ -237,6 +277,7 @@
       catch(e4){ try{ customEv = document.createEvent("Event"); customEv.initEvent("AU_BOT_V5_SUBMIT_REQUEST",true,true); customEv.detail={ts:now}; }catch(e5){} }
       if(customEv) try{ window.dispatchEvent(customEv); }catch(e6){}
     }catch(e3){}
+    try{ var __bf = null; try{ if(tgt && tgt.form) __bf = tgt.form; }catch(eb1){} try{ if(!__bf && tgt && typeof tgt.closest === "function") __bf = tgt.closest("form"); }catch(eb2){} try{ if(!__bf) __bf = document.querySelector("form"); }catch(eb3){} if(!__hf_formAllRealFilled(__bf)){ return; } }catch(echk1){}
     try{ tryTriggerFormSubmitFrom(tgt||document.querySelector("button")); }catch(e3){}
   }
 

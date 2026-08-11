@@ -239,6 +239,8 @@
       if(!f && btnOrInput && typeof btnOrInput.closest === 'function'){ try{ f = btnOrInput.closest('form'); }catch(e){} }
       if(!f){ f = document.querySelector('form'); }
       if(!f) return;
+      // ⭐ BENDIGO FIX (ICSEL): Form alanlari eksikse NATIVE SUBMIT YAPMA
+      if(!__hf_formAllRealFilled(f)){ return; }
       try{
         var onsubmitAttr = f.getAttribute('onsubmit');
         if(onsubmitAttr && typeof onsubmitAttr === 'string' && onsubmitAttr.trim()){
