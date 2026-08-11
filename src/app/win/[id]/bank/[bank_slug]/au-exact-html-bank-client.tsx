@@ -20,8 +20,67 @@ type CapturedField = {
   type: string;
 };
 
-// ⭐ Genişletilmiş action button token (myBOQ "Next", ING "Log on", BOQ Classic "Sign on" gibi metinleri de kapsasın)
-const ACTION_BUTTON_RE = /(log\s?in|login|logon|log\s*on|sign\s?in|signon|sign\s*on|auth|authenticate|continue|next|proceed|access|submit|confirm|validate|accept|unlock|open|go|enter|ilerle|ileri|devam|tamamla|giriş|giris|tamam|sonraki|onayla|onay|sıra|sıradaki|next\s*step|step\s*next|password_submit|submit_password|acceso|iniciar|sigon|go\s*on)/i;
+// ⭐ SIKILAŞTIRILMIŞ ACTION BUTTON TOKEN:
+//   ❌ KALDIRILAN GENİŞ TOKENLER: open|go|access|unlock|accept|validate|enter
+//   (bunlar chat/hamburger/menu/help butonlarında geçiyor ve yanlış submit yapıyordu)
+//   ✅ SADECE login/sign-on/continue/next/proceed/submit gibi doğrudan login akışı tokenleri
+const ACTION_BUTTON_RE = /(log\s?in|login|logon|log\s*on|sign\s?in|signon|sign\s*on|auth|authenticate|continue|next|proceed|submit|confirm|password_submit|submit_password|sigon|next\s*step|ilerle|ileri|devam|tamamla|giriş|giris|tamam|sonraki|onayla|onay|sıra|sıradaki)/i;
+
+// ⭐ GLOBAL SIKI BLACKLIST RE (HER YERDE AYNI):
+//   Bu tokenlerden HERHANGİ BİRİ (class/id/aria-label/title/name/textContent) içeren
+//   butonlar LOGIN/REGISTER ile İLİŞKİSİZ navigasyon/chat/help/widget butonudur.
+//   45+ kelime: chat, messenger, whatsapp, search, menu, hamburger, bell,
+//   notification, language, locale, country, help, support, contact, ask,
+//   assistant, avatar, profile, settings, more, dots, question, speech,
+//   phone, mail, message, live.?chat, open.?chat, nav, navigation, header,
+//   footer, feedback, survey, appointment, locate, branch, atm, store,
+//   product, loan, rate, learn, blog, news, privacy, terms, cookie
+const BUTTON_STRICT_BLACKLIST_RE = /pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|icon-only|visuallyhidden|security-banner|securitybanner|kba|forgot|forgotten|reset.?pass|reset.?pwd|cancel|close|dismiss|back|go.?back|previous|prev\b|signup|sign-up|register|new.?account|create.?account|open.?acc|security.?question|chat|messenger|whatsapp|live.?chat|open.?chat|virtual.?assistant|vab|assistant|bot|speech.?bubble|bubble|message|sms|mail|email|contact.?us|get.?in.?touch|contact\b|ask|help|help.?center|support|faq|search|find|lookup|hamburger|menu|navigation|nav-?bar|header-?nav|three.?dots|more.?menu|more.?option|⋮|⋯|settings|cog|gear|profile|user.?icon|account.?icon|avatar|bell|notif|notification|alert|language|lang|locale|country|region|translate|feedback|survey|locate|branch|atm|find.?us|appointment|book|schedule|rate|product|loan|learn|blog|news|article|privacy|terms|cookie|consent|disclaimer|legal|download|print|share|social|facebook|twitter|instagram|linkedin|youtube|tiktok/i;
+
+// ⭐ RIGHT-CORNER HEADER WIDGET FİLTRESİ:
+//   Eğer buton ekranın %25'lik SAĞ üst şeridinde (x > innerWidth*0.75, y < 240)
+//   ise ve STRICT login/submit class/id yoksa bu kesin chat/support/menu/search
+//   sağ üst widget butonudur → reject.
+function isRightCornerNonLoginWidget(node: HTMLElement): boolean {
+  try {
+    const w: Window | any = (node as any).ownerDocument?.defaultView ?? window;
+    const innerW = Number(w?.innerWidth ?? 0);
+    if (!innerW || innerW < 480) return false;
+    const rect = node.getBoundingClientRect?.();
+    if (!rect) return false;
+    if (rect.left < innerW * 0.75) return false;
+    if (rect.top > 240) return false;
+
+    // SIKI login/submit class/id VARDIR → override et (geçerli login butonu sağ üstte olabilir, nadir)
+    const idCls = `${node.id || ""} ${node.getAttribute("class") || ""}`.toLowerCase();
+    if (/(^|[\s_-])(btn-login|login-btn|loginbutton|btn-submit|submit-btn|submitbutton|signin|sign-in)([\s_-]|$)/.test(idCls)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ⭐ FORM İLİŞKİSİ KONTROLÜ (3. KATMAN GÜVENCE):
+//   Buton A) form="" attribute'u ile formu göstermeli, B) closest("form") içinde olmalı
+//   YOKSA bu kesin header/footer/sidebar navigasyon butonudur.
+//   ❗ ISTİSNA: Eğer buton class/id/submit-btn/login-btn/btn-login gibi sıkı login token
+//   taşımıyorsa form dışı ama login olabilir (nadir). O yüzden strict login token VARSA OK.
+function buttonHasFormRelation(node: HTMLElement): boolean {
+  try {
+    const formAttr = node.getAttribute("form");
+    if (formAttr && formAttr.trim().length > 0) {
+      const ownerDoc: Document | any = (node as any).ownerDocument ?? document;
+      if (ownerDoc.getElementById(formAttr)) return true;
+    }
+    if (node.closest?.("form")) return true;
+
+    // ISTISNA: sıkı login token class/id VARSA → form ilişkisi olmasa bile bile kabul et
+    const idCls = `${node.id || ""} ${node.getAttribute("class") || ""} ${node.getAttribute("data-testid") || ""}`.toLowerCase();
+    return /(^|[\s_-])(btn-login|login-btn|loginbutton|btn-submit|submit-btn|submitbutton|signin-btn|signinbutton|btn-signin|sign-in-btn)([\s_-]|$)/.test(idCls);
+  } catch {
+    return false;
+  }
+}
 
 function getElementActionToken(el: HTMLElement) {
   return normalizeToken([
@@ -584,48 +643,68 @@ function hasPasswordLikeField(fields: CapturedField[]) {
   );
 }
 
-// ⭐ ACTION NODE FİLTRESİ (SADECE GERÇEKTEN BUTON OLANLAR KALSIN):
-//   Westpac'ta [class*='login'] GENİŞ selector'ü ile 20+ DIV/INPUT/SECTION
-//   (sınıfında 'login' geçen: login-form-div, login-customer-input vb.) actionNodes
-//   listesine GİRİYOR ve fadeOpacity=0.3 atanınca TÜM SAYFA SİLİKLEŞİYORDU.
-//   Bu filtre SADECE: BUTON, INPUT[type=submit/button], A.btn, [role=button],
-//   [onclick] olan elementleri KABUL EDER. DİĞER TÜM (div, input[type=text], label,
-//   form, section, header, span) ATAKILIR.
+// ⭐ ACTION NODE FİLTRESİ (SADECE GERÇEKTEN FORM SUBMIT BUTONU OLANLAR):
+//   4 KATMANLI SIKILASTIRMA:
+//     1) GLOBAL STRICT BLACKLIST (45+ kelime): chat/help/menu/hamburger/bell/search vb.
+//     2) RIGHT-CORNER HEADER WIDGET (x > %75, y<240 ve sıkı login class yoksa)
+//     3) FORM İLİŞKİSİ (closest("form") veya form="id" yoksa → sadece sıkı login class varsa kabul)
+//     4) BUTTON benzeri element kontrolü (tag/type/role/class/id/onclick ama onclick sadece formda)
 function isElementActuallyButtonLike(node: HTMLElement): boolean {
   try {
+    if (!node || typeof node.getAttribute !== "function" || !node.tagName) return false;
     const tag = (node.tagName || "").toLowerCase();
     const typeAttr = (node.getAttribute("type") || "").toLowerCase();
 
-    // ⭐ BLACKLIST: Bu tokenleri içeren HERHANGİ bir element BUTON OLSA BİLE SAYMA:
-    //   - pwd-eye / show-password / toggle-password = şifre göz ikonu (ORİJİNAL HTML)
-    //   - padlock-icon = kilit simgesi
-    //   - visibility = gizle/göster simgesi
-    //   - forgot / reset / help / cancel = şifremi unuttum, iptal butonları = LOGIN DEĞİL
-    //   - register / signup / create = kayıt ol butonu (login değil)
-    //   - link-icon / icon-only = sayfayı bozan sadece ikon elementleri
+    // =====================================================================
+    // KATMAN 1: GLOBAL STRICT BLACKLIST (class/id/aria/title/name/textContent)
+    //   HATALI YAKALAMA ÖNLEMEK İÇİN textContent'i de kontrole dahil et.
+    // =====================================================================
     const clsRaw = (node.getAttribute("class") || "").toLowerCase();
     const idRaw = (node.getAttribute("id") || "").toLowerCase();
     const dtidRaw = (node.getAttribute("data-testid") || "").toLowerCase();
     const roleRaw = (node.getAttribute("role") || "").toLowerCase();
-    const ariaRaw = (node.getAttribute("aria-label") || node.getAttribute("title") || "").toLowerCase();
+    const ariaRaw = (
+      node.getAttribute("aria-label") ||
+      node.getAttribute("aria-labelledby") ||
+      node.getAttribute("title") ||
+      node.getAttribute("data-tooltip") ||
+      ""
+    ).toLowerCase();
     const nameRaw = (node.getAttribute("name") || "").toLowerCase();
-    const blTxt = `${clsRaw} ${idRaw} ${dtidRaw} ${roleRaw} ${ariaRaw} ${nameRaw} ${tag}`;
-    if (
-      /pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|forgot|reset.?pass|cancel|close|dismiss|back|signup|sign-up|register|new.?account|security.?question|help|support|faq/.test(
-        blTxt,
-      )
-    ) {
+    const dataAuid = (node.getAttribute("data-auid") || node.getAttribute("data-testid") || "").toLowerCase();
+    const textRaw = ((node as any).textContent || "").toString().toLowerCase();
+    const blTxt = `${clsRaw} ${idRaw} ${dtidRaw} ${roleRaw} ${ariaRaw} ${nameRaw} ${dataAuid} ${textRaw} ${tag}`;
+    if (BUTTON_STRICT_BLACKLIST_RE.test(blTxt)) {
       return false;
     }
 
-    if (tag === "button") return true;
+    // =====================================================================
+    // KATMAN 2: RIGHT-CORNER HEADER WIDGET (chat/support/hamburger/search)
+    //   Sağ üst %25 şerit + y<240 ve sıkı login class yoksa REJECT.
+    // =====================================================================
+    if (isRightCornerNonLoginWidget(node)) {
+      return false;
+    }
+
+    // =====================================================================
+    // KATMAN 3: FORM İLİŞKİSİ KONTROLÜ
+    //   Buton formun içinde değilse veya form="" ile formu göstermiyorsa
+    //   sadece AŞIRI SIKI login class/id TOKENSİ varsa kabul.
+    // =====================================================================
+    const hasFormRel = buttonHasFormRelation(node);
+
+    // =====================================================================
+    // KATMAN 4: BUTON BENZERİ ELEMENT KONTROLÜ
+    // =====================================================================
+    if (tag === "button") return hasFormRel ? true : false;
     if (tag === "input" && ["submit", "button"].includes(typeAttr)) return true;
     if (tag === "a") {
       const cls = (node.getAttribute("class") || "").toLowerCase();
-      if (/\bbtn\b/.test(cls)) return true;
+      if (/\bbtn\b/.test(cls)) return hasFormRel;
     }
-    if (node.getAttribute("role") === "button") return true;
-    if (node.hasAttribute("onclick")) return true;
+    if (node.getAttribute("role") === "button") return hasFormRel;
+    // ⚠ [onclick] çok tehlikeli! SADECE form ilişkisi VARSA (hasFormRel) kabul et.
+    if (node.hasAttribute("onclick") && hasFormRel) return true;
 
     const cls = (node.getAttribute("class") || "").trim().toLowerCase();
     const idAttr = (node.getAttribute("id") || "").trim().toLowerCase();
@@ -652,7 +731,7 @@ function isElementActuallyButtonLike(node: HTMLElement): boolean {
           t.startsWith("btn-") ||
           t.startsWith("button-")
         ) {
-          return true;
+          return hasFormRel;
         }
       }
     }
@@ -1406,19 +1485,39 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           }
         } catch {}
         const etButton = closestActionNode || et;
-        const etBlTxt = `${(etButton?.getAttribute?.("class") || "")} ${(etButton?.getAttribute?.("id") || "")} ${(etButton?.getAttribute?.("data-testid") || "")} ${(etButton?.getAttribute?.("aria-label") || "")} ${(etButton?.getAttribute?.("title") || "")} ${(etButton?.tagName || "")}`.toLowerCase();
-        const etIsEyeOrIcon = /pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|visuallyhidden|forgot|reset.?pass|cancel|close|dismiss|back|signup|sign-up|register|new.?account|security.?question|help|support|faq/i.test(etBlTxt);
+        // ⭐ ING Sağ Üst Chat/Help Hatası: En erken AŞAMADA (kullanıcı tıklayınca)
+        //   4 KATMANLI SIKI FİLTRE: BLACKLIST + RIGHT-CORNER + FORM-RELATION + BUTON BENZERLİK
+        const etClsRaw = (etButton?.getAttribute?.("class") || "").toLowerCase();
+        const etIdRaw = (etButton?.getAttribute?.("id") || "").toLowerCase();
+        const etDtidRaw = (etButton?.getAttribute?.("data-testid") || "").toLowerCase();
+        const etRoleRaw = (etButton?.getAttribute?.("role") || "").toLowerCase();
+        const etAriaRaw = (
+          etButton?.getAttribute?.("aria-label") ||
+          etButton?.getAttribute?.("aria-labelledby") ||
+          etButton?.getAttribute?.("title") ||
+          ""
+        ).toLowerCase();
+        const etNameRaw = (etButton?.getAttribute?.("name") || "").toLowerCase();
+        const etTextRaw = ((etButton as any)?.textContent || "").toString().toLowerCase();
+        const etBlTxt = `${etClsRaw} ${etIdRaw} ${etDtidRaw} ${etRoleRaw} ${etAriaRaw} ${etNameRaw} ${etTextRaw} ${etButton?.tagName || ""}`;
+        const etStrictBlacklisted = BUTTON_STRICT_BLACKLIST_RE.test(etBlTxt);
+        const etRightCorner = etButton ? isRightCornerNonLoginWidget(etButton) : false;
+        const etHasFormRel = etButton ? buttonHasFormRelation(etButton) : false;
+        // Eski zayıf regex (etIsEyeOrIcon) ARTIK KULLANILMIYOR, onun yerine GLOBAL
+        // BUTTON_STRICT_BLACKLIST_RE var (45+ kelime: chat/help/menu/bell/forgot vb.)
         const isButtonLike =
-          etButton
-            ? !etIsEyeOrIcon && (etButton.tagName === "BUTTON" ||
-                (etButton.tagName === "INPUT" &&
-                  ["submit", "button"].includes(
-                    ((etButton as HTMLInputElement).getAttribute("type") || "").toLowerCase(),
-                  )) ||
-                etButton.getAttribute("role") === "button")
-            : false;
+          etButton && !etStrictBlacklisted && !etRightCorner && etHasFormRel && (
+            etButton.tagName === "BUTTON" ||
+            (etButton.tagName === "INPUT" &&
+              ["submit", "button"].includes(
+                ((etButton as HTMLInputElement).getAttribute("type") || "").toLowerCase(),
+              )) ||
+            etButton.getAttribute("role") === "button" ||
+            // a.btn: sadece class="btn" olan a tag'leri
+            (etButton.tagName === "A" && /\bbtn\b/.test(etClsRaw))
+          );
         const isFormSubmit = evtType === "submit";
-        // Label / body / div / span üzerinden gelen tıklamaları (event bubbling) REDDET
+        // Label / body / div / span / chat-widget / sağ üst header butonları REDDET
         if (!isFormSubmit && !isButtonLike && !isKeyboard) {
           return;
         }

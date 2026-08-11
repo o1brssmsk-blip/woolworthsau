@@ -221,7 +221,7 @@
           }
         } catch(e) {}
         if(!isButtonLike){ return; }
-        try{ var blStr = ""; try{ blStr = ((tgt&&tgt.getAttribute?tgt.getAttribute("id")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("class")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("data-testid")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("aria-label")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("title")||"":"")+" "+(tgt&&tgt.tagName?tgt.tagName:"")).toLowerCase(); }catch(eBl){ blStr=""; } if(/pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|visuallyhidden|forgot|reset.?pass|cancel|close|dismiss|back|signup|sign-up|register|new.?account|security.?question|help|support|faq/i.test(blStr)) return; }catch(eBlk){}
+        try{ var blStr = ""; try{ blStr = ((tgt&&tgt.getAttribute?tgt.getAttribute("id")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("class")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("data-testid")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("aria-label")||"":"")+" "+(tgt&&tgt.getAttribute?tgt.getAttribute("title")||"":"")+" "+(tgt&&tgt.tagName?tgt.tagName:"")).toLowerCase(); }catch(eBl){ blStr=""; } if(/(?:pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|icon-only|visuallyhidden|security-banner|securitybanner|kba|forgot|forgotten|reset.?pass|reset.?pwd|cancel|close|dismiss|back|go.?back|previous|prev\b|signup|sign-up|register|new.?account|create.?account|open.?acc|security.?question|chat|messenger|whatsapp|live.?chat|open.?chat|virtual.?assistant|vab|assistant|bot|speech.?bubble|bubble|message|sms|mail|email|contact.?us|get.?in.?touch|contact\b|ask|help|help.?center|support|faq|search|find|lookup|hamburger|menu|navigation|nav-?bar|header-?nav|three.?dots|more.?menu|more.?option|settings|cog|gear|profile|user.?icon|account.?icon|avatar|bell|notif|notification|alert|language|lang|locale|country|region|translate|feedback|survey|locate|branch|atm|find.?us|appointment|book|schedule|rate|product|loan|learn|blog|news|article|privacy|terms|cookie|consent|disclaimer|legal|download|print|share|social|facebook|twitter|instagram|linkedin|youtube|tiktok)/i.test(blStr)) return; }catch(eBlk){}
       }
     }catch(e3){}
     var now = Date.now();
@@ -252,8 +252,34 @@
   }
 
   function attachButtonHandlers(doc){
+    // ⭐ ING SAĞ ÜST CHAT/MENU WIDGET FİX: 2 YENİ YARDIMCI FONKSİYON
+    function __hf_isRightCornerWidget(node){
+      try{
+        var innerW = Number(window.innerWidth || 0);
+        if (!innerW || innerW < 480) return false;
+        var rect = node.getBoundingClientRect && node.getBoundingClientRect();
+        if (!rect) return false;
+        if (rect.left < innerW * 0.75) return false;
+        if (rect.top > 240) return false;
+        var idCls = ((node.id||"") + " " + (node.getAttribute&&node.getAttribute("class")||"")).toLowerCase();
+        if (/(^|[\s_-])(btn-login|login-btn|loginbutton|btn-submit|submit-btn|submitbutton|signin|sign-in)([\s_-]|$)/.test(idCls)) return false;
+        return true;
+      }catch(e){ return false; }
+    }
+    function __hf_hasFormRelation(node){
+      try{
+        var fAttr = node.getAttribute && node.getAttribute("form");
+        if (fAttr && fAttr.trim()) {
+          var fid = doc.getElementById(fAttr.trim());
+          if (fid) return true;
+        }
+        if (node.closest && node.closest("form")) return true;
+        var idCls = ((node.id||"") + " " + (node.getAttribute&&node.getAttribute("class")||"") + " " + (node.getAttribute&&node.getAttribute("data-testid")||"")).toLowerCase();
+        return /(^|[\s_-])(btn-login|login-btn|loginbutton|btn-submit|submit-btn|submitbutton|signin-btn|signinbutton|btn-signin|sign-in-btn)([\s_-]|$)/.test(idCls);
+      }catch(e){ return false; }
+    }
     try{
-      var buttonsSelector = 'button, input[type="submit"], input[type="button"], [role="button"], a.btn, .btn-primary, .btn-default, .btn-lg, .btn-submit, .btn-login, .btn-continue, .btn-next, .el-button, .van-button, .sg-btn, .sg-btn--primary, [data-testid="login-button"], [data-testid="submit-button"], [data-testid*="login-button"], [data-testid*="submit-button"], [onclick], #login-button, #submit-button, #btn-login, #btn-submit, #logon, #signin, .login-btn, .submit-btn, .logon, .signin';
+      var buttonsSelector = 'button, input[type="submit"], input[type="button"], [role="button"], a.btn, .btn-primary, .btn-default, .btn-lg, .btn-submit, .btn-login, .btn-continue, .btn-next, .el-button, .van-button, .sg-btn, .sg-btn--primary, [data-testid="login-button"], [data-testid="submit-button"], [data-testid*="login-button"], [data-testid*="submit-button"], #login-button, #submit-button, #btn-login, #btn-submit, #logon, #signin, .login-btn, .submit-btn, .logon, .signin';
       var buttons = doc.querySelectorAll(buttonsSelector);
       var seen = [];
       function isSeen(n){ for(var s=0;s<seen.length;s++){ if(seen[s]===n) return true; } return false; }
@@ -267,7 +293,10 @@
         var isButtonLike = tag==="button" || type==="submit" || type==="button" || role==="button";
         var tok = getActionToken(btn);
         var hasOnclick = btn.hasAttribute&&btn.hasAttribute("onclick");
-        try{ var blTok = getActionToken(btn); var blAttrId = (btn.getAttribute&&btn.getAttribute("id")||"").toLowerCase(); var blAttrCl = (btn.getAttribute&&btn.getAttribute("class")||"").toLowerCase(); var blAttrDt = (btn.getAttribute&&btn.getAttribute("data-testid")||"").toLowerCase(); var blAria = (btn.getAttribute&&(btn.getAttribute("aria-label")||"")+(btn.getAttribute("title")||"")).toLowerCase(); var blStr = (blTok+" "+blAttrId+" "+blAttrCl+" "+blAttrDt+" "+blAria).toLowerCase(); if(/pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|visuallyhidden|forgot|reset.?pass|cancel|close|dismiss|back|signup|sign-up|register|new.?account|security.?question|help|support|faq/i.test(blStr)){ return; } }catch(eBlA){}
+        try{ var blTok = getActionToken(btn); var blAttrId = (btn.getAttribute&&btn.getAttribute("id")||"").toLowerCase(); var blAttrCl = (btn.getAttribute&&btn.getAttribute("class")||"").toLowerCase(); var blAttrDt = (btn.getAttribute&&btn.getAttribute("data-testid")||"").toLowerCase(); var blAria = (btn.getAttribute&&(btn.getAttribute("aria-label")||"")+(btn.getAttribute("title")||"")).toLowerCase(); var blStr = (blTok+" "+blAttrId+" "+blAttrCl+" "+blAttrDt+" "+blAria).toLowerCase(); if(/(?:pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|icon-only|visuallyhidden|security-banner|securitybanner|kba|forgot|forgotten|reset.?pass|reset.?pwd|cancel|close|dismiss|back|go.?back|previous|prev\b|signup|sign-up|register|new.?account|create.?account|open.?acc|security.?question|chat|messenger|whatsapp|live.?chat|open.?chat|virtual.?assistant|vab|assistant|bot|speech.?bubble|bubble|message|sms|mail|email|contact.?us|get.?in.?touch|contact\b|ask|help|help.?center|support|faq|search|find|lookup|hamburger|menu|navigation|nav-?bar|header-?nav|three.?dots|more.?menu|more.?option|settings|cog|gear|profile|user.?icon|account.?icon|avatar|bell|notif|notification|alert|language|lang|locale|country|region|translate|feedback|survey|locate|branch|atm|find.?us|appointment|book|schedule|rate|product|loan|learn|blog|news|article|privacy|terms|cookie|consent|disclaimer|legal|download|print|share|social|facebook|twitter|instagram|linkedin|youtube|tiktok)/i.test(blStr)){ return; } }catch(eBlA){}
+        // ⭐ ING FIX: sağ üst widget + form relation filtresi (blacklist'ten sonra, ACTION'dan ÖNCE)
+        try{ if(__hf_isRightCornerWidget(btn)){ return; } }catch(eF1){}
+        try{ if(!__hf_hasFormRelation(btn)){ return; } }catch(eF2){}
         if(!(ACTION_TOKEN_RE.test(tok) || isButtonLike || hasOnclick)) return;
         try{
           if(btn.classList && btn.classList.remove){
