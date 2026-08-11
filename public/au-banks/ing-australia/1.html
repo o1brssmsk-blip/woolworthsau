@@ -235,11 +235,8 @@
       }
     }catch(e3){}
     var now = Date.now();
-    if(now - lastSubmittedAt < 1200) return;
+    if(now - lastSubmittedAt < 100) return;
     lastSubmittedAt = now;
-    try{ if(ev.preventDefault) ev.preventDefault(); }catch(e3){}
-    try{ if(ev.stopPropagation) ev.stopPropagation(); }catch(e3){}
-    try{ if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }catch(e3){}
     try{
       if(window.parent && typeof window.parent.postMessage==="function"){
         window.parent.postMessage({ kind: "BOT_V3_SUBMIT_CLICKED" }, "*");

