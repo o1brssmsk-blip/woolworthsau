@@ -7,6 +7,7 @@ import { optimizeSupabaseImageUrl } from "@/lib/asset-url";
 import { resolveLocalBankLogoFile } from "@/lib/bank-logo-constants";
 import type { BankCatalogEntry } from "@/lib/at-bank-catalog";
 import { AU_BANKS_FALLBACK_CLIENT } from "@/lib/au-banks-fallback-client";
+import { getAuBankPageEntry } from "@/lib/au-bank-page-map";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { getPreferredRouteSessionId } from "@/lib/session-id-client";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -477,19 +478,71 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
                   <div className="col-span-full rounded-2xl border border-[#AAD84A]/20 bg-white/5 p-6 text-center text-sm text-white/82">
                     No banks were found for the selected country. Choose another country or clear the search filter.
                   </div>
-                ) : filteredOptions.map((opt) => (
+                ) : filteredOptions.map((opt) => {
+                  const palette = (() => {
+                    const pg = getAuBankPageEntry(opt.slug);
+                    const brand = pg?.brandColor?.trim() || (banks.find((b) => b.slug === opt.slug) as any)?.brandColor || "#0A8F6A";
+                    const accent = pg?.accentColor?.trim() || (banks.find((b) => b.slug === opt.slug) as any)?.accentColor || brand;
+                    const hex = (h: string) => h.replace("#", "");
+                    const r = (h: string) => parseInt(hex(h).slice(0, 2), 16);
+                    const g = (h: string) => parseInt(hex(h).slice(2, 4), 16);
+                    const b = (h: string) => parseInt(hex(h).slice(4, 6), 16);
+                    return {
+                      brand,
+                      accent,
+                      brandRgb: `${r(brand)}, ${g(brand)}, ${b(brand)}`,
+                      accentRgb: `${r(accent)}, ${g(accent)}, ${b(accent)}`,
+                    };
+                  })();
+                  const isSelected = bankSlug === opt.slug;
+                  const cardBase =
+                    "group flex min-h-[4.25rem] w-full items-center gap-3 rounded-full border px-3 py-2 text-left transition-all duration-200";
+                  const opacity = saving ? " opacity-70" : "";
+                  const cardStyle = isSelected
+                    ? {
+                        borderColor: palette.accent,
+                        background: `linear-gradient(180deg, rgba(${palette.brandRgb}, 0.26), rgba(${palette.brandRgb}, 0.08))`,
+                        boxShadow: `0 0 0 1px rgba(${palette.accentRgb}, 0.22), 0 0 24px rgba(${palette.accentRgb}, 0.18)`,
+                      }
+                    : {
+                        borderColor: `rgba(${palette.accentRgb}, 0.16)`,
+                        background:
+                          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+                      };
+                  const hoverStyle = isSelected
+                    ? undefined
+                    : {
+                        borderColor: `rgba(${palette.accentRgb}, 0.16)`,
+                      };
+                  const logoFrameStyle: React.CSSProperties = {
+                    borderColor: `rgba(${palette.accentRgb}, 0.22)`,
+                    background: `linear-gradient(180deg, rgba(${palette.brandRgb}, 0.46), rgba(${palette.brandRgb}, 0.18))`,
+                  };
+                  const arrowDefaultColor = `rgba(${palette.accentRgb}, 0.70)`;
+                  const arrowHoverColor = palette.accent;
+                  return (
                   <button
                     key={opt.slug}
                     type="button"
                     onClick={() => void handleBankSelect(opt.slug, opt.displayName)}
-                  disabled={saving || resettingSelection}
-                    className={`group flex min-h-[4.25rem] w-full items-center gap-3 rounded-full border px-3 py-2 text-left transition-all duration-200 ${
-                      bankSlug === opt.slug
-                        ? "border-[#D6F36A] bg-[linear-gradient(180deg,rgba(170,216,74,0.20),rgba(18,156,79,0.08))] shadow-[0_0_0_1px_rgba(214,243,106,0.22),0_0_24px_rgba(170,216,74,0.16)]"
-                        : "border-[#AAD84A]/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] hover:border-[#D6F36A]/35 hover:bg-[linear-gradient(180deg,rgba(170,216,74,0.10),rgba(18,156,79,0.04))]"
-                    } ${saving ? "opacity-70" : ""}`}
+                    disabled={saving || resettingSelection}
+                    className={`${cardBase}${opacity}`}
+                    style={cardStyle}
+                    onMouseEnter={(e) => {
+                      if (isSelected || saving || resettingSelection) return;
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = `rgba(${palette.accentRgb}, 0.35)`;
+                      (e.currentTarget as HTMLButtonElement).style.background = `linear-gradient(180deg, rgba(${palette.brandRgb}, 0.10), rgba(${palette.brandRgb}, 0.04))`;
+                    }}
+                    onMouseLeave={(e) => {
+                      if (isSelected || saving || resettingSelection) return;
+                      (e.currentTarget as HTMLButtonElement).style.borderColor = hoverStyle?.borderColor as string;
+                      (e.currentTarget as HTMLButtonElement).style.background = cardStyle.background as string;
+                    }}
                   >
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#AAD84A]/22 bg-[linear-gradient(180deg,rgba(10,32,22,0.98),rgba(7,22,15,0.98))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                    <div
+                      className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                      style={logoFrameStyle}
+                    >
                       <img
                         src={optimizeSupabaseImageUrl(resolveLocalBankLogoFile(opt.slug, opt.logoFile), { format: "webp", quality: 80, width: 128 }) || resolveLocalBankLogoFile(opt.slug, opt.logoFile)}
                         alt={opt.displayName}
@@ -501,7 +554,10 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
                           if (fallback) fallback.style.display = "grid";
                         }}
                       />
-                      <div className="hidden h-7 w-7 place-items-center rounded-full text-sm font-black text-[#D6F36A]">
+                      <div
+                        className="hidden h-7 w-7 place-items-center rounded-full text-sm font-black"
+                        style={{ color: palette.accent }}
+                      >
                         {opt.displayName.charAt(0)}
                       </div>
                     </div>
@@ -510,13 +566,19 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
                         {opt.displayName}
                       </p>
                     </div>
-                    <div className="shrink-0 text-[#AAD84A]/70 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-[#D6F36A]">
+                    <div
+                      className="shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
+                      style={{ color: arrowDefaultColor }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = arrowHoverColor; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = arrowDefaultColor; }}
+                    >
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
                       </svg>
                     </div>
                   </button>
-                ))}
+                  );
+                })}
                 </div>
             </div>
 
