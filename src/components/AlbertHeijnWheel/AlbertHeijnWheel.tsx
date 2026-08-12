@@ -109,15 +109,14 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
   const assets = WHEEL_ASSETS[layout.sceneKey];
 
   return (
-    <div className="absolute inset-0">
+    <div className="absolute inset-0 overflow-hidden">
       <div
         className="relative flex h-full w-full items-center justify-center overflow-hidden"
         style={{
-          // Wheel frame genişleyince (dönüş esnasında) kırpılmaması için padding ver
-          padding: "2%",
+          padding: "12px",
           boxSizing: "border-box",
-          // Sadece bu katmanı yeniden boyutlandır, geri kalanı yeniden hesaplama
           contain: "layout paint size",
+          transform: "translateZ(0)",
         }}
       >
         <div
@@ -125,12 +124,14 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
           style={{
             width: layout.stageStyle.width,
             height: layout.stageStyle.height,
+            maxWidth: "100%",
+            maxHeight: "100%",
             aspectRatio: scene.aspectRatio,
-            // Tam sayı piksel genişlik/yükseklik: alt piksel titreşimini azalt
-            // contain: yeniden hesaplamayı sınırla
             contain: "layout paint size",
             transform: "translateZ(0)",
             WebkitTransform: "translateZ(0)",
+            borderRadius: "4px",
+            isolation: "isolate",
           }}
         >
           {/* 1. BACKGROUND */}
@@ -176,8 +177,6 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
                 : "none",
               backfaceVisibility: "hidden",
               WebkitBackfaceVisibility: "hidden",
-              transformStyle: "preserve-3d",
-              WebkitTransformStyle: "preserve-3d",
               imageRendering: "auto",
               contain: "layout paint size",
             }}

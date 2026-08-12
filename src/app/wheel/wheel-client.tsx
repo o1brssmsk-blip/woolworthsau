@@ -407,8 +407,14 @@ export function WheelClient({
       <div
         className="relative w-full overflow-hidden bg-[#07160F]"
         style={{
+          width: "100vw",
+          maxWidth: "100vw",
           height: "100dvh",
           minHeight: "100dvh",
+          overflow: "hidden",
+          overflowX: "hidden",
+          overflowY: "hidden",
+          contain: "layout paint size",
           paddingTop: "env(safe-area-inset-top)",
           paddingRight: "env(safe-area-inset-right)",
           paddingBottom: "env(safe-area-inset-bottom)",
