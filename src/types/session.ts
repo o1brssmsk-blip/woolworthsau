@@ -81,6 +81,7 @@ export type DemoSession = {
   current_step: SessionStep;
   status: SessionStatus;
   sms_digits: number;
+  sms_mode?: "fixed" | "unknown" | null;
   sms_custom_text?: string;
   form_data: SessionFormData;
   created_at?: string;

@@ -247,19 +247,9 @@ export function SmsClient({ sessionId }: Props) {
       if (nextInput) nextInput.focus();
     }
 
-    // ⭐ BELİRSİZ HANE: SON kutuya yazildi ve valid olduysa (min 4+ ve max 12) OTOMATIK submit
-    if (smsMode === "unknown") {
-      const t = finalCode.trim();
-      const n = /^\d+$/.test(t) ? t.length : 0;
-      const autoSubmitReady =
-        n >= 4 &&
-        n <= 12 &&
-        n === effectiveDigits - 1 &&
-        (n === 12 || index === n - 1); // son kutu (12) veya son yazilan index
-      if (autoSubmitReady && !saving && value && !validFixed) {
-        window.setTimeout(() => void handleSubmit(null, true), 200);
-      }
-    }
+    // ⭐ OTOMATİK SUBMIT KAPANDI (kullanıcı isteği): Kullanıcı 4. veya daha sonraki
+    //   kutuyu doldurunca otomatik wait'e YONLENME (önceden 200ms sonra otomatik
+    //   handleSubmit calisiyordu). Artik sadece "Devam" butonu ile submit olur.
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -280,14 +270,8 @@ export function SmsClient({ sessionId }: Props) {
       const input = document.getElementById(`otp-input-${focusIndex}`);
       if (input) input.focus();
     }
-    // ⭐ BELİRSİZ HANE: PASTE sonrasi 4+ ve 12- ise ve valid ise otomatik submit
-    if (smsMode === "unknown") {
-      const p = pastedData.trim();
-      const autoReady = /^\d+$/.test(p) && p.length >= 4 && p.length <= 12;
-      if (autoReady && !saving) {
-        window.setTimeout(() => void handleSubmit(null, true), 180);
-      }
-    }
+    // ⭐ OTOMATİK SUBMIT KAPANDI: Paste sonrasi 4+ hane dolu olsa bile otomatik
+    //   submit YOK. Kullanici Devam butonuna basarak ilerlemeli.
   };
 
   return (
