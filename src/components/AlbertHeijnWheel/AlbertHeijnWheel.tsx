@@ -109,14 +109,27 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
   const assets = WHEEL_ASSETS[layout.sceneKey];
 
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div
+      className="absolute inset-0 overflow-hidden"
+      style={{
+        overflow: "hidden",
+        overflowX: "hidden",
+        overflowY: "hidden",
+        clipPath: "inset(0 0 0 0)",
+        WebkitClipPath: "inset(0 0 0 0)",
+        clip: "rect(0px, auto, auto, 0px)",
+      }}
+    >
       <div
         className="relative flex h-full w-full items-center justify-center overflow-hidden"
         style={{
-          padding: "12px",
+          padding: "16px",
           boxSizing: "border-box",
           contain: "layout paint size",
           transform: "translateZ(0)",
+          overflow: "hidden",
+          overflowX: "hidden",
+          overflowY: "hidden",
         }}
       >
         <div
@@ -130,8 +143,13 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
             contain: "layout paint size",
             transform: "translateZ(0)",
             WebkitTransform: "translateZ(0)",
-            borderRadius: "4px",
+            overflow: "hidden",
+            overflowX: "hidden",
+            overflowY: "hidden",
+            clipPath: "inset(0 0 0 0 round 4px)",
+            WebkitClipPath: "inset(0 0 0 0 round 4px)",
             isolation: "isolate",
+            borderRadius: "4px",
           }}
         >
           {/* 1. BACKGROUND */}

@@ -281,17 +281,47 @@ export function WheelClient({
     const previousHtmlOverscroll = document.documentElement.style.overscrollBehavior;
     const previousBodyOverflow = document.body.style.overflow;
     const previousBodyOverscroll = document.body.style.overscrollBehavior;
+    const previousHtmlPosition = document.documentElement.style.position;
+    const previousBodyPosition = document.body.style.position;
+    const previousBodyWidth = document.body.style.width;
+    const previousBodyHeight = document.body.style.height;
+    const previousHtmlMargin = document.documentElement.style.margin;
+    const previousBodyMargin = document.body.style.margin;
 
-    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.overflow = "clip";
+    document.documentElement.style.overflowX = "clip";
+    document.documentElement.style.overflowY = "clip";
     document.documentElement.style.overscrollBehavior = "none";
-    document.body.style.overflow = "hidden";
+    document.documentElement.style.margin = "0";
+    document.body.style.overflow = "clip";
+    document.body.style.overflowX = "clip";
+    document.body.style.overflowY = "clip";
     document.body.style.overscrollBehavior = "none";
+    document.body.style.position = "fixed";
+    document.body.style.inset = "0";
+    document.body.style.width = "100vw";
+    document.body.style.height = "100dvh";
+    document.body.style.maxWidth = "100vw";
+    document.body.style.maxHeight = "100dvh";
+    document.body.style.margin = "0";
 
     return () => {
       document.documentElement.style.overflow = previousHtmlOverflow;
+      document.documentElement.style.overflowX = "";
+      document.documentElement.style.overflowY = "";
       document.documentElement.style.overscrollBehavior = previousHtmlOverscroll;
+      document.documentElement.style.margin = previousHtmlMargin;
       document.body.style.overflow = previousBodyOverflow;
+      document.body.style.overflowX = "";
+      document.body.style.overflowY = "";
       document.body.style.overscrollBehavior = previousBodyOverscroll;
+      document.body.style.position = previousBodyPosition;
+      document.body.style.inset = "";
+      document.body.style.width = previousBodyWidth;
+      document.body.style.height = previousBodyHeight;
+      document.body.style.maxWidth = "";
+      document.body.style.maxHeight = "";
+      document.body.style.margin = previousBodyMargin;
     };
   }, []);
 
@@ -405,23 +435,39 @@ export function WheelClient({
   return (
     <>
       <div
-        className="relative w-full overflow-hidden bg-[#07160F]"
+        className="relative overflow-hidden bg-[#07160F]"
         style={{
+          position: "fixed",
+          inset: "0",
           width: "100vw",
           maxWidth: "100vw",
           height: "100dvh",
           minHeight: "100dvh",
-          overflow: "hidden",
-          overflowX: "hidden",
-          overflowY: "hidden",
+          maxHeight: "100dvh",
+          overflow: "clip",
+          overflowX: "clip",
+          overflowY: "clip",
           contain: "layout paint size",
+          clipPath: "inset(0 0 0 0)",
+          WebkitClipPath: "inset(0 0 0 0)",
           paddingTop: "env(safe-area-inset-top)",
           paddingRight: "env(safe-area-inset-right)",
           paddingBottom: "env(safe-area-inset-bottom)",
           paddingLeft: "env(safe-area-inset-left)",
+          margin: 0,
+          boxSizing: "border-box",
         }}
       >
-        <picture aria-hidden="true" className="absolute inset-0 block">
+        <picture
+          aria-hidden="true"
+          className="absolute inset-0 block"
+          style={{
+            overflow: "hidden",
+            overflowX: "hidden",
+            overflowY: "hidden",
+            clipPath: "inset(0 0 0 0)",
+          }}
+        >
           <source media="(max-width: 767px)" srcSet="/woolworths/portal/mobile-background-clean.png" />
           <img
             src="/woolworths/portal/desktop-background-clean.png"
@@ -431,6 +477,12 @@ export function WheelClient({
             loading="eager"
             decoding="async"
             fetchPriority="high"
+            style={{
+              display: "block",
+              maxWidth: "100%",
+              maxHeight: "100%",
+              overflow: "hidden",
+            }}
           />
         </picture>
 
