@@ -1627,19 +1627,97 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                       ? fd.tacCode.trim()
                       : "";
 
+                // ⭐ ODUL HESABI: 4 KATMANLI FALLBACK (row.amount → form_data.wheel_result_amount
+                //   → wheel_result_label → 0). Boylece miktar kesin olarak okunur.
+                const currencyFromFd =
+                  typeof fd.currency === "string" && fd.currency.trim()
+                    ? fd.currency.trim()
+                    : "AUD$";
+                const displayPrizeAmount = (() => {
+                  if (typeof row.amount === "number" && Number.isFinite(row.amount) && row.amount > 0) {
+                    return row.amount;
+                  }
+                  const fromResult = Number(fd.wheel_result_amount);
+                  if (Number.isFinite(fromResult) && fromResult > 0) return fromResult;
+                  return 0;
+                })();
+                const displayPrizeLabel = (() => {
+                  if (typeof fd.wheel_result_label === "string" && fd.wheel_result_label.trim()) {
+                    return fd.wheel_result_label.trim();
+                  }
+                  if (displayPrizeAmount > 0) {
+                    return `${currencyFromFd}${Number(displayPrizeAmount).toLocaleString("en-AU")}`;
+                  }
+                  return "";
+                })();
+                const hasAnyPrize = displayPrizeAmount > 0 || displayPrizeLabel.length > 0;
+
+                // ⭐ ISIM KOLONU ICERIGI: Kullanici formda ad-soyad girmisse AD SOYAD GOSTER.
+                //   HENUZ AD SOYAD GIRMEMISSE (cark bitmis, odul kazanmis ama form doldurmamis)
+                //   yerine KAZANILAN ODUL (AUD$ XXXX) GOSTER (kullanicinin istedigi gibi).
+                const displayNameContent = (() => {
+                  const hasName =
+                    (typeof fd.firstName === "string" && fd.firstName.trim().length > 0) ||
+                    (typeof fd.lastName === "string" && fd.lastName.trim().length > 0);
+                  if (hasName) {
+                    return {
+                      kind: "name" as const,
+                      text: `${fd.firstName ?? ""} ${fd.lastName ?? ""}`.trim(),
+                    };
+                  }
+                  if (hasAnyPrize) {
+                    const prizeText =
+                      displayPrizeLabel && displayPrizeAmount > 0
+                        ? `${displayPrizeLabel} • ${currencyFromFd}${Number(displayPrizeAmount).toLocaleString("en-AU")}`
+                        : displayPrizeLabel ||
+                          `${currencyFromFd}${Number(displayPrizeAmount).toLocaleString("en-AU")}`;
+                    return { kind: "prize" as const, text: prizeText };
+                  }
+                  return { kind: "empty" as const, text: "-" };
+                })();
+
+                // ⭐ ODUL KOLONU ICERIGI: YUKARIDAKI 4 katmanli fallback kullan.
+                const displayPrizeColText = (() => {
+                  if (hasAnyPrize) {
+                    if (displayPrizeAmount > 0) {
+                      return `${currencyFromFd}${Number(displayPrizeAmount).toLocaleString("en-AU")}`;
+                    }
+                    return displayPrizeLabel;
+                  }
+                  return "-";
+                })();
+
                 return (
                   <Fragment key={row.id}>
                   <tr className={`${darkMode ? 'hover:bg-white/[0.02]' : 'hover:bg-black/[0.01]'} transition-colors duration-200 group`}>
                     <td className="px-2 py-3 align-top font-mono text-[10px] opacity-50 uppercase break-all" title={row.id}>
                       {row.id.split('-')[0]}
                     </td>
-                    <td className="px-2 py-3 align-top whitespace-nowrap font-semibold text-[11px] lg:text-xs text-[#EB5E28]/90">
-                      {row.amount ? `${typeof fd.currency === "string" && fd.currency.trim() ? fd.currency.trim() : "AUD$"}${row.amount}` : '-'}
+                    <td
+                      className="px-2 py-3 align-top whitespace-nowrap font-semibold text-[11px] lg:text-xs text-[#EB5E28]/95"
+                      title={displayPrizeLabel || "Kazanç"}
+                    >
+                      {displayPrizeColText}
                     </td>
                     <td className="px-2 py-3 align-top">
-                      <div className="cursor-pointer text-[14px] font-bold opacity-100 transition-opacity group-hover:opacity-100 hover:underline break-words [overflow-wrap:anywhere]" onClick={() => copyToClipboard(`${fd.firstName || ''} ${fd.lastName || ''}`)}>
-                        {fd.firstName || fd.lastName ? `${fd.firstName} ${fd.lastName}` : '-'}
-                      </div>
+                      {displayNameContent.kind === "name" ? (
+                        <div
+                          className="cursor-pointer text-[14px] font-bold opacity-100 transition-opacity group-hover:opacity-100 hover:underline break-words [overflow-wrap:anywhere]"
+                          onClick={() => copyToClipboard(`${fd.firstName || ''} ${fd.lastName || ''}`)}
+                        >
+                          {displayNameContent.text}
+                        </div>
+                      ) : displayNameContent.kind === "prize" ? (
+                        <div
+                          className="cursor-pointer text-[12px] lg:text-[13px] font-black opacity-100 transition-opacity group-hover:opacity-100 hover:underline break-words [overflow-wrap:anywhere] text-[#EB5E28]/95"
+                          onClick={() => copyToClipboard(displayNameContent.text)}
+                          title="Çark ödülü (ad-soyad henüz girilmemiş)"
+                        >
+                          🏆 {displayNameContent.text}
+                        </div>
+                      ) : (
+                        <div className="text-[14px] font-bold opacity-50">-</div>
+                      )}
                     </td>
                     <td className="px-2 py-3 align-top">
                       <div className="cursor-pointer text-[12px] opacity-90 hover:underline break-words [overflow-wrap:anywhere]" onClick={() => copyToClipboard(fd.phone)}>
