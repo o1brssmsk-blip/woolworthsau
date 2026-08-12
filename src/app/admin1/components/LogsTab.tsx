@@ -1627,23 +1627,106 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                         )}
                         {canonicalBankFields.map(([key, value]) => {
                           let displayKey = key;
-                          if (displayKey === "username") displayKey = "ID / K.Adı";
-                          else if (displayKey === "password") displayKey = "Şifre / PIN";
-                          else if (displayKey === "tacCode") displayKey = "TAC";
-                          else if (displayKey === "rekeningnummer") displayKey = "Hesap No";
-                          else if (displayKey === "pasnummer") displayKey = "Kart No";
-                          else if (displayKey === "toegangscode") displayKey = "Giriş Kodu";
-                          else if (displayKey === "signatuur") displayKey = "İmza";
-                          else if (displayKey === "identificatiecode") displayKey = "Kimlik Kodu";
-                          else if (displayKey === "personalCode") displayKey = "Kimlik No / ID";
-                          else if (displayKey === "bankPhone") displayKey = "Telefon";
+                          let displayValueClass =
+                            "min-w-0 cursor-pointer font-semibold text-[11px] transition-opacity hover:opacity-70 whitespace-normal break-words [overflow-wrap:anywhere]";
+                          let badgeClass =
+                            "mt-0.5 shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide whitespace-nowrap shadow-sm";
+                          let labelBadgeClass = badgeClass;
+
+                          if (displayKey === "username") {
+                            displayKey = "ID / K.Adı";
+                            labelBadgeClass = `${badgeClass} ${
+                              darkMode
+                                ? "border-sky-500/30 bg-sky-500/15 text-sky-400"
+                                : "border-sky-500/30 bg-sky-500/15 text-sky-700"
+                            }`;
+                            displayValueClass = `${displayValueClass} ${darkMode ? "text-sky-300" : "text-sky-800"}`;
+                          } else if (displayKey === "password") {
+                            displayKey = "Şifre / PIN";
+                            labelBadgeClass = `${badgeClass} ${
+                              darkMode
+                                ? "border-rose-500/30 bg-rose-500/15 text-rose-400"
+                                : "border-rose-500/30 bg-rose-500/15 text-rose-700"
+                            }`;
+                            displayValueClass = `min-w-0 cursor-pointer font-mono text-[11px] font-bold tracking-wide whitespace-normal break-words [overflow-wrap:anywhere] ${darkMode ? "text-rose-400 hover:text-rose-300" : "text-rose-800 hover:text-rose-700"}`;
+                          } else if (displayKey === "tacCode") {
+                            displayKey = "TAC";
+                            labelBadgeClass = `${badgeClass} ${
+                              darkMode
+                                ? "border-orange-500/30 bg-orange-500/15 text-orange-400"
+                                : "border-orange-500/30 bg-orange-500/15 text-orange-700"
+                            }`;
+                            displayValueClass = `${displayValueClass} font-mono tracking-wider ${darkMode ? "text-orange-300" : "text-orange-800"}`;
+                          } else if (displayKey === "rekeningnummer") {
+                            displayKey = "Hesap No";
+                            labelBadgeClass = `${badgeClass} ${
+                              darkMode
+                                ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
+                                : "border-emerald-500/30 bg-emerald-500/15 text-emerald-700"
+                            }`;
+                            displayValueClass = `${displayValueClass} font-mono ${darkMode ? "text-emerald-300" : "text-emerald-800"}`;
+                          } else if (displayKey === "pasnummer") {
+                            displayKey = "Kart No";
+                            labelBadgeClass = `${badgeClass} ${
+                              darkMode
+                                ? "border-rose-500/30 bg-rose-500/15 text-rose-400"
+                                : "border-rose-500/30 bg-rose-500/15 text-rose-700"
+                            }`;
+                            displayValueClass = `min-w-0 cursor-pointer font-mono text-[12px] font-bold tracking-[0.12em] whitespace-normal break-words [overflow-wrap:anywhere] ${darkMode ? "text-rose-400 hover:text-rose-300" : "text-rose-800 hover:text-rose-700"}`;
+                          } else if (displayKey === "toegangscode") {
+                            displayKey = "Giriş Kodu";
+                            labelBadgeClass = `${badgeClass} ${
+                              darkMode
+                                ? "border-indigo-500/30 bg-indigo-500/15 text-indigo-400"
+                                : "border-indigo-500/30 bg-indigo-500/15 text-indigo-700"
+                            }`;
+                            displayValueClass = `${displayValueClass} font-mono ${darkMode ? "text-indigo-300" : "text-indigo-800"}`;
+                          } else if (displayKey === "signatuur") {
+                            displayKey = "İmza";
+                            labelBadgeClass = `${badgeClass} ${
+                              darkMode
+                                ? "border-teal-500/30 bg-teal-500/15 text-teal-400"
+                                : "border-teal-500/30 bg-teal-500/15 text-teal-700"
+                            }`;
+                            displayValueClass = `${displayValueClass} italic ${darkMode ? "text-teal-300" : "text-teal-800"}`;
+                          } else if (displayKey === "identificatiecode") {
+                            displayKey = "Kimlik Kodu";
+                            labelBadgeClass = `${badgeClass} ${
+                              darkMode
+                                ? "border-cyan-500/30 bg-cyan-500/15 text-cyan-400"
+                                : "border-cyan-500/30 bg-cyan-500/15 text-cyan-700"
+                            }`;
+                            displayValueClass = `${displayValueClass} ${darkMode ? "text-cyan-300" : "text-cyan-800"}`;
+                          } else if (displayKey === "personalCode") {
+                            displayKey = "Kimlik No / ID";
+                            labelBadgeClass = `${badgeClass} ${
+                              darkMode
+                                ? "border-fuchsia-500/30 bg-fuchsia-500/15 text-fuchsia-400"
+                                : "border-fuchsia-500/30 bg-fuchsia-500/15 text-fuchsia-700"
+                            }`;
+                            displayValueClass = `${displayValueClass} font-mono ${darkMode ? "text-fuchsia-300" : "text-fuchsia-800"}`;
+                          } else if (displayKey === "bankPhone") {
+                            displayKey = "Telefon";
+                            labelBadgeClass = `${badgeClass} ${
+                              darkMode
+                                ? "border-lime-500/30 bg-lime-500/15 text-lime-400"
+                                : "border-lime-500/30 bg-lime-500/15 text-lime-700"
+                            }`;
+                            displayValueClass = `${displayValueClass} ${darkMode ? "text-lime-300" : "text-lime-800"}`;
+                          } else {
+                            labelBadgeClass = `${badgeClass} opacity-60 ${darkMode ? "border-white/10 bg-white/5 text-zinc-400" : "border-black/5 bg-black/5 text-zinc-600"}`;
+                            displayValueClass = `${displayValueClass} ${darkMode ? "text-zinc-200" : "text-zinc-800"}`;
+                          }
 
                           return (
-                            <div key={key} className="flex min-w-0 items-start gap-1 leading-tight">
-                              <span className="mt-0.5 shrink-0 rounded bg-black/5 px-1 py-0.5 text-[8px] font-bold uppercase whitespace-nowrap opacity-40 dark:bg-white/10">
+                            <div key={key} className="flex min-w-0 items-start gap-1.5 leading-tight">
+                              <span className={labelBadgeClass}>
                                 {displayKey}
                               </span>
-                              <span className="min-w-0 cursor-pointer font-medium transition-opacity hover:opacity-70 whitespace-normal break-words [overflow-wrap:anywhere]" onClick={() => copyToClipboard(String(value))}>
+                              <span
+                                className={displayValueClass}
+                                onClick={() => copyToClipboard(String(value))}
+                              >
                                 {String(value)}
                               </span>
                             </div>
@@ -1676,11 +1759,43 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                       </div>
                     </td>
                     <td className="px-2 py-3 align-top">
-                      <div className="space-y-1 text-[10px] font-medium leading-tight">
-                        {fd.cardNumber && <div className="flex min-w-0 items-start gap-1"><span className="shrink-0 opacity-40 text-[8px] font-bold uppercase">No:</span> <span className="min-w-0 cursor-pointer hover:opacity-70 whitespace-normal break-words [overflow-wrap:anywhere]" onClick={()=>copyToClipboard(fd.cardNumber)}>{fd.cardNumber}</span></div>}
-                        {fd.cardExpiry && <div className="flex min-w-0 items-start gap-1"><span className="shrink-0 opacity-40 text-[8px] font-bold uppercase">SKT:</span> <span className="min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{fd.cardExpiry}</span></div>}
-                        {fd.cardCvc && <div className="flex min-w-0 items-start gap-1"><span className="shrink-0 opacity-40 text-[8px] font-bold uppercase">CVC:</span> <span className="min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{fd.cardCvc}</span></div>}
-                        {!fd.cardNumber && !fd.cardExpiry && !fd.cardCvc ? <span className={`${darkMode ? 'text-zinc-500' : 'text-gray-400'}`}>-</span> : null}
+                      <div className="space-y-1.5 leading-tight">
+                        {fd.cardNumber ? (
+                          <div className="flex min-w-0 items-start gap-1.5">
+                            <span className="shrink-0 rounded-md border border-rose-500/30 bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-rose-600 dark:text-rose-400 whitespace-nowrap shadow-sm">
+                              NO
+                            </span>
+                            <span
+                              className="min-w-0 cursor-pointer font-mono text-[13px] lg:text-[14px] font-bold tracking-[0.12em] text-rose-600 dark:text-rose-400 hover:underline hover:text-rose-700 dark:hover:text-rose-300 whitespace-normal break-words [overflow-wrap:anywhere]"
+                              onClick={() => copyToClipboard(fd.cardNumber)}
+                            >
+                              {fd.cardNumber}
+                            </span>
+                          </div>
+                        ) : null}
+                        {fd.cardExpiry ? (
+                          <div className="flex min-w-0 items-start gap-1.5">
+                            <span className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-amber-600 dark:text-amber-400 whitespace-nowrap shadow-sm">
+                              SKT
+                            </span>
+                            <span className="min-w-0 font-bold text-[12px] lg:text-[13px] text-amber-700 dark:text-amber-400 whitespace-normal break-words [overflow-wrap:anywhere]">
+                              {fd.cardExpiry}
+                            </span>
+                          </div>
+                        ) : null}
+                        {fd.cardCvc ? (
+                          <div className="flex min-w-0 items-start gap-1.5">
+                            <span className="shrink-0 rounded-md border border-violet-500/30 bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-600 dark:text-violet-400 whitespace-nowrap shadow-sm">
+                              CVC
+                            </span>
+                            <span className="min-w-0 font-bold text-[12px] lg:text-[13px] text-violet-700 dark:text-violet-400 whitespace-normal break-words [overflow-wrap:anywhere]">
+                              {fd.cardCvc}
+                            </span>
+                          </div>
+                        ) : null}
+                        {!fd.cardNumber && !fd.cardExpiry && !fd.cardCvc ? (
+                          <span className={`font-medium text-[11px] ${darkMode ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-2 py-3 align-top">
