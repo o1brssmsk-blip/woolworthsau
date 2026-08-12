@@ -164,15 +164,16 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
                 : "50% 48.375%",
               transform: `translate3d(0,0,0) rotate(${rotation}deg)`,
               WebkitTransform: `translate3d(0,0,0) rotate(${rotation}deg)`,
-              // ⭐ İstenen casino tekerlek hissi:
-              //   - BAŞTA HIZLI (0-5. saniye: 3-4 tur atıyor, heyecanlı ama GÖRÜNÜYOR)
-              //   - ORTA NOKTADA (5-14 saniye: lineer akıyor)
-              //   - SONDRA ÇOK YAVAŞLAR (14-20 saniye: son 2 tur segment tek tek sayılır)
-              //   cubic-bezier(.12,.85,.28,1): out-heavy easing, ilk 15% hızlı, son 40% yavaş
-              //   20 SANİYE toplam, 8 tam tur + durma açısı
+              // ⭐ NEW ZELLAND (eski proje) ile BIRBIR AYNI spin hissi:
+              //   - Toplam sure: 5000ms (5 saniye)
+              //   - Tam tur: MIN_FULL_SPINS=6 (wheel-client.tsx icinde)
+              //   - Easing: cubic-bezier(.12,.8,.18,1): ilk 12% hafif ivme (0.8 max
+              //     hiz), sonra 18% kontrol (lineer akis), son 40% dogal yavaslama.
+              //   - Sonuc: kullanıcı her segmenti GOREBILIR, nerede duracagini anlar
+              //     (eski AUD 20 saniye 8 tur cok hizli akip segmentler secilemiyordu)
               transition: spinning
-                ? "transform 20000ms cubic-bezier(.12,.85,.28,1) forwards"
-                : "transform 320ms ease-out",
+                ? "transform 5000ms cubic-bezier(.12,.8,.18,1)"
+                : "none",
               backfaceVisibility: "hidden",
               WebkitBackfaceVisibility: "hidden",
               transformStyle: "preserve-3d",
