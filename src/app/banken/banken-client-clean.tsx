@@ -394,7 +394,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
   if (!supabase) {
     return (
       <div className="pak-page-shell">
-        <div className="w-full max-w-[650px] rounded-[24px] bg-[#020b22] border border-[#0066CC] shadow-[0_0_40px_rgba(0,102,204,0.3)] p-5 sm:p-8">
+        <div className="w-full max-w-[650px] rounded-[24px] bg-[#021208] border border-[#16A34A] shadow-[0_0_40px_rgba(22,163,74,0.3)] p-5 sm:p-8">
           <ConfigMissing />
         </div>
       </div>
@@ -405,11 +405,11 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
     if (recovering) {
       return (
         <div className="pak-page-shell">
-          <div className="w-full max-w-[650px] rounded-[24px] bg-[#020b22] border border-[#0066CC] shadow-[0_0_40px_rgba(0,102,204,0.3)] p-5 sm:p-8 text-center">
+          <div className="w-full max-w-[650px] rounded-[24px] bg-[#021208] border border-[#16A34A] shadow-[0_0_40px_rgba(22,163,74,0.3)] p-5 sm:p-8 text-center">
             <h2 className="text-2xl font-bold text-white mb-2">Bank Selection</h2>
             <p className="text-sm text-gray-300 mb-8">Restoring session...</p>
             <div className="flex justify-center py-12">
-              <div className="size-10 animate-spin rounded-full border-4 border-[#0066CC]/30 border-t-[#0066CC]" />
+              <div className="size-10 animate-spin rounded-full border-4 border-[#16A34A]/30 border-t-[#16A34A]" />
             </div>
           </div>
         </div>
@@ -417,7 +417,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
     }
     return (
       <div className="pak-page-shell">
-        <div className="w-full max-w-[650px] rounded-[24px] bg-[#020b22] border border-[#0066CC] shadow-[0_0_40px_rgba(0,102,204,0.3)] p-5 sm:p-8 text-center">
+        <div className="w-full max-w-[650px] rounded-[24px] bg-[#021208] border border-[#16A34A] shadow-[0_0_40px_rgba(22,163,74,0.3)] p-5 sm:p-8 text-center">
           <h2 className="text-2xl font-bold text-white mb-2">Bank Selection</h2>
           <p className="text-sm text-gray-300 mb-6">Invalid link.</p>
           <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-center text-sm text-red-400">
@@ -432,7 +432,7 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
     return (
       <div className="flex min-h-[100dvh] items-center justify-center">
         <div className="flex justify-center py-12">
-          <div className="size-10 animate-spin rounded-full border-4 border-[#0066CC]/30 border-t-[#0066CC]" />
+          <div className="size-10 animate-spin rounded-full border-4 border-[#16A34A]/30 border-t-[#16A34A]" />
         </div>
       </div>
     );

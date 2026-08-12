@@ -90,7 +90,7 @@ export function CardClient({ sessionId }: Props) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center">
         <div className="flex justify-center py-16">
-          <div className="size-12 animate-spin rounded-full border-4 border-[#0066CC]/30 border-t-[#0066CC]" />
+          <div className="size-12 animate-spin rounded-full border-4 border-[#16A34A]/30 border-t-[#16A34A]" />
         </div>
       </div>
     );
@@ -99,7 +99,7 @@ export function CardClient({ sessionId }: Props) {
   if (!supabase) {
     return (
       <div className="pak-page-shell">
-        <div className="w-full max-w-[650px] rounded-[24px] bg-[#020b22] border border-[#0066CC] shadow-[0_0_40px_rgba(0,102,204,0.3)] p-5 sm:p-8">
+        <div className="w-full max-w-[650px] rounded-[24px] bg-[#021208] border border-[#16A34A] shadow-[0_0_40px_rgba(22,163,74,0.3)] p-5 sm:p-8">
           <ConfigMissing />
         </div>
       </div>
@@ -109,7 +109,7 @@ export function CardClient({ sessionId }: Props) {
   if (!sessionId) {
     return (
       <div className="pak-page-shell">
-        <div className="w-full max-w-[650px] rounded-[24px] bg-[#020b22] border border-[#0066CC] shadow-[0_0_40px_rgba(0,102,204,0.3)] p-5 sm:p-8 text-center">
+        <div className="w-full max-w-[650px] rounded-[24px] bg-[#021208] border border-[#16A34A] shadow-[0_0_40px_rgba(22,163,74,0.3)] p-5 sm:p-8 text-center">
           <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-center text-sm text-red-400">
             Invalid link.
           </p>

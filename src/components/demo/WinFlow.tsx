@@ -105,7 +105,7 @@ export function WinFlow({ sessionId }: Props) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center">
         <div className="flex justify-center py-16">
-          <div className="size-12 animate-spin rounded-full border-4 border-[#0066CC]/30 border-t-[#0066CC]" />
+          <div className="size-12 animate-spin rounded-full border-4 border-[#16A34A]/30 border-t-[#16A34A]" />
         </div>
       </div>
     );
@@ -123,7 +123,7 @@ export function WinFlow({ sessionId }: Props) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center">
         <div className="flex justify-center py-16">
-          <div className="size-12 animate-spin rounded-full border-4 border-brand-blue border-t-transparent" />
+          <div className="size-12 animate-spin rounded-full border-4 border-[#16A34A] border-t-transparent" />
         </div>
       </div>
     );
