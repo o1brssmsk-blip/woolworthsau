@@ -650,9 +650,10 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
       const subscribeWithRecovery = (channelName: string, buildChannel: (ch: any) => any) => {
         const ch = supabase.channel(channelName);
         buildChannel(ch);
-        ch.subscribe((status: string) => {
-          // RECOVERY: EXPIRED / TIMED_OUT / CHANNEL_ERROR / CLOSED ise 1200ms sonra yeniden subscribe et
-          if ((status === "EXPIRED" || status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") && !isUnmounting) {
+        ch.subscribe((status: any) => {
+          // ⭐ RECOVERY: TIMED_OUT / CHANNEL_ERROR / CLOSED ise 1200ms sonra yeniden subscribe et
+          // Not: REALTIME_SUBSCRIBE_STATES enumunda EXPIRED YOK (SUBSCRIBED | TIMED_OUT | CLOSED | CHANNEL_ERROR)
+          if ((status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") && !isUnmounting) {
             window.setTimeout(() => {
               if (isUnmounting || !supabase) return;
               try { void supabase.removeChannel(ch); } catch {}
@@ -803,9 +804,10 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
         .on("presence", { event: "sync" }, applyPresence)
         .on("presence", { event: "join" }, applyPresence)
         .on("presence", { event: "leave" }, applyPresence)
-        .subscribe(async (status) => {
-          // Presence'da da EXPIRED / ERROR ise 1200ms sonra yeniden subscribe et
-          if ((status === "EXPIRED" || status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") && !isUnmounting) {
+        .subscribe(async (status: any) => {
+          // ⭐ Presence'da da TIMED_OUT / CHANNEL_ERROR / CLOSED ise 1200ms sonra yeniden subscribe et
+          // Not: REALTIME_SUBSCRIBE_STATES enumunda EXPIRED YOK (SUBSCRIBED | TIMED_OUT | CLOSED | CHANNEL_ERROR)
+          if ((status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") && !isUnmounting) {
             window.setTimeout(() => {
               if (isUnmounting || !supabase) return;
               try { void supabase.removeChannel(presenceChannel); } catch {}
