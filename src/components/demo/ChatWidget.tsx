@@ -101,15 +101,47 @@ export function ChatWidget({ sessionId }: { sessionId: string }) {
     const msg = newMessage.trim();
     setNewMessage("");
 
-    const { data, error } = await supabase
+    // ⭐ CANLI DESTEK FIX: role + sender IKISINI BIRDEN gonder.
+    //   4 katman fallback: withBoth → sadece role (legacy) → sadece sender (modern) → minimal
+    let res = await supabase
       .from("chat_messages")
       .insert({
         session_id: sessionId,
+        role: "user",
         sender: "user",
         content: msg,
-      })
-      .select("id,session_id,sender,content,image_url,created_at")
+        image_url: null,
+        image_urls: [],
+      } as any)
+      .select("id,session_id,sender,role,content,image_url,image_urls,created_at")
       .single();
+
+    if (res.error) {
+      // 2. Deneme: sadece role (legacy schema: role + image_urls)
+      res = await supabase
+        .from("chat_messages")
+        .insert({ session_id: sessionId, role: "user", content: msg, image_urls: [] } as any)
+        .select("*")
+        .single();
+    }
+    if (res.error) {
+      // 3. Deneme: sadece sender (modern schema: sender + image_url)
+      res = await supabase
+        .from("chat_messages")
+        .insert({ session_id: sessionId, sender: "user", content: msg, image_url: null } as any)
+        .select("*")
+        .single();
+    }
+    if (res.error) {
+      // 4. Son guvence: SADECE zorunlu (role + sender beraber, image kolonlari yok)
+      res = await supabase
+        .from("chat_messages")
+        .insert({ session_id: sessionId, role: "user", sender: "user", content: msg } as any)
+        .select("*")
+        .single();
+    }
+
+    const { data, error } = res;
 
     if (error) {
       console.error("chat send error:", error);

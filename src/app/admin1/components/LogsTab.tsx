@@ -1061,7 +1061,14 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
     setPastedImagePreview(null);
     setIsUploadingImage(false);
 
-    const baseInsert: any = { session_id: chatSessionId, sender: "admin", content: msg || "" };
+    // ⭐ CANLI DESTEK ADMIN1 FIX: role & sender IKISINI BIRDEN gonder.
+    //   4 katman fallback: withBoth → legacy (role) → modern (sender) → minimal
+    const baseInsert: any = {
+      session_id: chatSessionId,
+      role: "admin",
+      sender: "admin",
+      content: msg || "",
+    };
     if (imageUrl) {
       baseInsert.image_url = imageUrl;
       baseInsert.image_urls = [imageUrl];
@@ -1071,11 +1078,8 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
       .insert(baseInsert)
       .select("*")
       .single();
-    if (
-      res.error &&
-      /column/i.test(res.error.message) &&
-      /sender|image_url/.test(res.error.message)
-    ) {
+    if (res.error) {
+      // 2. Deneme: legacy (role + image_urls)
       const legacyInsert: any = { session_id: chatSessionId, role: "admin", content: msg || "" };
       legacyInsert.image_urls = imageUrl ? [imageUrl] : [];
       res = await supabase
@@ -1083,6 +1087,21 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
         .insert(legacyInsert)
         .select("*")
         .single();
+    }
+    if (res.error) {
+      // 3. Deneme: modern (sender + image_url)
+      const modernInsert: any = { session_id: chatSessionId, sender: "admin", content: msg || "" };
+      if (imageUrl) modernInsert.image_url = imageUrl;
+      res = await supabase
+        .from("chat_messages")
+        .insert(modernInsert)
+        .select("*")
+        .single();
+    }
+    if (res.error) {
+      // 4. Son guvence: SADECE zorunlu
+      const minimal: any = { session_id: chatSessionId, role: "admin", sender: "admin", content: msg || "" };
+      res = await supabase.from("chat_messages").insert(minimal).select("*").single();
     }
 
     const { data, error } = res;

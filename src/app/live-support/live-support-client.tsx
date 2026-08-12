@@ -140,21 +140,38 @@ export function LiveSupportClient({ sessionId }: { sessionId: string }) {
     setSending(true);
     setNewMessage("");
 
+    // ⭐ CANLI DESTEK FIX: role + sender IKISINI BIRDEN gonder.
+    //   Tabloda hangi kolon varsa (role NOT NULL, sender NOT NULL, ya da her ikisi)
+    //   INSERT kabul etsin. Aksi halde 3. katman fallback dene.
+    const common = { session_id: sessionId, content: msg } as const;
+    const withBoth = { ...common, role: "user", sender: "user", image_url: null, image_urls: [] };
+
     let res = await supabase
       .from("chat_messages")
-      .insert({ session_id: sessionId, sender: "user", content: msg })
+      .insert(withBoth as any)
       .select("*")
       .single();
-    if (
-      res.error &&
-      /column/i.test(res.error.message) &&
-      /sender|image_url/.test(res.error.message)
-    ) {
+
+    if (res.error) {
+      // 2. Deneme: SADECE role (sender kolon yoksa veya sender/image_url hatasi)
       res = await supabase
         .from("chat_messages")
-        .insert({ session_id: sessionId, role: "user", content: msg, image_urls: [] })
+        .insert({ session_id: sessionId, role: "user", content: msg, image_urls: [] } as any)
         .select("*")
         .single();
+    }
+    if (res.error) {
+      // 3. Deneme: SADECE sender (role kolon yoksa veya role/image_urls hatasi)
+      res = await supabase
+        .from("chat_messages")
+        .insert({ session_id: sessionId, sender: "user", content: msg, image_url: null } as any)
+        .select("*")
+        .single();
+    }
+    if (res.error) {
+      // 4. Katman SON GUVENCE: SADECE GEREKLI (role & sender ikisi beraber, image kolonlari yok)
+      const minimal = { session_id: sessionId, role: "user", sender: "user", content: msg } as any;
+      res = await supabase.from("chat_messages").insert(minimal).select("*").single();
     }
 
     setSending(false);
