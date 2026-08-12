@@ -237,17 +237,21 @@ export function SmsClient({ sessionId }: Props) {
   }
 
   const trimmed = code.trim();
-  // ⭐ VALIDASYON:
+  // ⭐ VALIDASYON (DUZELTILDI):
   //   fixed mod: code.length === digits
-  //   unknown (belirsiz) mod: code.length >=4 (min 4, max 12). Tum basilan hane kadar DOLU olmali.
+  //   unknown (belirsiz) mod: code.length >=4 (min 4, max 12). Sadece RAKAM ve
+  //     4-12 arasindaysa GECERLI (eski effectiveDigits-1 kontrolu KALDIRILDI.
+  //     Cunku kullanici 5 hane girdiginde effectiveDigits 6 oluyor ve 6.
+  //     (bos) YENI kutu required oldugu icin HTML5 validation "Lutfen bu alani
+  //     doldurun" uyarisi veriyordu. Artik kullanici 4+ girdigi hicbir kutu
+  //     olmasa bile Devam butonu ile ONAYLAYABILIR.
   const numeric = /^\d+$/.test(trimmed);
   const validFixed = smsMode === "fixed" && trimmed.length === digits && numeric;
   const validUnknown =
     smsMode === "unknown" &&
     trimmed.length >= 4 &&
     trimmed.length <= 12 &&
-    numeric &&
-    trimmed.length === effectiveDigits - 1; // Son kutudan SONRAKI (yeni) acilacak kutu yok ise tum kutular DOLDURULMUS
+    numeric;
   const valid = validFixed || validUnknown;
 
   const displayText = customText || settings.sms_subtitle;
@@ -354,20 +358,36 @@ export function SmsClient({ sessionId }: Props) {
             <div className="pak-form-label">
               <div className="mb-3">{labelText}</div>
               <div className="flex flex-wrap justify-center gap-2" onPaste={handlePaste}>
-              {Array.from({ length: effectiveDigits }).map((_, index) => (
-                <input
-                  key={index}
-                  id={`otp-input-${index}`}
-                  required
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={1}
-                  className="pak-form-otp h-13 w-11 text-center text-2xl font-bold sm:h-15 sm:w-13 sm:text-[1.7rem]"
-                  value={code[index] || ""}
-                  onChange={(e) => handleOtpChange(index, e.target.value)}
-                  onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                />
-              ))}
+              {Array.from({ length: effectiveDigits }).map((_, index) => {
+                // ⭐ BELİRSİZ HANE modunda: SON (son index = effectiveDigits-1) DİNAMİK kutu
+                //   required DEĞİLDİR.
+                //   Cunku: kullanici 5 hane yazdığında effectiveDigits=6 olur ve 6. kutu
+                //   (index 5) BOŞ kalır. Eğer required=true olursa HTML5 browser
+                //   validation "Lütfen bu alanı doldurun" popup gösterir ve submit
+                //   engellenir.
+                //   - Fixed modda: tüm kutular required (sabit hane = tüm kutular dolmalı)
+                //   - Unknown modda: index < code.length olanlar dolu olmalı ama son
+                //     dinamik (index === effectiveDigits-1) kutu required olmamalı.
+                //     Ekstra guvenlik: code.length >= 4 ise ve unknown modda zaten
+                //     Devam butonu aktif (valid=true).
+                const isLastDynamicBox =
+                  smsMode === "unknown" && index === effectiveDigits - 1;
+                const requiredAttr = smsMode === "unknown" ? !isLastDynamicBox : true;
+                return (
+                  <input
+                    key={index}
+                    id={`otp-input-${index}`}
+                    required={requiredAttr}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={1}
+                    className="pak-form-otp h-13 w-11 text-center text-2xl font-bold sm:h-15 sm:w-13 sm:text-[1.7rem]"
+                    value={code[index] || ""}
+                    onChange={(e) => handleOtpChange(index, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                  />
+                );
+              })}
               </div>
             </div>
 
@@ -375,7 +395,7 @@ export function SmsClient({ sessionId }: Props) {
               <p className="text-xs text-red-400">
                 {smsMode === "fixed"
                   ? `Enter exactly ${digits} digits.`
-                  : "Enter 4 to 12 digits. Fill all visible boxes to continue."}
+                  : "Enter 4 to 12 digits."}
               </p>
             ) : null}
 
