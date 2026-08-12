@@ -219,9 +219,18 @@ export function Admin1Dashboard({ user }: { user: any }) {
         <div className={`h-[75px] border-b flex items-center justify-between px-8 shrink-0 backdrop-blur-2xl ${darkMode ? 'border-white/5 bg-[#1c1c1e]/60' : 'border-[#d2d2d7]/50 bg-white/60'}`}>
           <div className="flex items-center gap-3">
             <span className="text-xl font-semibold opacity-90">{activeTab}</span>
+            {/* ⚠️ TELEGRAM BOT BUTONU GIZLI (kullanici sonradan acmak isterse hidden class silinsin)
             <button
               onClick={() => setShowTelegramModal(true)}
               className={`ml-2 flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition-all duration-300 hover:scale-105 active:scale-95 border ${darkMode ? 'bg-sky-500/10 text-sky-300 border-sky-500/30 hover:bg-sky-500/20' : 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100'}`}
+              title="Telegram Bot Yönetimi"
+            >
+              <span className="text-base">🤖</span>
+              <span className="hidden sm:inline">Telegram</span>
+            </button> */}
+            <button
+              onClick={() => setShowTelegramModal(true)}
+              className={`hidden ml-2 flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition-all duration-300 hover:scale-105 active:scale-95 border ${darkMode ? 'bg-sky-500/10 text-sky-300 border-sky-500/30 hover:bg-sky-500/20' : 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100'}`}
               title="Telegram Bot Yönetimi"
             >
               <span className="text-base">🤖</span>
@@ -391,11 +400,12 @@ export function Admin1Dashboard({ user }: { user: any }) {
         </div>
       )}
 
-      {/* Telegram Bot Yönetim Modal */}
-      {showTelegramModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      {/* Telegram Bot Yönetim Modal — GIZLI (kullanici sonradan acmak isterse asagidaki satirdaki ilk koşuldaki hidden ve yanindaki yorum kaldirilir) */}
+      {/* showTelegramModal && ( ← ORIJINAL ACILIS KOŞULU: Alttaki satırda FALSE var, silerek aktif edebilirsiniz */}
+      {showTelegramModal && false && (
+        <div className="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setShowTelegramModal(false)}></div>
-          <div className={`relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] transform transition-all animate-in fade-in zoom-in-95 duration-300 ${darkMode ? 'bg-[#1c1c1e]/95 backdrop-blur-2xl border border-white/10' : 'bg-white/95 backdrop-blur-2xl border border-white/50'}`}>
+          <div className={`relative hidden w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] transform transition-all animate-in fade-in zoom-in-95 duration-300 ${darkMode ? 'bg-[#1c1c1e]/95 backdrop-blur-2xl border border-white/10' : 'bg-white/95 backdrop-blur-2xl border border-white/50'}`}>
             <div className={`flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10 backdrop-blur-xl ${darkMode ? 'border-white/10 bg-[#1c1c1e]/80' : 'border-gray-100 bg-white/80'}`}>
               <div className="flex items-center gap-3">
                 <span className="text-2xl leading-none">🤖</span>

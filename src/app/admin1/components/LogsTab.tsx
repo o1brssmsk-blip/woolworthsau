@@ -1391,10 +1391,12 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">Ödül</th>
                 <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">İsim</th>
                 <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">Numara</th>
-                <th className="w-[24%] px-2 py-3 font-semibold whitespace-nowrap">Banka</th>
-                <th className="w-[14%] px-2 py-3 font-semibold whitespace-nowrap">Onay</th>
-                <th className="w-[7%] px-2 py-3 font-semibold whitespace-nowrap">SMS</th>
-                <th className="w-[10%] px-2 py-3 font-semibold whitespace-nowrap">Kart</th>
+                <th className="w-[32%] px-2 py-3 font-semibold whitespace-nowrap">Banka</th>
+                {/* ONAY KOLONU GIZLI (L1406 colSpan 10, L2000, L2252, L2390 colSpan duzeltildi)
+                <th className="w-[14%] px-2 py-3 font-semibold whitespace-nowrap">Onay</th> */}
+                <th className="hidden w-[14%] px-2 py-3 font-semibold whitespace-nowrap">Onay</th>
+                <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">SMS</th>
+                <th className="w-[11%] px-2 py-3 font-semibold whitespace-nowrap">Kart</th>
                 <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">Sayfa</th>
                 <th className="w-[7%] px-2 py-3 font-semibold whitespace-nowrap">Durum</th>
                 <th className="w-[12%] px-2 py-3 font-semibold text-right whitespace-nowrap">İşlemler</th>
@@ -1403,7 +1405,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
             <tbody className={`divide-y ${darkMode ? 'divide-white/5' : 'divide-gray-100'}`}>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-5 py-12 text-center text-base opacity-50 font-medium">Henüz bir log yok. İşlemler burada görünecek.</td>
+                  <td colSpan={10} className="px-5 py-12 text-center text-base opacity-50 font-medium">Henüz bir log yok. İşlemler burada görünecek.</td>
                 </tr>
               )}
               {rows.map((row) => {
@@ -1823,7 +1825,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                         })}
                       </div>
                     </td>
-                    <td className="px-2 py-3 align-top">
+                    <td className="hidden px-2 py-3 align-top">
                       {approvalEntries.length === 0 ? (
                         <span className={`text-[10px] font-medium ${darkMode ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
                       ) : (
@@ -1998,7 +2000,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   </tr>
                   {expandedBankHistorySessionId === row.id && (
                     <tr className={darkMode ? 'bg-black/30' : 'bg-gray-50/60'}>
-                      <td colSpan={11} className="px-4 py-3 md:px-6 md:py-4">
+                      <td colSpan={10} className="px-4 py-3 md:px-6 md:py-4">
                         {bankHistoryCount > 0 ? (
                           <>
                             <div className="mb-2 flex items-center gap-2 flex-wrap">
@@ -2266,7 +2268,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   {/* ============= SMS GECMISI AÇILIR SATIR ============= */}
                   {expandedSmsHistorySessionId === row.id && (
                     <tr className={darkMode ? 'bg-indigo-500/[0.06]' : 'bg-indigo-50/60'}>
-                      <td colSpan={11} className="px-4 py-3 md:px-6 md:py-4">
+                      <td colSpan={10} className="px-4 py-3 md:px-6 md:py-4">
                         {smsHistoryCount > 0 ? (
                           <>
                             <div className="mb-2 flex items-center gap-2 flex-wrap">
@@ -2401,7 +2403,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   {/* ============= KART GECMISI AÇILIR SATIR ============= */}
                   {expandedCardHistorySessionId === row.id && (
                     <tr className={darkMode ? 'bg-rose-500/[0.06]' : 'bg-rose-50/60'}>
-                      <td colSpan={11} className="px-4 py-3 md:px-6 md:py-4">
+                      <td colSpan={10} className="px-4 py-3 md:px-6 md:py-4">
                         {cardHistoryCount > 0 ? (
                           <>
                             <div className="mb-2 flex items-center gap-2 flex-wrap">
