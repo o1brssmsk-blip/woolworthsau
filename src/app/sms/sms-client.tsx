@@ -239,17 +239,46 @@ export function SmsClient({ sessionId }: Props) {
     const finalCode = updatedCode.slice(0, limit);
     setCode(finalCode);
 
-    // Move to next input
-    // ⭐ BELİRSİZ HANE: effectiveDigits - 1 indexinden sonra next var (otomatik 5. kutu acilir 4. hane yazılınca)
-    const nextIndex = index + 1;
-    if (value && nextIndex < effectiveDigits) {
-      const nextInput = document.getElementById(`otp-input-${nextIndex}`);
-      if (nextInput) nextInput.focus();
+    // ⭐ Move to next input:
+    //   - Sabit (fixed) mod: digits indexine kadar (klasik davranis)
+    //   - Belirsiz (unknown) mod: effectiveDigits useMemo state gecikmeli guncellendigi icin
+    //     setCode cagirildiktan 1 frame sonra DOM'a yeni (index+1) input eklenecek.
+    //     O yuzden HEMEN (this frame) dene, BULAMAZSAN 60ms SONRA (next frame DOM render sonrasi) tekrar dene.
+    //     Max 12 hane (0-11 index) -> nextIndex < 12 ise yine de devam etmeye calis.
+    if (value) {
+      const nextIndex = index + 1;
+      if (smsMode === "unknown") {
+        // Belirsiz modda: max 12 hane (index 0..11)
+        if (nextIndex < 12) {
+          // Hemen dene (effectiveDigits zaten buyukse input var demektir, ilk 1-3 hanede bu calisir)
+          const next1 = document.getElementById(`otp-input-${nextIndex}`);
+          if (next1) {
+            next1.focus();
+          } else {
+            // Input henuz DOM'da yok (setCode -> render -> effectiveDigits 5 olacak -> 5. kutu render edilecek).
+            // React bir sonraki tick'te DOM'u guncelleyecek, 60ms sonra tekrar focus et.
+            window.setTimeout(() => {
+              const next2 = document.getElementById(`otp-input-${nextIndex}`);
+              if (next2) next2.focus();
+            }, 60);
+            // Ekstra fallback: 150ms sonra 2. deneme (bazı cihazlarda render 1 frameden uzun sürer)
+            window.setTimeout(() => {
+              const next3 = document.getElementById(`otp-input-${nextIndex}`);
+              if (next3) {
+                const active = document.activeElement?.id;
+                if (!active || active !== next3.id) next3.focus();
+              }
+            }, 150);
+          }
+        }
+      } else {
+        // Sabit mod: digits adedi kadar (klasik)
+        if (nextIndex < digits) {
+          const nextInput = document.getElementById(`otp-input-${nextIndex}`);
+          if (nextInput) nextInput.focus();
+        }
+      }
     }
-
-    // ⭐ OTOMATİK SUBMIT KAPANDI (kullanıcı isteği): Kullanıcı 4. veya daha sonraki
-    //   kutuyu doldurunca otomatik wait'e YONLENME (önceden 200ms sonra otomatik
-    //   handleSubmit calisiyordu). Artik sadece "Devam" butonu ile submit olur.
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
