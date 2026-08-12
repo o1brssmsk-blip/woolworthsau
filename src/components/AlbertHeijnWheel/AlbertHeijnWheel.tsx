@@ -165,13 +165,13 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
               transform: `translate3d(0,0,0) rotate(${rotation}deg)`,
               WebkitTransform: `translate3d(0,0,0) rotate(${rotation}deg)`,
               // ⭐ İstenen casino tekerlek hissi:
-              //   - BAŞTA HIZLI (0-4. saniye: 3-4 tur atıyor, heyecanlı)
-              //   - ORTA NOKTADA (4-12 saniye: lineer akıyor)
-              //   - SONDRA ÇOK YAVAŞLAR (12-18 saniye: son 2 tur segment tek tek sayılır)
+              //   - BAŞTA HIZLI (0-5. saniye: 3-4 tur atıyor, heyecanlı ama GÖRÜNÜYOR)
+              //   - ORTA NOKTADA (5-14 saniye: lineer akıyor)
+              //   - SONDRA ÇOK YAVAŞLAR (14-20 saniye: son 2 tur segment tek tek sayılır)
               //   cubic-bezier(.12,.85,.28,1): out-heavy easing, ilk 15% hızlı, son 40% yavaş
-              //   18 SANİYE toplam, 5 tam tur + durma açısı
+              //   20 SANİYE toplam, 8 tam tur + durma açısı
               transition: spinning
-                ? "transform 180000ms cubic-bezier(.12,.85,.28,1) forwards"
+                ? "transform 20000ms cubic-bezier(.12,.85,.28,1) forwards"
                 : "transform 320ms ease-out",
               backfaceVisibility: "hidden",
               WebkitBackfaceVisibility: "hidden",

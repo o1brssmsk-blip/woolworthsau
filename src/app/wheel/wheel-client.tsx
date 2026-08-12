@@ -32,7 +32,7 @@ type SessionRecord = {
 };
 
 const ANGLE_OFFSET = 0;
-const MIN_FULL_SPINS = 50;
+const MIN_FULL_SPINS = 8;
 const LOCAL_HISTORY_KEY = "ah-prize-wheel-last-five-wins";
 const MAX_HISTORY_ITEMS = 5;
 const WHEEL_CURRENCY = "AUD$";
