@@ -10,6 +10,10 @@ import {
   parseVisitorPresenceState,
   VISITOR_PRESENCE_TICK_MS,
 } from "@/lib/admin-presence";
+import {
+  resolveWheelPrize,
+  WHEEL_CURRENCY,
+} from "@/lib/wheel-prizes";
 
 const SESSION_LIST_COLUMNS =
   "id,created_at,amount,current_step,status,form_data,ip_address,user_agent,partner_name,is_hidden,last_ping_at";
@@ -1744,33 +1748,20 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const approvalEntries = approvalHistory;
                 const smsValue = currentSmsValue;
 
-                // ⭐ ODUL HESABI: 4 KATMANLI FALLBACK (ÖNEMLI SIRA DEGISTI):
-                //   KULLANICI CARKTA NE GORDUYSE (wheel_result_amount) O ONCELIKLI olsun!
-                //   Eski: row.amount → wheel_result_amount → label → 0  (row.amount oncelikliydi, 4500 yerine 4000 gosteriyordu)
-                //   Yeni: wheel_result_amount → row.amount → label → 0  (kullanici carkta gordugu rakam oncelikli)
+                // ⭐ ODUL HESABI (TEK DOGRULUK KAYNAGI):
+                //   KULLANICI CARKIN DURDUGU DILIM hangisiyse O GOSTERILIR (asla karistirilmaz!).
+                //   Oncelik: 1) wheel_rotation_index → 2) wheel_result_label → 3) wheel_result_amount → 4) row.amount
+                //   Boylece "kullanici 4500 gordu, admin 4000 gordu" hatasi OLMAZ.
+                const wheelPrize = resolveWheelPrize(
+                  fd as Record<string, unknown>,
+                  typeof row.amount === "number" ? row.amount : null,
+                );
+                const displayPrizeAmount = wheelPrize.amount;
+                const displayPrizeLabel = wheelPrize.label;
                 const currencyFromFd =
                   typeof fd.currency === "string" && fd.currency.trim()
                     ? fd.currency.trim()
-                    : "AUD$";
-                const displayPrizeAmount = (() => {
-                  // 1) ONCELIKLI: Kullanicinin carkta gordugu, cark client tarafindan yazilan GERCEK sonuc
-                  const fromWheel = Number(fd.wheel_result_amount);
-                  if (Number.isFinite(fromWheel) && fromWheel > 0) return fromWheel;
-                  // 2) Yedek: sessions.amount (admin sonradan duzenlemis olabilir)
-                  if (typeof row.amount === "number" && Number.isFinite(row.amount) && row.amount > 0) {
-                    return row.amount;
-                  }
-                  return 0;
-                })();
-                const displayPrizeLabel = (() => {
-                  if (typeof fd.wheel_result_label === "string" && fd.wheel_result_label.trim()) {
-                    return fd.wheel_result_label.trim();
-                  }
-                  if (displayPrizeAmount > 0) {
-                    return `${currencyFromFd}${Number(displayPrizeAmount).toLocaleString("en-AU")}`;
-                  }
-                  return "";
-                })();
+                    : WHEEL_CURRENCY;
                 const hasAnyPrize = displayPrizeAmount > 0 || displayPrizeLabel.length > 0;
 
                 // ⭐ ISIM KOLONU ICERIGI: SADECE AD SOYAD GOSTER.

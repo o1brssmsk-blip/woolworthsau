@@ -7,17 +7,14 @@ import { AlbertHeijnWheel } from "@/components/AlbertHeijnWheel/AlbertHeijnWheel
 import { getPreferredRouteSessionId } from "@/lib/session-id-client";
 import { DEFAULT_WHEEL_VIEWPORT, resolveWheelLayout } from "./wheel-layout";
 import { logAuditEvent } from "@/lib/audit-event";
-
-type PrizeKind = "amount" | "message";
-
-type PrizeSegment = {
-  kind: PrizeKind;
-  text: string;
-  selectionIndex: number;
-  rotationIndex: number;
-  amount: number | null;
-  popupLines: string[];
-};
+import {
+  WHEEL_PRIZES,
+  WHEEL_CURRENCY,
+  getWheelPrizeByRotationIndex,
+  getWheelPrizeByText,
+  getWheelPrizeByAmount,
+  type WheelPrizeSegment as PrizeSegment,
+} from "@/lib/wheel-prizes";
 
 type WinHistoryItem = {
   prize: string;
@@ -35,18 +32,7 @@ const ANGLE_OFFSET = 0;
 const MIN_FULL_SPINS = 6;
 const LOCAL_HISTORY_KEY = "ah-prize-wheel-last-five-wins";
 const MAX_HISTORY_ITEMS = 5;
-const WHEEL_CURRENCY = "AUD$";
-
-const PRIZES: readonly PrizeSegment[] = [
-  { kind: "amount", text: "AUD$2,000", selectionIndex: 0, rotationIndex: 0, amount: 2000, popupLines: ["AUD$ 2,000"] },
-  { kind: "amount", text: "AUD$2,500", selectionIndex: 1, rotationIndex: 1, amount: 2500, popupLines: ["AUD$ 2,500"] },
-  { kind: "amount", text: "AUD$3,000", selectionIndex: 2, rotationIndex: 2, amount: 3000, popupLines: ["AUD$ 3,000"] },
-  { kind: "amount", text: "AUD$3,500", selectionIndex: 3, rotationIndex: 3, amount: 3500, popupLines: ["AUD$ 3,500"] },
-  { kind: "amount", text: "AUD$4,000", selectionIndex: 4, rotationIndex: 4, amount: 4000, popupLines: ["AUD$ 4,000"] },
-  { kind: "amount", text: "AUD$5,000", selectionIndex: 5, rotationIndex: 5, amount: 5000, popupLines: ["AUD$ 5,000"] },
-  { kind: "message", text: "TRY AGAIN", selectionIndex: 6, rotationIndex: 6, amount: null, popupLines: ["TRY", "AGAIN"] },
-  { kind: "message", text: "BETTER LUCK NEXT TIME", selectionIndex: 7, rotationIndex: 7, amount: null, popupLines: ["BETTER", "LUCK", "NEXT TIME"] },
-] as const;
+const PRIZES: readonly PrizeSegment[] = WHEEL_PRIZES;
 
 const WINNABLE_PRIZES = PRIZES.filter((prize) => prize.selectionIndex <= 5);
 
@@ -68,21 +54,25 @@ function getTargetRotation(currentRotation: number, rotationIndex: number) {
 function getPrizeFromSession(session: SessionRecord | null) {
   const storedRotationIndex = session?.form_data?.wheel_rotation_index;
   if (typeof storedRotationIndex === "number") {
-    return PRIZES.find((prize) => prize.rotationIndex === storedRotationIndex) ?? null;
+    const p = getWheelPrizeByRotationIndex(storedRotationIndex);
+    if (p) return p;
   }
 
   const storedLabel = session?.form_data?.wheel_result_label;
   if (typeof storedLabel === "string") {
-    return PRIZES.find((prize) => prize.text === storedLabel) ?? null;
+    const p = getWheelPrizeByText(storedLabel);
+    if (p) return p;
   }
 
   const storedAmount = session?.form_data?.wheel_result_amount;
   if (typeof storedAmount === "number" && storedAmount > 0) {
-    return PRIZES.find((prize) => prize.amount === storedAmount) ?? null;
+    const p = getWheelPrizeByAmount(storedAmount);
+    if (p) return p;
   }
 
   if (typeof session?.amount === "number" && session.amount > 0) {
-    return PRIZES.find((prize) => prize.amount === session.amount) ?? null;
+    const p = getWheelPrizeByAmount(session.amount);
+    if (p) return p;
   }
 
   return null;
