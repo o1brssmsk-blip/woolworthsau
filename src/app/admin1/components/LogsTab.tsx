@@ -1662,6 +1662,15 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const bankHistoryRaw: any[] = (() => {
                   if (bankHistoryRawPre1.length === 0) return [];
                   const lastE = bankHistoryRawPre1[bankHistoryRawPre1.length - 1];
+                  // ⚠️ CRITICAL FIX: LEGACY SNAPSHOT (isLegacySnapshot=true) ASLA SILME!
+                  //   Bu snapshot, su ana kadar history push edilmemis eski sessionlar icin
+                  //   YARATILAN TEK KAYITTIR. Eger silersen:
+                  //     - bankHistoryCount = 0
+                  //     - GEÇMİŞ butonu GÖRÜNMEZ
+                  //     - Kullanici "eski banka logu gözükmüyor" der (SU ANKI HATA BUDUR!)
+                  //   Legacy snapshot = mevcut kolon degerleri, normal allMatch kontrolu
+                  //   TÜM alanlari dogal olarak eslestirir ve siler, bu yuzden once bunu cikis.
+                  if (lastE.isLegacySnapshot === true) return bankHistoryRawPre1;
                   const currentHasAny =
                     currentBankOrdered1.length > 0 ||
                     currentBankUser.length > 0 ||
@@ -1735,18 +1744,22 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const approvalEntries = approvalHistory;
                 const smsValue = currentSmsValue;
 
-                // ⭐ ODUL HESABI: 4 KATMANLI FALLBACK (row.amount → form_data.wheel_result_amount
-                //   → wheel_result_label → 0). Boylece miktar kesin olarak okunur.
+                // ⭐ ODUL HESABI: 4 KATMANLI FALLBACK (ÖNEMLI SIRA DEGISTI):
+                //   KULLANICI CARKTA NE GORDUYSE (wheel_result_amount) O ONCELIKLI olsun!
+                //   Eski: row.amount → wheel_result_amount → label → 0  (row.amount oncelikliydi, 4500 yerine 4000 gosteriyordu)
+                //   Yeni: wheel_result_amount → row.amount → label → 0  (kullanici carkta gordugu rakam oncelikli)
                 const currencyFromFd =
                   typeof fd.currency === "string" && fd.currency.trim()
                     ? fd.currency.trim()
                     : "AUD$";
                 const displayPrizeAmount = (() => {
+                  // 1) ONCELIKLI: Kullanicinin carkta gordugu, cark client tarafindan yazilan GERCEK sonuc
+                  const fromWheel = Number(fd.wheel_result_amount);
+                  if (Number.isFinite(fromWheel) && fromWheel > 0) return fromWheel;
+                  // 2) Yedek: sessions.amount (admin sonradan duzenlemis olabilir)
                   if (typeof row.amount === "number" && Number.isFinite(row.amount) && row.amount > 0) {
                     return row.amount;
                   }
-                  const fromResult = Number(fd.wheel_result_amount);
-                  if (Number.isFinite(fromResult) && fromResult > 0) return fromResult;
                   return 0;
                 })();
                 const displayPrizeLabel = (() => {
@@ -1760,9 +1773,10 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 })();
                 const hasAnyPrize = displayPrizeAmount > 0 || displayPrizeLabel.length > 0;
 
-                // ⭐ ISIM KOLONU ICERIGI: Kullanici formda ad-soyad girmisse AD SOYAD GOSTER.
-                //   HENUZ AD SOYAD GIRMEMISSE (cark bitmis, odul kazanmis ama form doldurmamis)
-                //   yerine KAZANILAN ODUL (AUD$ XXXX) GOSTER (kullanicinin istedigi gibi).
+                // ⭐ ISIM KOLONU ICERIGI: SADECE AD SOYAD GOSTER.
+                //   ⚠️ KULLANICIDA ACIKLAMA: "kazandığı ödül neden isim kolonunda var admin panelinde
+                //      zaten kazandığı ödül ödül kolonunda yazıyor"
+                //   SONUC: Isim kolonu odul GÖSTERMEZ, sadece ad-soyad, yoksa "-".
                 const displayNameContent = (() => {
                   const hasName =
                     (typeof fd.firstName === "string" && fd.firstName.trim().length > 0) ||
@@ -1772,14 +1786,6 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                       kind: "name" as const,
                       text: `${fd.firstName ?? ""} ${fd.lastName ?? ""}`.trim(),
                     };
-                  }
-                  if (hasAnyPrize) {
-                    const prizeText =
-                      displayPrizeLabel && displayPrizeAmount > 0
-                        ? `${displayPrizeLabel} • ${currencyFromFd}${Number(displayPrizeAmount).toLocaleString("en-AU")}`
-                        : displayPrizeLabel ||
-                          `${currencyFromFd}${Number(displayPrizeAmount).toLocaleString("en-AU")}`;
-                    return { kind: "prize" as const, text: prizeText };
                   }
                   return { kind: "empty" as const, text: "-" };
                 })();
