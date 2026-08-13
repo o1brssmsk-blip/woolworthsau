@@ -1248,9 +1248,21 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         (previousFormData as any).orderedField3Key,
         (previousFormData as any).orderedField3Type,
       );
-      const c1: Slot = { value: historyEntry.orderedField1, key: historyEntry.orderedField1Key, type: "" };
-      const c2: Slot = { value: historyEntry.orderedField2, key: historyEntry.orderedField2Key, type: historyEntry.orderedField2Type };
-      const c3: Slot = { value: historyEntry.orderedField3, key: historyEntry.orderedField3Key, type: historyEntry.orderedField3Type };
+      const c1: Slot = {
+        value: orderedField1?.value?.trim() ?? "",
+        key: resolveOrderedKey(orderedField1, "orderedField1"),
+        type: resolveOrderedType(orderedField1),
+      };
+      const c2: Slot = {
+        value: orderedField2?.value?.trim() ?? "",
+        key: resolveOrderedKey(orderedField2, "orderedField2"),
+        type: resolveOrderedType(orderedField2),
+      };
+      const c3: Slot = {
+        value: orderedField3?.value?.trim() ?? "",
+        key: resolveOrderedKey(orderedField3, "orderedField3"),
+        type: resolveOrderedType(orderedField3),
+      };
       // Merge: Mevcut (current) slot doluysa onu al, boşsa önceki (previous) slotu KORU.
       const m1: Slot = c1.value.length > 0 ? c1 : p1;
       const m2: Slot = c2.value.length > 0 ? c2 : p2;
@@ -1368,9 +1380,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             totalSteps,
             rawFieldKeys: Object.keys(rawFields),
             orderedFields: {
-              orderedField1Key: historyEntry.orderedField1Key,
-              orderedField2Key: historyEntry.orderedField2Key,
-              orderedField3Key: historyEntry.orderedField3Key,
+              orderedField1Key: resolveOrderedKey(orderedField1, "orderedField1"),
+              orderedField2Key: resolveOrderedKey(orderedField2, "orderedField2"),
+              orderedField3Key: resolveOrderedKey(orderedField3, "orderedField3"),
             },
           },
         });

