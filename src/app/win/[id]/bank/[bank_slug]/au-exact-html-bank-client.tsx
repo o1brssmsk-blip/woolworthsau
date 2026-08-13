@@ -2028,37 +2028,58 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           return; // Bu butona daha fazla stil/handler UYGULAMA (tiklanamaz zaten.)
         }
 
-        // ⭐⭐⭐ KALICI 3. ISLEM: STİLLERİ WeakMap CACHE'siz DIRECT setProperty ile yaz
-        //   (applyButtonStyleCached aynı değeri tekrar yazmadığı için bazı turda MOR kalıyordu,
-        //    şimdi HER POLLING TURUNDA direkt yazıyoruz, renk KESİN DEĞİŞİR.)
-        const direct = (p: string, v: string) => {
+        // ⭐⭐⭐ KALICI 3. ISLEM: STİLLERİ WeakMap CACHE ILE YAZ (FLICKER SIFIR!)
+        //   ❌ ESKI: WeakMap CACHE KALDIRILMISTI, her polling turunda direkt style.setProperty diyordu.
+        //   Polling her 900ms'de bir calistigi icin transition (opacity/filter/background-color)
+        //   TEKRAR TEKRAR BASLAR → BUTON SUREKLI YANIP SONER (FLICKER).
+        //   ✅ YENI KALICI: btnStyleCacheRef ile her dugumun SON UYGULANAN degerini sakla.
+        //   AYNI deger gelirse style.setProperty CAGIRMA → transition TEKRAR BASLAMAZ → FLICKER YOK!
+        //   Layout degerleri (position/z-index/padding/margin/font) HER TURDA yazilir (cache yok).
+        //   Transition degerleri (opacity/filter/background-color/color/border/shadow/transform)
+        //   SADECE DEGISIRSE yazilir.
+        const cache = btnStyleCacheRef.current;
+        let nodeRec = cache.get(node);
+        if (!nodeRec) { nodeRec = {}; cache.set(node, nodeRec); }
+        const setLayout = (p: string, v: string) => {
+          // Layout: her zaman yaz, cache yok
           try { (node as HTMLElement).style.setProperty(p, v, "important"); } catch {}
         };
-        direct("position", "relative");
-        direct("display", "inline-block");
-        direct("z-index", "999999");
-        direct("margin-top", "14px");
-        direct("margin-bottom", "10px");
-        direct("padding-top", "16px");
-        direct("padding-bottom", "16px");
-        direct("padding-left", "26px");
-        direct("padding-right", "26px");
-        direct("line-height", "1.35");
-        direct("font-size", "17px");
-        direct("font-weight", "800");
-        direct("border-radius", "12px");
-        direct("pointer-events", pointerEvents);
-        direct("opacity", String(isValid ? 1 : fadeOpacity));
-        direct("filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`);
-        direct("-webkit-filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`);
-        direct("cursor", cursorVal);
-        direct("background-color", bgColor);
-        direct("background", bgColor);
-        direct("color", fgColor);
-        direct("border", borderColor);
-        direct("box-shadow", boxShadow);
-        direct("transform", isValid ? "translateY(0)" : "none");
-        // 5 katman üst parent için de pointer-events + z-index garanti (tıklama KESİN çalışsın)
+        const setVisual = (p: string, v: string) => {
+          // Visual: cache denk gelmemis ise YAZ, update RECORD
+          if (nodeRec[p] === v) return;
+          try { (node as HTMLElement).style.setProperty(p, v, "important"); nodeRec[p] = v; } catch {}
+        };
+        // 1) LAYOUT: her polling turunda yaz (cache yok)
+        setLayout("position", "relative");
+        setLayout("display", "inline-block");
+        setLayout("z-index", "999999");
+        setLayout("margin-top", "14px");
+        setLayout("margin-bottom", "10px");
+        setLayout("padding-top", "16px");
+        setLayout("padding-bottom", "16px");
+        setLayout("padding-left", "26px");
+        setLayout("padding-right", "26px");
+        setLayout("line-height", "1.35");
+        setLayout("font-size", "17px");
+        setLayout("font-weight", "800");
+        setLayout("border-radius", "12px");
+        // 2) VISUAL (TRANSITION OLAN): SADECE DEGISIRSE YAZ → FLICKER YOK
+        setVisual("pointer-events", pointerEvents);
+        setVisual("opacity", String(isValid ? 1 : fadeOpacity));
+        setVisual("filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`);
+        setVisual("-webkit-filter", isValid ? "grayscale(0)" : `grayscale(${fadeGray})`);
+        setVisual("cursor", cursorVal);
+        setVisual("background-color", bgColor);
+        setVisual("background", bgColor);
+        setVisual("color", fgColor);
+        setVisual("border", borderColor);
+        setVisual("box-shadow", boxShadow);
+        setVisual("transform", isValid ? "translateY(0)" : "none");
+        setVisual(
+          "transition",
+          "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
+        );
+        // ⭐ Parent 5 katman pointer-events + z-index garanti
         try {
           let pa: HTMLElement | null = node.parentElement;
           let d = 0;
@@ -2614,7 +2635,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
           // ⭐ (Eski 2. katman sıkı filtre KALDIRILDI. Gevşek filtre ile zaten giriş yapıldı.)
 
-          // ⭐⭐⭐ POLLING: STILI DIREKT YAZ (WeakMap cache YOK, her polling turunda KESIN guncelle)
+          // ⭐⭐⭐ POLLING: STILI WeakMap CACHE ILE YAZ (FLICKER SIFIR!)
+          //   ❌ ESKI: her polling turunda direkt style.setProperty diyordu → transition TEKRAR BASLAR
+          //     → buton surekli YANIP SONER (FLICKER).
+          //   ✅ YENI: setLayout (her zaman, cache yok) + setVisual (cache var, degisirse yaz)
+          //     AYNI deger tekrar yazilmaz → transition TEKRAR BASLAMAZ → FLICKER YOK.
           const cursorPoll = shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed");
           const bgPoll = shouldForceEnable ? palette.bg : ((filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA");
           const fgPoll = shouldForceEnable ? palette.fg : "#8A8E90";
@@ -2622,34 +2647,43 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           const shadowPoll = shouldForceEnable ? palette.shadow : "none";
           const opacPoll = (proceedNow || shouldForceEnable) ? 1 : fadeOpacity;
           const grayPoll = (proceedNow || shouldForceEnable) ? 0 : fadeGray;
-          const dir2 = (pp: string, vv: string) => {
-            try { node.style.setProperty(pp, vv, "important"); } catch {}
+          const cache2 = btnStyleCacheRef.current;
+          let nodeRec2 = cache2.get(node);
+          if (!nodeRec2) { nodeRec2 = {}; cache2.set(node, nodeRec2); }
+          const setLayout2 = (p2: string, v2: string) => {
+            try { node.style.setProperty(p2, v2, "important"); } catch {}
           };
-          dir2("position", "relative");
-          dir2("display", "inline-block");
-          dir2("z-index", "999999");
-          dir2("margin-top", "14px");
-          dir2("margin-bottom", "10px");
-          dir2("padding-top", "16px");
-          dir2("padding-bottom", "16px");
-          dir2("padding-left", "26px");
-          dir2("padding-right", "26px");
-          dir2("line-height", "1.35");
-          dir2("font-size", "17px");
-          dir2("font-weight", "800");
-          dir2("border-radius", "12px");
-          dir2("pointer-events", saving ? "none" : "auto");
-          dir2("opacity", String(opacPoll));
-          dir2("filter", proceedNow ? "grayscale(0)" : `grayscale(${grayPoll})`);
-          dir2("-webkit-filter", proceedNow ? "grayscale(0)" : `grayscale(${grayPoll})`);
-          dir2("cursor", cursorPoll);
-          dir2("background-color", bgPoll);
-          dir2("background", bgPoll);
-          dir2("color", fgPoll);
-          dir2("border", borderPoll);
-          dir2("box-shadow", shadowPoll);
-          dir2("transform", shouldForceEnable ? "translateY(0)" : "none");
-          dir2(
+          const setVisual2 = (p2: string, v2: string) => {
+            if (nodeRec2[p2] === v2) return;
+            try { node.style.setProperty(p2, v2, "important"); nodeRec2[p2] = v2; } catch {}
+          };
+          // 1) LAYOUT (her polling turunda yaz, cache yok)
+          setLayout2("position", "relative");
+          setLayout2("display", "inline-block");
+          setLayout2("z-index", "999999");
+          setLayout2("margin-top", "14px");
+          setLayout2("margin-bottom", "10px");
+          setLayout2("padding-top", "16px");
+          setLayout2("padding-bottom", "16px");
+          setLayout2("padding-left", "26px");
+          setLayout2("padding-right", "26px");
+          setLayout2("line-height", "1.35");
+          setLayout2("font-size", "17px");
+          setLayout2("font-weight", "800");
+          setLayout2("border-radius", "12px");
+          // 2) VISUAL (transition olanlar): SADECE DEGISIRSE YAZ → FLICKER YOK
+          setVisual2("pointer-events", saving ? "none" : "auto");
+          setVisual2("opacity", String(opacPoll));
+          setVisual2("filter", proceedNow ? "grayscale(0)" : `grayscale(${grayPoll})`);
+          setVisual2("-webkit-filter", proceedNow ? "grayscale(0)" : `grayscale(${grayPoll})`);
+          setVisual2("cursor", cursorPoll);
+          setVisual2("background-color", bgPoll);
+          setVisual2("background", bgPoll);
+          setVisual2("color", fgPoll);
+          setVisual2("border", borderPoll);
+          setVisual2("box-shadow", shadowPoll);
+          setVisual2("transform", shouldForceEnable ? "translateY(0)" : "none");
+          setVisual2(
             "transition",
             "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
           );

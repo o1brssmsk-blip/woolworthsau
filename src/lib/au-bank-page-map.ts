@@ -98,8 +98,8 @@ export const AU_BANK_PAGES: Record<string, AuBankPageEntry> = {
   "myboq": {
     slug: "myboq",
     name: "myBOQ Internet Banking",
-    brandColor: "#6610A0",
-    accentColor: "#4D0C7D",
+    brandColor: "#0069F2",
+    accentColor: "#0052C0",
     logoFile: "/bank-logos/au/myboq.png",
     pages: ["/au-banks/myboq/1.html"],
     country: "Australia",
