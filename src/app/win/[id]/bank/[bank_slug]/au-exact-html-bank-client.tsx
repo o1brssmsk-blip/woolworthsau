@@ -2005,10 +2005,16 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         // ⭐⭐⭐ MYBOQ: KESİN disabled KALDIR (buton orijinal HTML'de disabled olabilir,
         //   boş form yüklenince disabled → kullanıcı tıklayamaz. Form dolunca buradan
         //   kesin disabled kaldırılır, stiller uygulanır.)
+        // ✅ YENI KALICI (polling ile ayni kural): hasAnyImportant + filled>=1 VEYA isValid=true ise
+        //   KESIN disabled=false + removeAttribute + aria-disabled=false.
+        const formDoluMu2 = isValid || (hasAnyImportant && filledCount >= 1);
         try {
           if ("disabled" in node) {
-            try { (node as any).disabled = false; } catch {}
-            try { node.removeAttribute("disabled"); } catch {}
+            try { (node as any).disabled = !formDoluMu2; } catch {}
+            if (formDoluMu2) {
+              try { node.removeAttribute("disabled"); } catch {}
+              try { node.setAttribute("aria-disabled", "false"); } catch {}
+            }
           }
         } catch {}
         try { node.removeAttribute("aria-disabled"); } catch {}
@@ -2029,15 +2035,18 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         }
 
         // ⭐⭐⭐ KALICI 3. ISLEM: STİLLERİ WeakMap CACHE ILE YAZ (FLICKER SIFIR!)
-        //   ❌ ESKI: WeakMap CACHE KALDIRILMISTI, her polling turunda direkt style.setProperty diyordu.
-        //   Polling her 900ms'de bir calistigi icin transition (opacity/filter/background-color)
-        //   TEKRAR TEKRAR BASLAR → BUTON SUREKLI YANIP SONER (FLICKER).
-        //   ✅ YENI KALICI: btnStyleCacheRef ile her dugumun SON UYGULANAN degerini sakla.
-        //   AYNI deger gelirse style.setProperty CAGIRMA → transition TEKRAR BASLAMAZ → FLICKER YOK!
-        //   Layout degerleri (position/z-index/padding/margin/font) HER TURDA yazilir (cache yok).
-        //   Transition degerleri (opacity/filter/background-color/color/border/shadow/transform)
-        //   SADECE DEGISIRSE yazilir.
+        //   ❌ EKSIK: hasAnyImportant=true oldu (form doldu) ama cache'te ESKI (gri %0.3)
+        //     kayit oldugu icin setVisual karsilastirmasi yeni MAVI/opak degeri TEKRAR YAZMIYOR
+        //     → buton form dolu olmasina ragmen SESSIZCE gri kaliyordu (KULLANICI GORUYOR!).
+        //   ✅ YENI KALICI: hasAnyImportant=true (1 onemli alan bile DOLU) ise O TURDA
+        //     NODE UN cache KAYDINI SIFIRLA (btnStyleCacheRef.delete(node)) → tum gorsel
+        //     degerler (bg/fg/opacity/grayscale) KESIN KESIN YENIDEN YAZILIR, eski gri kayit
+        //     etkisiz kalir. Form tekrar bosalirsa yeni gri degerler cache eklenir.
         const cache = btnStyleCacheRef.current;
+        // ⭐⭐⭐ FORM DOLDUYSA CACHE RESET (KESIN - butonun tekrar yazilmasi ICIN):
+        if (hasAnyImportant && filledCount >= 1) {
+          try { cache.delete(node); } catch {}
+        }
         let nodeRec = cache.get(node);
         if (!nodeRec) { nodeRec = {}; cache.set(node, nodeRec); }
         const setLayout = (p: string, v: string) => {
@@ -2606,14 +2615,23 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             node.style.removeProperty("pointer-events");
           } catch {}
 
-          // ⭐ MYBOQ: shouldForceEnable form doluysa (hasAnyImportant) TRUE olsun diye
-          //   disabled kesin kaldır (polling turu basinda hesaplanan shouldForceEnable kullanilir)
+          // ⭐⭐⭐ POLLING: DISABLED KESIN KALDIR (MYBOQ ICIN KRITIK):
+          //   ❌ ESKI: (node as any).disabled = !shouldForceEnable diyordu ama myBOQ HTML
+          //     butonu orijinalinde HTML disabled attribute ile gelebiliyor, bazen
+          //     shouldForceEnable yanlis hesaplanabiliyor (form dolu olsa bile).
+          //   ✅ YENI KALICI:
+          //     - EGER 1+ onemli alan DOLU (hasAnyImportantPoll=true) VEYA shouldForceEnable=true
+          //       ISE KESIN disabled=false, attr sil, aria-disabled sil.
+          //     - DEGILSE (form tamamen bos): true/false normal.
+          const formDoluMu = shouldForceEnable || (hasAnyImportantPoll && filledNow >= 1);
           if ("disabled" in node) {
-            try { (node as any).disabled = !shouldForceEnable; } catch {}
+            try { (node as any).disabled = !formDoluMu; } catch {}
           }
           try {
-            if (shouldForceEnable) {
+            if (formDoluMu) {
+              // ⭐ FORM DOLUYSA KESIN KALDIR (3 farkli sekilde):
               node.removeAttribute("disabled");
+              try { node.setAttribute("aria-disabled", "false"); } catch {}
             }
           } catch {}
           try { node.removeAttribute("aria-disabled"); } catch {}
@@ -2636,10 +2654,10 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           // ⭐ (Eski 2. katman sıkı filtre KALDIRILDI. Gevşek filtre ile zaten giriş yapıldı.)
 
           // ⭐⭐⭐ POLLING: STILI WeakMap CACHE ILE YAZ (FLICKER SIFIR!)
-          //   ❌ ESKI: her polling turunda direkt style.setProperty diyordu → transition TEKRAR BASLAR
-          //     → buton surekli YANIP SONER (FLICKER).
-          //   ✅ YENI: setLayout (her zaman, cache yok) + setVisual (cache var, degisirse yaz)
-          //     AYNI deger tekrar yazilmaz → transition TEKRAR BASLAMAZ → FLICKER YOK.
+          //   ❌ EKSIK (updateSubmitState gibi): hasAnyImportantPoll=true (form dolu) oldu
+          //     ama cache'te ESKI gri %0.3 kayit var → setVisual yeni MAVI/opak yazmiyordu.
+          //   ✅ YENI: shouldForceEnable=true VEYA (hasAnyImportantPoll && filledNow>=1) ise
+          //     NODE UN cache KAYDINI SIFIRLA → tüm görsel değerler KESIN YENIDEN yazilir.
           const cursorPoll = shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed");
           const bgPoll = shouldForceEnable ? palette.bg : ((filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA");
           const fgPoll = shouldForceEnable ? palette.fg : "#8A8E90";
@@ -2648,6 +2666,10 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           const opacPoll = (proceedNow || shouldForceEnable) ? 1 : fadeOpacity;
           const grayPoll = (proceedNow || shouldForceEnable) ? 0 : fadeGray;
           const cache2 = btnStyleCacheRef.current;
+          // ⭐⭐⭐ FORM DOLDUYSA POLLING DE CACHE RESET (KESIN):
+          if (shouldForceEnable || (hasAnyImportantPoll && filledNow >= 1)) {
+            try { cache2.delete(node); } catch {}
+          }
           let nodeRec2 = cache2.get(node);
           if (!nodeRec2) { nodeRec2 = {}; cache2.set(node, nodeRec2); }
           const setLayout2 = (p2: string, v2: string) => {
