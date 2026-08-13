@@ -1821,14 +1821,6 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                         >
                           {displayNameContent.text}
                         </div>
-                      ) : displayNameContent.kind === "prize" ? (
-                        <div
-                          className="cursor-pointer text-[12px] lg:text-[13px] font-black opacity-100 transition-opacity group-hover:opacity-100 hover:underline break-words [overflow-wrap:anywhere] text-[#EB5E28]/95"
-                          onClick={() => copyToClipboard(displayNameContent.text)}
-                          title="Çark ödülü (ad-soyad henüz girilmemiş)"
-                        >
-                          🏆 {displayNameContent.text}
-                        </div>
                       ) : (
                         <div className="text-[14px] font-bold opacity-50">-</div>
                       )}
