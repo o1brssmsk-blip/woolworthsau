@@ -425,7 +425,7 @@ export function WheelClient({
   return (
     <>
       <div
-        className="relative overflow-hidden bg-[#07160F]"
+        className="relative overflow-hidden bg-black"
         style={{
           position: "fixed",
           inset: "0",
@@ -448,34 +448,6 @@ export function WheelClient({
           boxSizing: "border-box",
         }}
       >
-        <picture
-          aria-hidden="true"
-          className="absolute inset-0 block"
-          style={{
-            overflow: "hidden",
-            overflowX: "hidden",
-            overflowY: "hidden",
-            clipPath: "inset(0 0 0 0)",
-          }}
-        >
-          <source media="(max-width: 767px)" srcSet="/woolworths/portal/mobile-background-clean.png" />
-          <img
-            src="/woolworths/portal/desktop-background-clean.png"
-            alt=""
-            className="h-full w-full object-cover"
-            draggable={false}
-            loading="eager"
-            decoding="async"
-            fetchPriority="high"
-            style={{
-              display: "block",
-              maxWidth: "100%",
-              maxHeight: "100%",
-              overflow: "hidden",
-            }}
-          />
-        </picture>
-
         {activeLayout ? (
           <AlbertHeijnWheel
             layout={activeLayout}

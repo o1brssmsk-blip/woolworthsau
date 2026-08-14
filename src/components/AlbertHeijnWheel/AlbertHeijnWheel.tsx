@@ -123,7 +123,8 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
       <div
         className="relative flex h-full w-full items-center justify-center overflow-hidden"
         style={{
-          padding: "16px",
+          // ⭐⭐⭐ KALICI FIX: padding 16px SILINDI (eskiden etrafinda 16px bosluk vardi, kenarlarda dis siyah görünüyordu)
+          padding: "0px",
           boxSizing: "border-box",
           contain: "layout paint size",
           transform: "translateZ(0)",
@@ -135,21 +136,32 @@ export function AlbertHeijnWheel({ layout, rotation, spinning, disabled, onSpin,
         <div
           className="relative overflow-hidden"
           style={{
-            width: layout.stageStyle.width,
-            height: layout.stageStyle.height,
-            maxWidth: "100%",
-            maxHeight: "100%",
+            // ⭐⭐⭐ KALICI FIX (ASPECT RATIO KORU + OBJECT-COVER GIBI):
+            // Aspect ratio sahnenin (market + cark + buton) GENISLIK/YUKSEKLIK oranı sabit.
+            // Ekrana sığdırırken ORAN KORUNMALIDIR (yoksa cark, buton, pointer konumlari bozulur).
+            // - 1. adim: sahnenin ORIJINAL aspect ratio'sunu SABITLE:
             aspectRatio: scene.aspectRatio,
+            // - 2. adim: EN AZINDAN 100vw/100vh (kucukse buyut, ekranda bosluk kalmasın):
+            minWidth: "100%",
+            minHeight: "100%",
+            // - 3. adim: Hicbir zaman ekran buyuklugunden (100% w/h) kucuk olmasın (tam kaplasın):
+            width: "auto",
+            height: "auto",
+            // ⭐ OBJECT-COVER GIBI DAVRAS:
+            //   aspect ratio = w/h ise:
+            //   Eger ekran genisligi > oran (daha yatay ekran):  height=100% → width = height * oran → genislikten tasan KESILIR.
+            //   Eger ekran yuksekligi > oran (daha dikey ekran): width=100% → height = width / oran → yukseklikten tasan KESILIR.
+            //   Sonuc: SAHNE TUM EKRANI KAPLAR (kenarlarda siyah bosluk KALMAZ) ama ASPECT RATIO BOZULMAZ (icindeki % konumlar CALISIR).
+            //   Flex container (L124) items-center justify-center ile tasan kisimlar ORTALANIR → CENTER & COVER davranisi.
             contain: "layout paint size",
             transform: "translateZ(0)",
             WebkitTransform: "translateZ(0)",
             overflow: "hidden",
             overflowX: "hidden",
             overflowY: "hidden",
-            clipPath: "inset(0 0 0 0 round 4px)",
-            WebkitClipPath: "inset(0 0 0 0 round 4px)",
-            isolation: "isolate",
-            borderRadius: "4px",
+            backgroundSize: "cover",
+            backgroundPosition: "center center",
+            backgroundRepeat: "no-repeat",
           }}
         >
           {/* 1. BACKGROUND */}
