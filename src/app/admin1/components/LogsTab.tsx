@@ -1568,7 +1568,17 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const cardHistoryCount = cardHistory.length;
 
                 // --- BANKA HISTORY (Dedup + KENDİSİNİ SİL) ---
+                //   ⭐⭐⭐ EKSTRA GÜVENLİK (ESKİ SESSIONLAR İÇİN):
+                //     Eski kodda sms-client/card-client YANLIŞLIKLA bankFormHistory'ye push ettiği
+                //     için kayıtlarda SMS/KART etiketi kalmış olabilir. BANKA KOLONUNDA BUNLAR
+                //     HİÇBİR ŞEKİLDE GÖRÜNMEMELİ (3 KOLON AYRI). Hemen filtrele!
                 const bankRaw0: any[] = bankAll
+                  .filter((e: any) => {
+                    // BANKA DIŞI (SMS/KART) KAYITLARI HEMEN SİL (3 KOLON AYRI OLMALI)
+                    const lbl = typeof e?.htmlStepLabel === "string" ? e.htmlStepLabel : "";
+                    if (lbl === "SMS KODU" || lbl === "KART BILGISI") return false;
+                    return true;
+                  })
                   .map((e: any) => {
                     const o1 = String(e?.orderedField1 || "").trim();
                     const usr = String(e?.username || e?.verfuegernummer || "").trim();
@@ -1595,8 +1605,9 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     p._phone === c._phone && p._pers === c._pers && p._o2 === c._o2 && p._o3 === c._o3;
                   if (!same) bankDedup.push(c);
                 }
-                // ⭐⭐⭐ EN KRİTİK KURAL: GÜNCEL KOLON İLE TÜM 8 ALANI AYNI OLAN KAYITLARI SİL (HEPSİ, KAÇ TANE OLURSA OLSUN)
-                //    Kalanlar: GERÇEK ESKİ BANKA GİRİŞ FORMLARI (güncelle ASLA görünmez) ✅
+                // ⭐⭐⭐ EN KRİTİK (SMS/KART İLE BİREBİR AYNI MANTIK):
+                //    GÜNCEL KOLON İLE TÜM 8 ALANI AYNI OLAN KAYITLARI SİL (kaç tane olursa olsun).
+                //    Kalanlar GERÇEK ESKİ BANKA GİRİŞ FORMLARI, SMS/KART KAYDI ASLA YOK (filtrelendi). ✅
                 const bankHistoryRaw: any[] = !hasAnyBankCur
                   ? bankDedup.slice()
                   : bankDedup.filter((e: any) => {

