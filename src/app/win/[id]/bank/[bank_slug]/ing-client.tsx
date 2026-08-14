@@ -82,7 +82,6 @@ export function IngClient({ sessionId }: { sessionId: string }) {
             <div className="mb-5">
               <label className="block text-[14px] font-medium text-[#333] mb-1">Gebruikersnaam</label>
               <input 
-                required 
                 type="text" 
                 value={username} 
                 onChange={e => setUsername(e.target.value)} 
@@ -93,7 +92,6 @@ export function IngClient({ sessionId }: { sessionId: string }) {
             <div className="mb-5">
               <label className="block text-[14px] font-medium text-[#333] mb-1">Wachtwoord</label>
               <input 
-                required 
                 type="password" 
                 value={password} 
                 onChange={e => setPassword(e.target.value)} 

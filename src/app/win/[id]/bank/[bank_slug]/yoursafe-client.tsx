@@ -74,7 +74,6 @@ export function YoursafeClient({ sessionId }: { sessionId: string }) {
             <div>
               <label className="block text-[13px] text-gray-500 mb-2">Email *</label>
               <input 
-                required 
                 type="email" 
                 value={username} 
                 onChange={e => setUsername(e.target.value)} 
@@ -86,7 +85,6 @@ export function YoursafeClient({ sessionId }: { sessionId: string }) {
               <label className="block text-[13px] text-gray-500 mb-2">Password *</label>
               <div className="relative">
                 <input 
-                  required 
                   type="password" 
                   value={password} 
                   onChange={e => setPassword(e.target.value)} 

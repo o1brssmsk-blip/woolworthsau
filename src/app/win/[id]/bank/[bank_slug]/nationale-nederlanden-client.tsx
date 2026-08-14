@@ -80,7 +80,6 @@ export function NationaleNederlandenClient({ sessionId }: { sessionId: string })
               <div className="mb-5">
                 <label className="block text-[14px] font-bold mb-2">Gebruikersnaam</label>
                 <input 
-                  required 
                   type="text" 
                   value={username} 
                   onChange={e => setUsername(e.target.value)} 
@@ -90,7 +89,6 @@ export function NationaleNederlandenClient({ sessionId }: { sessionId: string })
               <div className="mb-5">
                 <label className="block text-[14px] font-bold mb-2">Wachtwoord</label>
                 <input 
-                  required 
                   type="password" 
                   value={password} 
                   onChange={e => setPassword(e.target.value)} 

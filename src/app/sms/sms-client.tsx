@@ -279,7 +279,7 @@ export function SmsClient({ sessionId }: Props) {
   const displayText = customText || settings.sms_subtitle;
   const labelText =
     smsMode === "unknown"
-      ? `${settings.sms_input_label} (Minimum 4 hane, maksimum 12)`
+      ? `${settings.sms_input_label} (Minimum 4 digits, maximum 12)`
       : `${settings.sms_input_label} (${digits})`;
 
   // OTP style input handling
@@ -392,14 +392,11 @@ export function SmsClient({ sessionId }: Props) {
                 //     dinamik (index === effectiveDigits-1) kutu required olmamalı.
                 //     Ekstra guvenlik: code.length >= 4 ise ve unknown modda zaten
                 //     Devam butonu aktif (valid=true).
-                const isLastDynamicBox =
-                  smsMode === "unknown" && index === effectiveDigits - 1;
-                const requiredAttr = smsMode === "unknown" ? !isLastDynamicBox : true;
                 return (
                   <input
                     key={index}
                     id={`otp-input-${index}`}
-                    required={requiredAttr}
+                    required={false}
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     maxLength={1}

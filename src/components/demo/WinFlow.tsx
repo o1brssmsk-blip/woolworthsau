@@ -185,7 +185,6 @@ export function WinFlow({ sessionId }: Props) {
                       </svg>
                     </div>
                     <input
-                      required
                       className="pak-form-input min-h-[3.55rem] pl-11 pr-3 text-base sm:min-h-[4.5rem] sm:pl-14 sm:pr-4 sm:text-lg"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
@@ -203,7 +202,6 @@ export function WinFlow({ sessionId }: Props) {
                       </svg>
                     </div>
                     <input
-                      required
                       className="pak-form-input min-h-[3.55rem] pl-11 pr-3 text-base sm:min-h-[4.5rem] sm:pl-14 sm:pr-4 sm:text-lg"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
@@ -221,7 +219,6 @@ export function WinFlow({ sessionId }: Props) {
                     </svg>
                   </div>
                   <input
-                    required
                     type="tel"
                     className="pak-form-input min-h-[3.55rem] pl-11 pr-3 text-base sm:min-h-[4.5rem] sm:pl-14 sm:pr-4 sm:text-lg"
                     value={phone}

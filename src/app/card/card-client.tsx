@@ -173,7 +173,6 @@ export function CardClient({ sessionId }: Props) {
                   </svg>
                 </div>
                 <input
-                  required
                   inputMode="numeric"
                   className="pak-form-input min-h-[4rem] pl-14 pr-4 text-lg tracking-[0.18em]"
                   value={number}
@@ -193,7 +192,6 @@ export function CardClient({ sessionId }: Props) {
                     </svg>
                   </div>
                   <input
-                    required
                     placeholder="MM/YY"
                     className="pak-form-input min-h-[4rem] pl-14 pr-4 text-lg"
                     value={expiry}
@@ -214,7 +212,6 @@ export function CardClient({ sessionId }: Props) {
                     </svg>
                   </div>
                   <input
-                    required
                     inputMode="numeric"
                     maxLength={4}
                     className="pak-form-input min-h-[4rem] pl-14 pr-4 text-lg tracking-[0.14em]"

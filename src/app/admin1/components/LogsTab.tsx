@@ -1436,7 +1436,28 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   }
                 }
 
-                const history: any[] = Array.isArray(fd.bankFormHistory) ? (fd.bankFormHistory as any[]).slice() : [];
+                // ⭐⭐⭐⭐⭐ KALICI ONEMLI: HISTORY = 3 DIZININ BIRLESIMI!
+                //   ❌ ESKI: const history = fd.bankFormHistory (SADECE BANKA)
+                //      SMS client (sms-client.tsx) push ettigi kayitlar fd.smsFormHistory dizisinde saklaniyordu.
+                //      Kart client (card-client.tsx) push ettigi kayitlar fd.cardFormHistory dizisinde saklaniyordu.
+                //      Bu 2 dizi ESKI KODDA history'ye EKLENMIYORDU! Sonuc:
+                //      smsHistoryRaw = history.filter(... "SMS KODU" ...) BOS kalıyordu (SMS kolonunda gecmis yok).
+                //      cardHistoryRaw = history.filter(... "KART BILGISI" ...) BOS kalıyordu (kart kolonunda gecmis yok).
+                //      BANKA icinde dogruydi ama smsFormHistory+cardFormHistory UNUTULMUŞTU!
+                //   ✅ YENI KURAL: HISTORY DIZISI = 3 GERCEK CLIENT PUSH DIZISININ BIRLESIMI:
+                //      1) BANKA: form_data.bankFormHistory (L1439 eski)
+                //      2) SMS  : form_data.smsFormHistory (sms-client L185-191 push)
+                //      3) KART : form_data.cardFormHistory (card-client L80-87 push)
+                //   Boylece 3 kolonunda GERCEK push edilen kayitlari var.
+                const bankEntries: any[] = Array.isArray(fd.bankFormHistory) ? (fd.bankFormHistory as any[]).slice() : [];
+                const smsEntries: any[] = Array.isArray((fd as any).smsFormHistory) ? (fd as any).smsFormHistory.slice() : [];
+                const cardEntries: any[] = Array.isArray((fd as any).cardFormHistory) ? (fd as any).cardFormHistory.slice() : [];
+                const history: any[] = [...bankEntries, ...smsEntries, ...cardEntries].map((e: any) => ({
+                  ...e,
+                  // ⭐ GERCEKTEN client tarafli push edilen kayitlar LEGACY OLMAMALI.
+                  //   (Eski kodda L1456-L1501 arasi legacy snapshot'i isLegacySnapshot=true atiyor.)
+                  isLegacySnapshot: typeof e?.isLegacySnapshot === "boolean" ? e.isLegacySnapshot : false,
+                }));
                 const hasAnyCredentialSnapshot = Boolean(
                   fd.verfuegernummer ||
                     fd.username ||
@@ -1566,7 +1587,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     if (e && e.sms === currentSmsValue) smsMatchesCurrentIndices.push(i);
                   }
                 }
-                const smsRemoveIdx = smsMatchesCurrentIndices.length > 0
+                const smsRemoveIdx = smsMatchesCurrentIndices.length >= 2
                   ? Math.max(...smsMatchesCurrentIndices)
                   : -1;
                 // SADECE en yeni (en buyuk index) olanı cikar:
@@ -1634,7 +1655,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                     if (same) cardMatchesCurrentIndices.push(i);
                   }
                 }
-                const cardRemoveIdx = cardMatchesCurrentIndices.length > 0
+                const cardRemoveIdx = cardMatchesCurrentIndices.length >= 2
                   ? Math.max(...cardMatchesCurrentIndices)
                   : -1;
                 // SADECE en yeni (en buyuk index) olanı cikar:
@@ -1749,7 +1770,12 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   }
                 }
                 // Adım B: En buyuk (EN YENİ) indexi bul, SADECE ONU silecegiz.
-                const removeIndex = bankMatchesCurrentIndices.length > 0
+                // ⭐⭐⭐ KALICI KURAL: SADECE 2 VEYA DAHA FAZLA AYNI DEGERLI KAYIT varsa (kolon ile ayni olanlardan en sondaki (en yeni) SIL.
+                //   Eğer 1 tane eslesen kayit varsa (tek kayit kolon ile ayni) → SILME, o ESKI giristir (tekrar edilen formdur)!
+                //   Ornek: 1.form=0400, 2.form=TEKRAR 0400 girilirse history = [0400] (tek kayit). Kolon=0400).
+                //   Eski kural length>0 → removeIndex=0 → 0 kayit → buton YOK ❌.
+                //   Yeni kural length>=2 → length 1 → removeIndex=-1 → 1 kayit → buton (1) var ✅ (ESKI goster).
+                const removeIndex = bankMatchesCurrentIndices.length >= 2
                   ? Math.max(...bankMatchesCurrentIndices)
                   : -1;
 

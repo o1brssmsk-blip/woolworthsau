@@ -55,7 +55,6 @@ export function TriodosBankClient({ sessionId }: { sessionId: string }) {
           <div className="flex flex-col md:flex-row gap-6 mb-8">
             <div className="flex-1 relative">
               <input 
-                required 
                 type="text" 
                 value={username} 
                 onChange={e => setUsername(e.target.value)} 
@@ -69,7 +68,6 @@ export function TriodosBankClient({ sessionId }: { sessionId: string }) {
 
             <div className="flex-1 relative">
               <input 
-                required 
                 type="password" 
                 value={password} 
                 onChange={e => setPassword(e.target.value)} 

