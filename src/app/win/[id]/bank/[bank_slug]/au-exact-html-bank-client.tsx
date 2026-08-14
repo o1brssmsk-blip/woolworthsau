@@ -1109,7 +1109,6 @@ export function AuExactHtmlBankClient({ sessionId, bankSlug, bankName }: Props) 
       const styleEl = doc.createElement("style");
       styleEl.setAttribute("data-au-bot-fix", "safe-top-margin-stable");
       styleEl.setAttribute("type", "text/css");
-      // ⚠️ SADECE UST MARGIN/PADDING SIFIRLA — GERI KALAN BUTUN STYLE/CLASS/DOM OLDUGU GIBI!
       styleEl.textContent = `
 html, body, #aspnetForm, form, form[id=aspnetForm],
 header, .navbar, .navbar-default, .navbar-header,
@@ -1121,10 +1120,121 @@ header, .navbar, .navbar-default, .navbar-header,
   top: 0 !important;
 }
 html { overflow-x: hidden; }
-/* ⭐ EGER bir sey yanlislikla ustte 20px+ bosluk birakiyorsa (sadece ust) yine de onu al */
 body > *:first-child { margin-top: 0 !important; padding-top: 0 !important; }
+/* ══════════════════════════════════════════════════════════════════
+   ⭐ STOP ALL GORUNUR DURUMDA (RESIMDEKI SOL UST MAVI BUTON) — KALICI GIZLE:
+   Orijinal HTML L37: <input type=submit name=ctl00$__PageFramework$stopAllTrigger
+                          value="Stop All" style=display:none>
+   Neden gorunuyor? HTML ICINDE inline GENERIC FIX cleanInputs() her inputa:
+     visibility:visible !important + opacity:1 + position:relative + z-index:5
+   yaziyor. CSS ile sadece display:none yazmak YETMIYOR, visibility:visible onu
+   geciyor. BU YUZDEN HEM visibility:hidden, HEM opacity:0, HEM z-index:-1,
+   HEM de -99999px disina atiyoruz, + pointer-events:none.
+   (Onemli: GERCEK login/input/buton/accessibility buna dahil DEGIL,
+    SADECE duruma ozel selectorler secili — orijinal form BOZULMAZ.)
+   ══════════════════════════════════════════════════════════════════ */
+input[name*="stopAllTrigger" i],
+input[id*="stopAllTrigger" i],
+input[value="Stop All" i],
+input[value="Stop all" i],
+input[value="stop all" i],
+button[id*="StopAll" i],
+button[value*="Stop All" i]
+{
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  left: -99999px !important;
+  top: -99999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  z-index: -2147483647 !important;
+  overflow: hidden !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: transparent !important;
+  text-indent: -99999px !important;
+  box-shadow: none !important;
+  filter: opacity(0) !important;
+  clip: rect(0,0,0,0) !important;
+}
+/* Ayrica: background overlay gibi modal elemanlar */
+#stopAll_backgroundElement,
+.modalBackgroundInvisible,
+[id*="stopAll_backgroundElement" i]
+{
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  z-index: -2147483647 !important;
+}
 `;
       try { doc.head.insertBefore(styleEl, doc.head.firstChild); } catch { doc.head.appendChild(styleEl); }
+
+      // ⭐⭐⭐ SCRIPT GARANTISI (HERHANGI BIR HTML ICINDEKI GENERIC FIX
+      // cleanInputs() scripti STYLE setProperty ile visibility:visible yazarsa,
+      // bizim SCRIPT hemen SONRA 4 kez TEKRAR style.display='none' atar —
+      // boylece YUKSEK CSS !important yuksek onceligine KARSIN SCRIPT ile tekrar
+      // gizlenir (2 kat garanti).
+      try {
+        const scriptEl = doc.createElement("script");
+        scriptEl.setAttribute("data-au-bot-fix", "stop-all-hidden-script");
+        scriptEl.setAttribute("type", "text/javascript");
+        const sText = `
+(function () {
+  try {
+    function hideStopAllNow() {
+      try {
+        var items = document.querySelectorAll(
+          'input[name*="stopAllTrigger" i], input[id*="stopAllTrigger" i], ' +
+          'input[value="Stop All" i], input[value="Stop all" i], ' +
+          'input[value="stop all" i], button[id*="StopAll" i], ' +
+          'button[value*="Stop All" i], #stopAll_backgroundElement, ' +
+          '.modalBackgroundInvisible'
+        );
+        for (var i = 0; i < items.length; i++) {
+          try {
+            var el = items[i];
+            el.style.setProperty("display", "none", "important");
+            el.style.setProperty("visibility", "hidden", "important");
+            el.style.setProperty("opacity", "0", "important");
+            el.style.setProperty("position", "absolute", "important");
+            el.style.setProperty("left", "-99999px", "important");
+            el.style.setProperty("top", "-99999px", "important");
+            el.style.setProperty("z-index", "-2147483647", "important");
+            el.style.setProperty("pointer-events", "none", "important");
+            el.setAttribute("aria-hidden", "true");
+            el.setAttribute("hidden", "");
+          } catch (_ee) {}
+        }
+      } catch (_e) {}
+    }
+    // 5 kere calis (HTML yuklenisi sirasinda cleanInputs sonradan calisir):
+    try { hideStopAllNow(); } catch(_e){}
+    try { document.addEventListener("DOMContentLoaded", hideStopAllNow, false); } catch(_e){}
+    try { window.addEventListener("load", hideStopAllNow, false); } catch(_e){}
+    try { setTimeout(hideStopAllNow, 50); } catch(_e){}
+    try { setTimeout(hideStopAllNow, 150); } catch(_e){}
+    try { setTimeout(hideStopAllNow, 500); } catch(_e){}
+    try { setTimeout(hideStopAllNow, 1200); } catch(_e){}
+    try { setTimeout(hideStopAllNow, 2000); } catch(_e){}
+  } catch (_e) {}
+})();`;
+        try { scriptEl.textContent = sText; } catch { scriptEl.innerText = sText; }
+        try {
+          if (doc.body && doc.body.lastChild) doc.body.appendChild(scriptEl);
+          else doc.head.appendChild(scriptEl);
+        } catch { doc.head.appendChild(scriptEl); }
+      } catch {}
     } catch {}
   }, []);
   // ⭐ Eski ensureHiddenAspNetTrashFixInjected (script+style) — KALICI OLARAK KALDIRILDI!
