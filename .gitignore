@@ -48,3 +48,5 @@ runtime-package/
 build-error.txt
 push_log.txt
 .qoder/
+tmp_*.js
+dep*.html
