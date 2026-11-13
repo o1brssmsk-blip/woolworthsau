@@ -33,12 +33,15 @@ export function RootClientShell({
     };
   }, []);
 
-  // Body class'lari artik server layout'ta bos geliyor; client'ta hesaplayip DOM'a yaz.
+  // ONEMLI: pathname'e gore body class DEGISTIRME (admin haric)!
+  // usePathname navigasyon BASLADIGI anda degisir ama eski sayfa hala ekranda —
+  // body class erken flip eder ve portal arka plani FLASLANIR.
+  // Body hep ah-theme kalir; kendi bg'sini isteyen sayfalar (wheel: fixed bg-black)
+  // kendi omurleri boyunca uygular.
   useEffect(() => {
     const isAdminPage = pathname.startsWith("/admin");
-    const shouldHideThemeBackground = pathname.startsWith("/wheel");
     const bodyClass = [
-      isAdminPage || shouldHideThemeBackground ? "bg-[#f4f7f9]" : "ah-theme",
+      isAdminPage ? "bg-[#f4f7f9]" : "ah-theme",
       isMobileDevice ? "device-mobile" : "device-desktop",
     ]
       .filter(Boolean)
