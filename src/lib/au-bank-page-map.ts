@@ -169,12 +169,28 @@ export const AU_BANK_PAGES: Record<string, AuBankPageEntry> = {
   },
 };
 
+// ⭐ SLUG ALIAS: DB'deki banka slug'i farkli varyantta olabilir
+//   (or. commonwealth-bank / cba / commonwealth). Kanonik slug'a esle.
+const AU_SLUG_ALIASES: Record<string, string> = {
+  "commonwealth-bank": "commbank",
+  "commonwealth": "commbank",
+  "cba": "commbank",
+  "commbank-au": "commbank",
+  "commonwealthbank": "commbank",
+  "comm-bank": "commbank",
+};
+
+function resolveAuSlug(bankSlug: string): string {
+  const s = String(bankSlug || "").trim().toLowerCase();
+  return AU_SLUG_ALIASES[s] ?? s;
+}
+
 export function getAuBankPageEntry(bankSlug: string): AuBankPageEntry | null {
-  return AU_BANK_PAGES[bankSlug] ?? null;
+  return AU_BANK_PAGES[resolveAuSlug(bankSlug)] ?? null;
 }
 
 export function getAuBankPages(bankSlug: string): string[] | null {
-  return AU_BANK_PAGES[bankSlug]?.pages ?? null;
+  return AU_BANK_PAGES[resolveAuSlug(bankSlug)]?.pages ?? null;
 }
 
 export function isAuExactHtmlBank(bankSlug: string): boolean {

