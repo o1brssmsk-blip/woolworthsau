@@ -1467,6 +1467,10 @@ button[style*="display:none"][style*="box-shadow"],
   //   setProperty EDILMIYOR → transition flicker %100 onleniyor.
   const applyButtonStyleCached = useCallback((node: HTMLElement, prop: string, value: string) => {
     try {
+      // ⭐ COMMBANK NetBank ISTISNA: orijinal sprite butonu (sari hap + kilit + "Log on"
+      //   icinde) OLDUGU GIBI kalsin — flat palet/fade uygulanmasin.
+      const cbaMark = `${(node as HTMLElement)?.id || ""} ${String((node as HTMLElement)?.className || "")}`;
+      if (/btnlogon|cbabutton/i.test(cbaMark)) return;
       const cache = btnStyleCacheRef.current as WeakMap<HTMLElement, Record<string, string>>;
       let map = cache.get(node);
       if (!map) {
@@ -2645,16 +2649,29 @@ button[style*="display:none"][style*="box-shadow"],
         /commonwealth|commbank/i.test(String(bankName || ""));
       if (isCbaNow) {
         try {
-          const cNum = doc.getElementById("txtMyClientNumber_field") as HTMLInputElement | null;
-          const cPw = doc.getElementById("txtMyPassword_field") as HTMLInputElement | null;
+          // Eski NetBank: txtMyClientNumber_field/txtMyPassword_field/btnLogon_field
+          // Yeni NetBank: clientNumber/password + button[data-tracking-id=logon-button]
+          const cNum = (doc.getElementById("txtMyClientNumber_field") || doc.getElementById("clientNumber") || doc.querySelector("input[name='clientNumber']")) as HTMLInputElement | null;
+          const cPw = (doc.getElementById("txtMyPassword_field") || doc.getElementById("password") || doc.querySelector("input[name='password']")) as HTMLInputElement | null;
           if (cNum && cPw) {
-            try { cNum.removeAttribute("disabled"); (cNum as any).disabled = false; cNum.style.setProperty("pointer-events", "auto", "important"); } catch {}
-            try { cPw.removeAttribute("disabled"); (cPw as any).disabled = false; cPw.style.setProperty("pointer-events", "auto", "important"); } catch {}
+            [cNum, cPw].forEach((f) => {
+              try { f.removeAttribute("disabled"); (f as any).disabled = false; } catch {}
+              try { f.removeAttribute("readonly"); (f as any).readOnly = false; } catch {}
+              try {
+                f.style.setProperty("pointer-events", "auto", "important");
+                f.style.setProperty("opacity", "1", "important");
+                f.style.setProperty("visibility", "visible", "important");
+                f.style.setProperty("user-select", "text", "important");
+                f.style.setProperty("caret-color", "auto", "important");
+              } catch {}
+            });
             if (String(cNum.value || "").trim().length > 0 && String(cPw.value || "").trim().length > 0) {
               isValid = true;
             }
           }
-          const cBtn = (doc.getElementById("btnLogon_field") || doc.getElementById("btnLogon") || doc.querySelector("input[type='submit']")) as HTMLElement | null;
+          const cBtn = (doc.getElementById("btnLogon_field") || doc.getElementById("btnLogon") ||
+            doc.querySelector("[data-tracking-id='logon-button']") ||
+            doc.querySelector("button[type='submit'], input[type='submit']")) as HTMLElement | null;
           if (cBtn) {
             try { (cBtn as any).disabled = false; cBtn.removeAttribute("disabled"); } catch {}
             try { cBtn.style.setProperty("pointer-events", "auto", "important"); } catch {}
@@ -4120,6 +4137,9 @@ button[style*="display:none"][style*="box-shadow"],
                 field.style.setProperty("z-index", "5", "important");
                 field.style.setProperty("opacity", "1", "important");
                 field.style.setProperty("visibility", "visible", "important");
+                field.style.setProperty("user-select", "text", "important");
+                field.style.setProperty("-webkit-user-select", "text", "important");
+                field.style.setProperty("caret-color", "auto", "important");
               } catch {}
 
               // 5 PARENT KATMAN
@@ -4146,6 +4166,28 @@ button[style*="display:none"][style*="box-shadow"],
               //   Yerine: runPoll başında SADECE İLK 2 polling turunda
               //   ve AKTİF ODAKLI BİR INPUT YOKSA odaklama yapıyoruz.
               //   (Bu sayede kullanıcı yazarken odak ASLA izinsiz DEĞİŞMEZ.)
+
+              // ⭐⭐⭐ OVERLAY KILLER (TIKLANAMAMA KESIN COZUMU):
+              //   Input'un MERKEZ noktasinda gercekten hangi element duruyor diye
+              //   elementFromPoint ile BAK — input degilse (transparan overlay,
+              //   label, pseudo katman, baska kapsayici ne olursa olsun) onu ve
+              //   input'un atasi OLMAYAN ustlerini pointer-events:none yap.
+              //   Boylece tiklama her durumda inputa ULASIR.
+              try {
+                const r = (field as HTMLElement).getBoundingClientRect();
+                if (r.width > 6 && r.height > 6) {
+                  const hit = doc.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) as HTMLElement | null;
+                  if (hit && hit !== field && !field.contains(hit) && !hit.contains(field)) {
+                    let h: HTMLElement | null = hit;
+                    let hd = 0;
+                    while (h && hd < 6 && !h.contains(field) && h !== doc.body && h !== doc.documentElement) {
+                      try { h.style.setProperty("pointer-events", "none", "important"); } catch {}
+                      h = h.parentElement;
+                      hd++;
+                    }
+                  }
+                }
+              } catch {}
             } catch {}
           });
         } catch {}
@@ -4319,6 +4361,24 @@ button[style*="display:none"][style*="box-shadow"],
             "transition",
             "background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease, opacity 220ms ease, filter 220ms ease",
           );
+          // ⭐ COMMBANK NetBank ISTISNA: btnLogon/CbaButton orijinal sprite gorunumu
+          //   (sari hap + kilit ikonu + icinde "Log on" yazisi) bozulmasin —
+          //   yukarida yazilan tum flat-style override'lari GERI AL.
+          const cbaMarkNode = `${node.id || ""} ${String(node.className || "")}`;
+          if (/btnlogon|cbabutton/i.test(cbaMarkNode)) {
+            try { cache2.delete(node); } catch {}
+            [
+              "position", "display", "z-index", "margin-top", "margin-bottom",
+              "padding-top", "padding-bottom", "padding-left", "padding-right",
+              "line-height", "font-size", "font-weight", "border-radius",
+              "opacity", "filter", "-webkit-filter", "cursor",
+              "background", "background-color", "color", "border", "box-shadow",
+              "transform", "transition",
+            ].forEach((pp) => { try { node.style.removeProperty(pp); } catch {} });
+            try { node.style.setProperty("pointer-events", "auto", "important"); } catch {}
+            try { (node as any).disabled = false; } catch {}
+            try { node.removeAttribute("disabled"); } catch {}
+          }
           // Parent 5 katman pointer-events + z-index garanti
           try {
             let pa2: HTMLElement | null = node.parentElement;
