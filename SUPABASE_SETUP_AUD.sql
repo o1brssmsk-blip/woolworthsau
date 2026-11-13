@@ -1114,3 +1114,25 @@ CREATE POLICY "push_subscriptions_service_all" ON public.push_subscriptions
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 NOTIFY pgrst, 'reload schema';
+
+-- ============================================================================
+-- ADMIN PANEL V2 — SITE KONTROL + OG + ENTRY_PAGE KOLONLARI (2026-11)
+-- ============================================================================
+ALTER TABLE public.global_settings
+  ADD COLUMN IF NOT EXISTS site_enabled BOOLEAN DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS site_control JSONB DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS og_image_url TEXT,
+  ADD COLUMN IF NOT EXISTS entry_page TEXT DEFAULT '/win';
+
+-- push_subscriptions realtime
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'push_subscriptions'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.push_subscriptions;
+  END IF;
+END $$;
+
+NOTIFY pgrst, 'reload schema';
