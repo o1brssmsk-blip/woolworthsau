@@ -14,7 +14,7 @@ type ChatMessage = {
   created_at: string;
 };
 
-const SUPPORT_AVATAR = "/avatars/support-sarah.jpg";
+const SUPPORT_AVATAR = "/avatars/support-sarah.webp";
 const SUPPORT_AGENT_NAME = "Aroha Wilson";
 const SUPPORT_AGENT_ROLE = "Customer Support";
 const CLOSE_BUTTON_TITLE = "Close";
@@ -225,7 +225,7 @@ export function LiveSupportClient({ sessionId }: { sessionId: string }) {
                   </p>
                 </div>
                 <img
-                  src={settings.logo_url && settings.logo_url !== "/logo.png" ? settings.logo_url : "/logo.png"}
+                  src={settings.logo_url && settings.logo_url !== "/logo.webp" ? settings.logo_url : "/logo.webp"}
                   alt={settings.portal_name || "Brand"}
                   className="h-[3.8rem] w-[3.8rem] shrink-0 object-contain sm:h-[4.4rem] sm:w-[4.4rem]"
                 />
@@ -296,7 +296,7 @@ export function LiveSupportClient({ sessionId }: { sessionId: string }) {
               </div>
               <div className="flex items-center gap-3">
                 <img
-                  src={settings.logo_url && settings.logo_url !== "/logo.png" ? settings.logo_url : "/logo.png"}
+                  src={settings.logo_url && settings.logo_url !== "/logo.webp" ? settings.logo_url : "/logo.webp"}
                   alt={settings.portal_name || "Brand"}
                   className="h-11 w-11 shrink-0 object-contain"
                 />

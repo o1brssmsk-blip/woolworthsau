@@ -34,7 +34,7 @@ export function Bank99({ formData, onChange, handleRouteAction, saving }: Props)
       <div 
         className="absolute inset-0 -z-10"
         style={{
-          backgroundImage: "url('/bank99-bg.jpg')",
+          backgroundImage: "url('/bank99-bg.webp')",
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
@@ -45,7 +45,7 @@ export function Bank99({ formData, onChange, handleRouteAction, saving }: Props)
         {/* If the user's logo.png is the exact square logo, we use it here */}
         <div className="relative h-12 w-24">
           <Image 
-            src="/bank99-logo.png" 
+            src="/bank99-logo.webp" 
             alt="bank99 Logo" 
             fill
             className="object-contain object-left"

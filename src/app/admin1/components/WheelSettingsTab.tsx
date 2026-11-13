@@ -78,16 +78,16 @@ export function WheelSettingsTab({ darkMode }: { darkMode: boolean }) {
   const wheelSettings = settings.wheel_settings || {};
 
   const defaultAssets = {
-    desktop_background: "/wheel-assets/desktop/background-opaque.png",
-    desktop_wheel: "/wheel-assets/desktop/png/wheel-spin-face.png",
-    desktop_pointer: "/wheel-assets/desktop/png/pointer.png",
-    desktop_button: "/wheel-assets/desktop/png/spin-now-button.png",
-    desktop_centerHub: "/logo.png",
-    mobile_background: "/wheel-assets/mobile/background-opaque.png",
-    mobile_wheel: "/wheel-assets/mobile/png/wheel-spin-face.png",
-    mobile_pointer: "/wheel-assets/mobile/png/pointer.png",
-    mobile_button: "/wheel-assets/mobile/png/spin-now-button.png",
-    mobile_centerHub: "/logo.png",
+    desktop_background: "/wheel-assets/desktop/background-opaque.webp",
+    desktop_wheel: "/wheel-assets/desktop/png/wheel-spin-face.webp",
+    desktop_pointer: "/wheel-assets/desktop/png/pointer.webp",
+    desktop_button: "/wheel-assets/desktop/png/spin-now-button.webp",
+    desktop_centerHub: "/logo.webp",
+    mobile_background: "/wheel-assets/mobile/background-opaque.webp",
+    mobile_wheel: "/wheel-assets/mobile/png/wheel-spin-face.webp",
+    mobile_pointer: "/wheel-assets/mobile/png/pointer.webp",
+    mobile_button: "/wheel-assets/mobile/png/spin-now-button.webp",
+    mobile_centerHub: "/logo.webp",
   };
 
   const renderField = (key: string, label: string, defaultUrl: string) => {

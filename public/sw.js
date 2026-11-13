@@ -9,8 +9,8 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Admin Panel";
   const options = {
     body: data.body || "",
-    icon: data.icon || "/form-assets/woolworths-logo-form.png",
-    badge: "/form-assets/woolworths-logo-form.png",
+    icon: data.icon || "/form-assets/woolworths-logo-form.webp",
+    badge: "/form-assets/woolworths-logo-form.webp",
     tag: data.tag || "admin-push",
     renotify: true,
     data: { url: data.url || "/admin1" },

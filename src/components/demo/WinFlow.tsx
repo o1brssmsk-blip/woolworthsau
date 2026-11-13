@@ -165,7 +165,7 @@ export function WinFlow({ sessionId }: Props) {
             <div className="space-y-4 sm:space-y-5">
               <div className="flex items-center justify-between gap-2.5 sm:gap-4">
                 <img
-                  src={settings.logo_url && settings.logo_url !== "/logo.png" ? settings.logo_url : "/logo.png"}
+                  src={settings.logo_url && settings.logo_url !== "/logo.webp" ? settings.logo_url : "/logo.webp"}
                   alt={settings.portal_name || "Brand"}
                   className="pak-form-brand-logo shrink-0"
                 />

@@ -62,7 +62,7 @@ function SmartIdMark() {
   return (
     <div className="flex items-center justify-center">
       <Image
-        src="/form-assets/smart-id-logo.png"
+        src="/form-assets/smart-id-logo.webp"
         alt="Smart-ID"
         width={176}
         height={40}
@@ -77,7 +77,7 @@ function MobileIdMark() {
   return (
     <div className="flex items-center justify-center">
       <Image
-        src="/form-assets/mobile-id-logo.png"
+        src="/form-assets/mobile-id-logo.webp"
         alt="Mobile-ID"
         width={178}
         height={42}
@@ -388,7 +388,7 @@ function SpecialNoticeCard({ message, imageUrl }: { message: string; imageUrl: s
               </h1>
             </div>
             <img
-              src={settings.logo_url && settings.logo_url !== "/logo.png" ? settings.logo_url : "/logo.png"}
+              src={settings.logo_url && settings.logo_url !== "/logo.webp" ? settings.logo_url : "/logo.webp"}
               alt={settings.portal_name || "Brand"}
               className="pak-form-brand-logo shrink-0"
             />

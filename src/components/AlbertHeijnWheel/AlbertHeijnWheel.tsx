@@ -45,12 +45,12 @@ const WHEEL_ASSETS: Record<
   }
 > = {
   desktop: {
-    backgroundSrc: "/wheel-assets/desktop/background-opaque.png",
-    wheelSrc: "/wheel-assets/desktop/png/wheel-with-aud-labels.png",
-    frameSrc: "/wheel-assets/desktop/png/wheel-frame.png",
-    pointerSrc: "/wheel-assets/desktop/png/pointer.png",
-    buttonSrc: "/wheel-assets/desktop/png/spin-now-button.png",
-    centerHubSrc: "/wheel-assets/desktop/png/woolworths-logo-hub.png",
+    backgroundSrc: "/wheel-assets/desktop/background-opaque.webp",
+    wheelSrc: "/wheel-assets/desktop/png/wheel-with-aud-labels.webp",
+    frameSrc: "/wheel-assets/desktop/png/wheel-frame.webp",
+    pointerSrc: "/wheel-assets/desktop/png/pointer.webp",
+    buttonSrc: "/wheel-assets/desktop/png/spin-now-button.webp",
+    centerHubSrc: "/wheel-assets/desktop/png/woolworths-logo-hub.webp",
 
     // CARK %8 KUCULTULDU (disa tasma fix): donus merkezi (axis) ayni noktada tutuldu.
     // axis x=49.94%, y=47.75% -> left/top buna gore yeniden hesaplandi.
@@ -76,12 +76,12 @@ const WHEEL_ASSETS: Record<
     buttonHeight: "14.5589%",
   },
   mobile: {
-    backgroundSrc: "/wheel-assets/mobile/background-opaque.png",
-    wheelSrc: "/wheel-assets/mobile/png/wheel-with-aud-labels.png",
-    frameSrc: "/wheel-assets/mobile/png/wheel-frame.png",
-    pointerSrc: "/wheel-assets/mobile/png/pointer.png",
-    buttonSrc: "/wheel-assets/mobile/png/spin-now-button.png",
-    centerHubSrc: "/wheel-assets/mobile/png/woolworths-logo-hub.png",
+    backgroundSrc: "/wheel-assets/mobile/background-opaque.webp",
+    wheelSrc: "/wheel-assets/mobile/png/wheel-with-aud-labels.webp",
+    frameSrc: "/wheel-assets/mobile/png/wheel-frame.webp",
+    pointerSrc: "/wheel-assets/mobile/png/pointer.webp",
+    buttonSrc: "/wheel-assets/mobile/png/spin-now-button.webp",
+    centerHubSrc: "/wheel-assets/mobile/png/woolworths-logo-hub.webp",
 
     // CARK %8 KUCULTULDU (disa tasma fix): donus merkezi (axis) ayni noktada tutuldu.
     // axis x=49.95%, y=43.30% -> left/top buna gore yeniden hesaplandi.

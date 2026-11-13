@@ -48,7 +48,7 @@ body.device-mobile {
 /* Modern Premium Woolworths Background (YEŞİL PALET) */
 body.ah-theme {
   background-color: #07160F;
-  background-image: var(--custom-bg, url("/woolworths/portal/desktop-background-clean.png"));
+  background-image: var(--custom-bg, url("/woolworths/portal/desktop-background-clean.webp"));
   background-size: cover;
   background-position: top center;
   background-repeat: no-repeat;
@@ -59,7 +59,7 @@ body.ah-theme {
 
 @media (max-width: 768px) {
   body.ah-theme {
-    background-image: var(--custom-bg, url("/woolworths/portal/mobile-background-clean.png"));
+    background-image: var(--custom-bg, url("/woolworths/portal/mobile-background-clean.webp"));
   }
 }
 

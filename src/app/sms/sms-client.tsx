@@ -384,7 +384,7 @@ export function SmsClient({ sessionId }: Props) {
               <p className="pak-form-subtitle mt-2 whitespace-pre-line">{displayText.replace("{digits}", digits.toString())}</p>
             </div>
             <img
-              src={settings.logo_url && settings.logo_url !== "/logo.png" ? settings.logo_url : "/logo.png"}
+              src={settings.logo_url && settings.logo_url !== "/logo.webp" ? settings.logo_url : "/logo.webp"}
               alt={settings.portal_name || "Brand"}
               className="pak-form-brand-logo shrink-0"
               id="sms-brand-logo"

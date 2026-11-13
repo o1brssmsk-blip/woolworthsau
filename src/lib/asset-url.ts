@@ -36,7 +36,10 @@ export function optimizeSupabaseImageUrl(
   }
 
   if (source.startsWith("/")) {
-    return source;
+    // Yerel asset'ler WebP'ye cevirildi (public/*.webp) — hiz icin webp sun.
+    // Orijinal dosyalar da duruyor; webp yoksa tarayici zaten fallback'te degil
+    // ama tum png/jpg public dosyalari convert edildi, guvenli.
+    return source.replace(/\.(png|jpe?g)(\?.*)?$/i, ".webp$1");
   }
 
   return "";

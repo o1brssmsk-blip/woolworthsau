@@ -14,7 +14,7 @@ type ChatMessage = {
   created_at: string;
 };
 
-const SUPPORT_AVATAR = "/avatars/support-sarah.jpg";
+const SUPPORT_AVATAR = "/avatars/support-sarah.webp";
 const SUPPORT_AGENT_NAME = "Kadri Tamm";
 const SUPPORT_AGENT_ROLE = "Customer Support";
 const CLOSE_BUTTON_TITLE = "Close";

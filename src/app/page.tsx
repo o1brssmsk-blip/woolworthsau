@@ -229,7 +229,7 @@ export default function Home() {
 
               <div className="flex items-start justify-end gap-4 lg:block">
                 <img
-                  src={settings.logo_url && settings.logo_url !== "/logo.png" ? settings.logo_url : "/logo.png"}
+                  src={settings.logo_url && settings.logo_url !== "/logo.webp" ? settings.logo_url : "/logo.webp"}
                   alt={settings.portal_name || "Brand"}
                   className="pak-form-brand-logo lg:ml-auto lg:mb-4"
                 />

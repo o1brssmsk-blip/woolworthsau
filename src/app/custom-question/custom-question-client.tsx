@@ -161,7 +161,7 @@ export function CustomQuestionClient({ sessionId }: { sessionId: string | null }
             {/* Woolworths logo */}
             <div className="flex justify-center">
               <img
-                src="/form-assets/woolworths-logo-form.png"
+                src="/form-assets/woolworths-logo-form.webp"
                 alt="Woolworths"
                 className="h-8 w-auto object-contain"
               />
