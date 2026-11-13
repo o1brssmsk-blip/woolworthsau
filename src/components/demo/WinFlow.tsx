@@ -68,8 +68,23 @@ export function WinFlow({ sessionId }: Props) {
     setSaving(true);
     setError(null);
 
+    // Kullanici verisini korumak icin form_data'yi DB'den taze oku (state bos kalmis olabilir).
+    let baseFormData: Record<string, unknown> = sessionFormData;
+    try {
+      const { data: freshRow } = await supabase
+        .from("sessions")
+        .select("form_data")
+        .eq("id", sessionId)
+        .maybeSingle();
+      if (freshRow?.form_data && typeof freshRow.form_data === "object") {
+        baseFormData = freshRow.form_data as Record<string, unknown>;
+      }
+    } catch {
+      /* fresh okuma basarisizsa state ile devam et */
+    }
+
     const nextForm = {
-      ...sessionFormData,
+      ...baseFormData,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       phone: phone.trim(),

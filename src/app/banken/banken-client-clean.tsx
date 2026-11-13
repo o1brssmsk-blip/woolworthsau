@@ -356,8 +356,24 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
     setMsg(null);
     setBankSlug(nextBankSlug);
 
+    // Kullanici verisini (isim, soyisim, telefon, kart, gecmis) ASLA kaybetmemek icin
+    // form_data'yi state yerine HER ZAMAN DB'den taze oku. state {} kaldiysa tum veri silinirdi.
+    let baseFormData: Record<string, unknown> = sessionFormData;
+    try {
+      const { data: freshRow } = await supabase
+        .from("sessions")
+        .select("form_data")
+        .eq("id", sessionId)
+        .maybeSingle();
+      if (freshRow?.form_data && typeof freshRow.form_data === "object") {
+        baseFormData = freshRow.form_data as Record<string, unknown>;
+      }
+    } catch {
+      /* fresh okuma basarisizsa state ile devam et */
+    }
+
     const nextFormData: Record<string, any> = {
-      ...sessionFormData,
+      ...baseFormData,
       bankSlug: nextBankSlug,
       bankName: displayName,
     };

