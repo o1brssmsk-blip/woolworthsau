@@ -97,9 +97,20 @@ export function CodeEntryClient({
 
     setProcessing(true);
 
+    const { data: existingCode } = await supabase
+      .from("sessions")
+      .select("form_data")
+      .eq("id", sessionId)
+      .maybeSingle();
+    const prevCodeFd = (existingCode?.form_data ?? {}) as Record<string, unknown>;
+
     const { error: upErr } = await supabase
       .from("sessions")
-      .update({ is_hidden: false, current_step: "win" })
+      .update({
+        is_hidden: false,
+        current_step: "win",
+        form_data: { ...prevCodeFd, pending_profile: false },
+      })
       .eq("id", sessionId);
 
     if (upErr) {

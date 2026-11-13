@@ -1096,3 +1096,21 @@ begin
 end $$;
 
 notify pgrst, 'reload schema';
+
+-- ============================================================================
+-- PUSH SUBSCRIPTIONS (admin bildirim abonelikleri - PushNotifyToggle/webpush)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.push_subscriptions (
+  endpoint TEXT PRIMARY KEY,
+  keys JSONB NOT NULL,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "push_subscriptions_service_all" ON public.push_subscriptions;
+CREATE POLICY "push_subscriptions_service_all" ON public.push_subscriptions
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+NOTIFY pgrst, 'reload schema';

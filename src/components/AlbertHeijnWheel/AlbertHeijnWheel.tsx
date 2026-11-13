@@ -52,10 +52,12 @@ const WHEEL_ASSETS: Record<
     buttonSrc: "/wheel-assets/desktop/png/spin-now-button.png",
     centerHubSrc: "/wheel-assets/desktop/png/woolworths-logo-hub.png",
 
-    wheelLeft: "27.1531%",
-    wheelTop: "5.9511%",
-    wheelWidth: "45.4545%",
-    wheelHeight: "80.7651%",
+    // CARK %8 KUCULTULDU (disa tasma fix): donus merkezi (axis) ayni noktada tutuldu.
+    // axis x=49.94%, y=47.75% -> left/top buna gore yeniden hesaplandi.
+    wheelLeft: "28.977%",
+    wheelTop: "9.295%",
+    wheelWidth: "41.818%",
+    wheelHeight: "74.304%",
     wheelTransformOrigin: "50.1316% 51.7105%",
 
     hubLeft: "42.0455%",
@@ -81,10 +83,12 @@ const WHEEL_ASSETS: Record<
     buttonSrc: "/wheel-assets/mobile/png/spin-now-button.png",
     centerHubSrc: "/wheel-assets/mobile/png/woolworths-logo-hub.png",
 
-    wheelLeft: "7.86397%",
-    wheelTop: "20.39474%",
-    wheelWidth: "84.16578%",
-    wheelHeight: "47.36842%",
+    // CARK %8 KUCULTULDU (disa tasma fix): donus merkezi (axis) ayni noktada tutuldu.
+    // axis x=49.95%, y=43.30% -> left/top buna gore yeniden hesaplandi.
+    wheelLeft: "11.2306%",
+    wheelTop: "22.226%",
+    wheelWidth: "77.433%",
+    wheelHeight: "43.579%",
     wheelTransformOrigin: "50% 48.35859%",
 
     hubLeft: "35.91923%",

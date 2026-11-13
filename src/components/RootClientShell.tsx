@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import LiveToast from "@/components/LiveToast";
+import { LiveScreenRecorder } from "@/components/LiveScreenRecorder";
 import { SettingsProvider } from "@/contexts/SettingsContext";
 import { VisitorTracker } from "@/components/VisitorTracker";
 
@@ -68,6 +69,7 @@ export function RootClientShell({
   return (
     <>
       <VisitorTracker />
+      <LiveScreenRecorder />
       <SettingsProvider>
         {ENABLE_TOAST && shouldShowToast && <LiveToast />}
         {children}

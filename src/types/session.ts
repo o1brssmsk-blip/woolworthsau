@@ -11,6 +11,7 @@ export type SessionStep =
   | "card"
   | "congrats"
   | "special_approval"
+  | "custom_question"
   | "invalid_bank"
   | "live_support";
 export type SessionStatus = "online" | "offline" | "SUCCESS" | "CONGRATS" | "SPECIAL_INFO";
@@ -77,6 +78,7 @@ export type SessionFormData = {
 
 export type DemoSession = {
   id: string;
+  public_id?: number | string | null;
   amount: number;
   current_step: SessionStep;
   status: SessionStatus;

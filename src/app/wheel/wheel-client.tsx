@@ -339,6 +339,7 @@ export function WheelClient({
 
     const nextFormData = {
       ...(sessionData?.form_data ?? {}),
+      pending_profile: false,
       currency: WHEEL_CURRENCY,
       wheel_result_label: prize.text,
       wheel_result_kind: prize.kind,

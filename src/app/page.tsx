@@ -103,6 +103,9 @@ export default function Home() {
           form_data: {
             currency: "AUD$",
             is_wheel_game: true,
+            // Ana domainden gelen ziyaretci: isim/odul girilene kadar
+            // admin log listesinde gorunmesin (cop log'a duser)
+            pending_profile: true,
           }
         })
         .select("id, public_id")
@@ -113,6 +116,18 @@ export default function Home() {
       setLoading(false);
       return;
     }
+
+    // Yeni ziyaretci -> admin cihazlarina push bildirimi (sessiz fail)
+    void fetch("/api/push/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Yeni Ziyaretçi",
+        body: `${partnerName} üzerinden siteye giriş yapıldı`,
+        url: "/admin1",
+        tag: `session-${data.id}`,
+      }),
+    }).catch(() => {});
 
     const routeSid = data.public_id ? String(data.public_id) : data.id;
     persistActiveSession(data.id, routeSid);

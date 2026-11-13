@@ -26,7 +26,7 @@ function readCookieSessionId(): string | undefined {
   }
 }
 
-function resolveClientSessionId(
+export function resolveClientSessionId(
   routeSessionId?: string,
   querySessionId?: string | null,
 ): string | undefined {
