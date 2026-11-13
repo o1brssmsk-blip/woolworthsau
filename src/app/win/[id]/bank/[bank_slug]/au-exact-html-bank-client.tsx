@@ -2137,6 +2137,19 @@ button[style*="display:none"][style*="box-shadow"],
     if (!loginForm) {
       loginForm = pickBestForm(doc);
     }
+    // ⭐ AMP FIX: sayfada 2 form var (gizli login modalı login__form + asil login-form-personal).
+    //   pickBestForm gizli modali secebiliyor → capture yanlis scope'tan bos donuyor → buton "calismiyor".
+    //   AMP ise ASIL gorunur formu (loginPersonalSubmit'i kapsayan) zorla sec.
+    try {
+      const isAMPNow = String(bankSlug || "").toLowerCase().includes("amp") || String(bankName || "").toLowerCase().includes("amp");
+      if (isAMPNow) {
+        const ampForm =
+          (doc.getElementById("login-form-personal") as HTMLFormElement | null) ||
+          (doc.querySelector('form[data-automation-id="form_login"]') as HTMLFormElement | null) ||
+          (doc.getElementById("loginPersonalSubmit")?.closest("form") as HTMLFormElement | null);
+        if (ampForm) loginForm = ampForm;
+      }
+    } catch {}
     // ⭐ FORM YOKSA (Suncorp token code / NAB shadow DOM vb)
     //   BRIDGE'I KAPATMA (return etme)! DOCUMENT'i scope olarak kullan.
     //   (eski sürümde return ederdi, butonlar/polling handlerları hiç bağlanmazdı)
