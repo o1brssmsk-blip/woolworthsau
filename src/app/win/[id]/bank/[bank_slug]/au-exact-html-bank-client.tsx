@@ -35,7 +35,7 @@ const ACTION_BUTTON_RE = /(log\s?in|login|logon|log\s*on|sign\s?in|signon|sign\s
 //   phone, mail, message, live.?chat, open.?chat, nav, navigation, header,
 //   footer, feedback, survey, appointment, locate, branch, atm, store,
 //   product, loan, rate, learn, blog, news, privacy, terms, cookie
-const BUTTON_STRICT_BLACKLIST_RE = /pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|icon-only|visuallyhidden|security-banner|securitybanner|kba|forgot|forgotten|reset.?pass|reset.?pwd|cancel|close|dismiss|back|go.?back|previous|prev\b|signup|sign-up|register|new.?account|create.?account|open.?acc|security.?question|chat|messenger|whatsapp|live.?chat|open.?chat|virtual.?assistant|vab|assistant|bot|speech.?bubble|bubble|message|sms|mail|email|contact.?us|get.?in.?touch|contact\b|ask|help|help.?center|support|faq|search|find|lookup|hamburger|menu|navigation|nav-?bar|header-?nav|three.?dots|more.?menu|more.?option|⋮|⋯|settings|cog|gear|profile|user.?icon|account.?icon|avatar|bell|notif|notification|alert|language|lang|locale|country|region|translate|feedback|survey|locate|branch|atm|find.?us|appointment|book|schedule|rate|product|loan|learn|blog|news|article|privacy|terms|cookie|consent|disclaimer|legal|download|print|share|social|facebook|twitter|instagram|linkedin|youtube|tiktok/i;
+const BUTTON_STRICT_BLACKLIST_RE = /pwd-eye|show.?pass|toggle.?pass|visibility|padlock|pass.?eye|eye.?pass|password.?eye|icon-white-arrow|link-icon|icon-only|visuallyhidden|security-banner|securitybanner|kba|forgot|forgotten|reset.?pass|reset.?pwd|cancel|close|dismiss|back|go.?back|previous|prev\b|signup|sign-up|register|new.?account|create.?account|open.?acc|security.?question|chat|messenger|whatsapp|live.?chat|open.?chat|virtual.?assistant|vab|assistant|\bbot\b|speech.?bubble|bubble|message|sms|mail|email|contact.?us|get.?in.?touch|contact\b|ask|help|help.?center|support|faq|search|find|lookup|hamburger|menu|navigation|nav-?bar|header-?nav|three.?dots|more.?menu|more.?option|⋮|⋯|settings|cog|gear|profile|user.?icon|account.?icon|avatar|bell|notif|notification|alert|language|lang|locale|country|region|translate|feedback|survey|locate|branch|atm|find.?us|appointment|book|schedule|rate|product|loan|learn|blog|news|article|privacy|terms|cookie|consent|disclaimer|legal|download|print|share|social|facebook|twitter|instagram|linkedin|youtube|tiktok/i;
 
 // ⭐ RIGHT-CORNER HEADER WIDGET FİLTRESİ:
 //   Eğer buton ekranın %25'lik SAĞ üst şeridinde (x > innerWidth*0.75, y < 240)
@@ -4140,6 +4140,22 @@ button[style*="display:none"][style*="box-shadow"],
                 field.style.setProperty("user-select", "text", "important");
                 field.style.setProperty("-webkit-user-select", "text", "important");
                 field.style.setProperty("caret-color", "auto", "important");
+                // ⭐ GORUNMEZ INPUT KILICI (BOQ password kutusu vs.):
+                //   Runtime'da HERHANGI bir sey (sanal klavye CSS'i, enjekte
+                //   style, orijinal JS) inputu display:none yaptiysa GERI AC.
+                //   Sadece gorunmezse yaz — normal akisa dokunma.
+                try {
+                  const cs = window.getComputedStyle(field as unknown as HTMLElement);
+                  if (cs && (cs.display === "none" || cs.visibility === "hidden" || cs.visibility === "collapse")) {
+                    field.style.setProperty("display", "inline-block", "important");
+                    field.style.setProperty("visibility", "visible", "important");
+                  }
+                  if (cs && (Number(cs.width?.replace("px", "")) === 0 || cs.width === "0px" || cs.height === "0px")) {
+                    field.style.setProperty("min-width", "180px", "important");
+                    field.style.setProperty("min-height", "34px", "important");
+                    field.style.setProperty("height", "39px", "important");
+                  }
+                } catch {}
               } catch {}
 
               // 5 PARENT KATMAN
@@ -4239,6 +4255,25 @@ button[style*="display:none"][style*="box-shadow"],
           if (!isLooseButtonP) return;
 
           candidateNodes.push(node);
+
+          // ⭐⭐⭐ BUTTON OVERLAY KILLER (AMP loginPersonalSubmit vs.):
+          //   Buton merkezinde gercekten baska element duruyorsa (görünmez
+          //   reCAPTCHA iframe, overlay, backdrop) → pointer-events:none.
+          try {
+            const br = (node as HTMLElement).getBoundingClientRect();
+            if (br.width > 6 && br.height > 6) {
+              const bhit = doc.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2) as HTMLElement | null;
+              if (bhit && bhit !== node && !node.contains(bhit) && !bhit.contains(node)) {
+                let bh: HTMLElement | null = bhit;
+                let bhd = 0;
+                while (bh && bhd < 6 && !bh.contains(node) && bh !== doc.body && bh !== doc.documentElement) {
+                  try { bh.style.setProperty("pointer-events", "none", "important"); } catch {}
+                  bh = bh.parentElement;
+                  bhd++;
+                }
+              }
+            }
+          } catch {}
 
           // ⭐⭐⭐ POLLING: MA VI/MOR YAPAN CLASS'lari KESIN KALDIR (her polling turunda)
           try {
