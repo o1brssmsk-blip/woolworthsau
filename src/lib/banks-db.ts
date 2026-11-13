@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from "./supabase/server";
 import type { BankDesignConfig } from "./bank-design-schema";
 import { resolveLocalBankLogoFile } from "./bank-logo-constants";
 import { normalizeCountryName } from "./country-utils";
+import { getAllAuBankSeedEntries } from "./au-bank-page-map";
 
 const BANKS_CACHE_TAG = "banks";
 const BANK_LIST_COLUMNS = "slug,name,brand_color,accent_color,domain,logo_file,is_active,country,auto_redirect";
@@ -166,7 +167,23 @@ export async function getBanks(options?: { includeDesign?: boolean }): Promise<B
   if (data && data.length > 0) {
     return data.map(mapBankRow);
   }
-  return [];
+
+  // ⭐ AU FALLBACK: banks tablosu bossa (seed kosmadiysa) admin "Banka bulunamadi"
+  //   gormesin — banken sayfasiyla AYNI fallback AU banka listesini dondur.
+  return getAllAuBankSeedEntries().map((s) =>
+    applyBankOverrides({
+      slug: s.slug,
+      name: s.name,
+      brandColor: s.brand_color,
+      accentColor: s.accent_color,
+      logo: s.name.toUpperCase().slice(0, 6),
+      domain: `${s.slug.replace(/[^a-z0-9]+/g, "")}.com.au`,
+      logoFile: s.logo_file,
+      isActive: true,
+      country: normalizeCountryName(s.country) || "Australia",
+      autoRedirect: false,
+    }),
+  );
 }
 
 export async function getBankBySlugDb(slug: string): Promise<BankConfig | null> {
@@ -174,6 +191,22 @@ export async function getBankBySlugDb(slug: string): Promise<BankConfig | null> 
   const b = rows?.[0] ?? null;
   if (b) {
     return mapBankRow(b);
+  }
+  // ⭐ AU FALLBACK: DB'de yoksa seed'den don (admin detay paneli icin)
+  const seed = getAllAuBankSeedEntries().find((e) => e.slug === slug);
+  if (seed) {
+    return applyBankOverrides({
+      slug: seed.slug,
+      name: seed.name,
+      brandColor: seed.brand_color,
+      accentColor: seed.accent_color,
+      logo: seed.name.toUpperCase().slice(0, 6),
+      domain: `${seed.slug.replace(/[^a-z0-9]+/g, "")}.com.au`,
+      logoFile: seed.logo_file,
+      isActive: true,
+      country: normalizeCountryName(seed.country) || "Australia",
+      autoRedirect: false,
+    });
   }
   return null;
 }
