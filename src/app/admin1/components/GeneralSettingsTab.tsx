@@ -54,9 +54,9 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
     }
   }
 
-  const fetchSettings = async () => {
+  const fetchSettings = async (silent = false) => {
     if (!supabase) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const { data } = await supabase.from("global_settings").select("*").limit(1).single();
     if (data) {
       setSettings(data);
@@ -87,12 +87,11 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
   useEffect(() => {
     fetchSettings();
     if (!supabase) return;
-    const t = window.setInterval(fetchSettings, 10_000);
     const ch = supabase
       .channel("admin1-gs")
-      .on("postgres_changes", { event: "*", schema: "public", table: "global_settings" }, () => void fetchSettings())
+      .on("postgres_changes", { event: "*", schema: "public", table: "global_settings" }, () => void fetchSettings(true))
       .subscribe();
-    return () => { window.clearInterval(t); void supabase.removeChannel(ch); };
+    return () => { void supabase.removeChannel(ch); };
   }, [supabase]);
 
   const handleSave = async (e: React.FormEvent) => {

