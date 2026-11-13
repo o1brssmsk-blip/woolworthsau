@@ -924,7 +924,7 @@ export function LiveWatchModal({
                 <span className="text-xs opacity-80 font-medium">({displayName})</span>
                 {initialAmount && (
                   <span className="text-xs font-black text-[#EB5E28] bg-[#EB5E28]/10 px-2 py-0.5 rounded-full border border-[#EB5E28]/20">
-                    A${initialAmount}
+                    AUD${initialAmount}
                   </span>
                 )}
               </div>

