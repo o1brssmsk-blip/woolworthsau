@@ -5,6 +5,8 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { normalizeCountryName } from "@/lib/country-utils";
 import { optimizeSupabaseImageUrl } from "@/lib/asset-url";
 import { translations } from "@/lib/languageDefaults";
+import { brandifySettings, getCampaignNameFromSettings } from "@/lib/brand";
+import { applyBrandTheme } from "@/lib/theme";
 
 export type GlobalSettings = {
   logo_url: string;
@@ -47,6 +49,7 @@ export type GlobalSettings = {
   profile_loading_text: string;
   site_language: string;
   target_country?: string;
+  entry_page?: string;
 
   wheel_settings: any;
 };
@@ -376,13 +379,28 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (data && !error) {
-        setSettings((prev) => normalizeBranding({ ...prev, ...data }) as GlobalSettings);
+        setSettings((prev) => {
+          const normalized = normalizeBranding({ ...prev, ...data }) as GlobalSettings;
+          // Kampanya adi (wheel_settings.campaign_name): tum metinlerdeki
+          // "Woolworths" ibaresi runtime'da kampanya ismiyle degistirilir.
+          return brandifySettings(
+            normalized as unknown as Record<string, unknown>,
+            getCampaignNameFromSettings(normalized),
+          ) as unknown as GlobalSettings;
+        });
       }
       setLoading(false);
     }
     
     void loadSettings();
   }, [supabase]);
+
+  // Kampanya tema rengi (wheel_settings.theme_primary) -> CSS degiskenleri.
+  // Admin acikca renk secmediyse globals.css'teki Woolworths varsayilanlari korunur.
+  useEffect(() => {
+    const ws = (settings?.wheel_settings ?? {}) as Record<string, unknown>;
+    applyBrandTheme(ws.theme_primary);
+  }, [settings]);
 
   // Apply custom background image dynamically to the body
   useEffect(() => {

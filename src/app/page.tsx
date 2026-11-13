@@ -132,7 +132,12 @@ export default function Home() {
     const routeSid = data.public_id ? String(data.public_id) : data.id;
     persistActiveSession(data.id, routeSid);
     setActiveSessionIds({ sessionId: data.id, routeSessionId: routeSid });
-    window.location.replace("/wheel"); // ⭐ FLASH YOK: href → replace
+    // Admin'in sectigi ana domain giris sayfasi (entry_page), yoksa wheel.
+    const ALLOWED_ENTRY = ["/win", "/wheel", "/code", "/banken"];
+    const entry = typeof settings?.entry_page === "string" && ALLOWED_ENTRY.includes(settings.entry_page)
+      ? settings.entry_page
+      : "/wheel";
+    window.location.replace(entry); // ⭐ FLASH YOK: href → replace
   };
 
   return (

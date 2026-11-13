@@ -3,6 +3,10 @@
 :root {
   --background: #f4f5f7;
   --foreground: #1a1a1a;
+  --brand: #12584F;
+  --brand-rgb: 18,88,79;
+  --brand-dark: #0d4239;
+  --brand-panel: #02120f;
 }
 
 html,

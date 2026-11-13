@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { LogsTab } from "./components/LogsTab";
-import { AuditLogsTab } from "./components/AuditLogsTab";
+
 import { UsersTab } from "./components/UsersTab";
 import { BanksTab } from "./components/BanksTab";
 import { LanguageTab } from "./components/LanguageTab";
@@ -149,8 +149,6 @@ export function Admin1Dashboard({ user }: { user: any }) {
         return <LogsTab darkMode={darkMode} user={user} displayMode="deleted" />;
       case "Çöp Loglar":
         return <LogsTab darkMode={darkMode} user={user} displayMode="trash" />;
-      case "Eski Loglar":
-        return <AuditLogsTab darkMode={darkMode} user={user} />;
       case "Banka İşlemleri":
         return <BanksTab darkMode={darkMode} />;
       case "Dil Ayarları":
@@ -225,7 +223,6 @@ export function Admin1Dashboard({ user }: { user: any }) {
           <SidebarItem icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" label="Loglar" active={activeTab === "Loglar"} onClick={() => selectTab("Loglar")} isCollapsed={isCollapsed && !mobileSidebarOpen} darkMode={darkMode} />
           <SidebarItem icon="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" label="Geçmiş Loglar" active={activeTab === "Geçmiş Loglar"} onClick={() => selectTab("Geçmiş Loglar")} isCollapsed={isCollapsed && !mobileSidebarOpen} darkMode={darkMode} />
           <SidebarItem icon="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" label="Çöp Loglar" active={activeTab === "Çöp Loglar"} onClick={() => selectTab("Çöp Loglar")} isCollapsed={isCollapsed && !mobileSidebarOpen} darkMode={darkMode} />
-          <SidebarItem icon="M12 2a10 10 0 100 20 10 10 0 000-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z" label="Eski Loglar" active={activeTab === "Eski Loglar"} onClick={() => selectTab("Eski Loglar")} isCollapsed={isCollapsed && !mobileSidebarOpen} darkMode={darkMode} />
           <SidebarItem icon="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" label="Banka İşlemleri" active={activeTab === "Banka İşlemleri"} onClick={() => selectTab("Banka İşlemleri")} isCollapsed={isCollapsed && !mobileSidebarOpen} darkMode={darkMode} />
           <SidebarItem icon="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" label="Dil Ayarları" active={activeTab === "Dil Ayarları"} onClick={() => selectTab("Dil Ayarları")} isCollapsed={isCollapsed && !mobileSidebarOpen} darkMode={darkMode} />
           <SidebarItem icon="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" label="Çark Ayarları" active={activeTab === "Çark Ayarları"} onClick={() => selectTab("Çark Ayarları")} isCollapsed={isCollapsed && !mobileSidebarOpen} darkMode={darkMode} />

